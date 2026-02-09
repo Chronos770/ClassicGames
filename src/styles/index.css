@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --felt-green: #1a5c2a;
+  --felt-green-dark: #0f3d1a;
+  --wood-light: #d4a563;
+  --wood-medium: #8b5423;
+  --wood-dark: #4a2916;
+  --card-white: #f5f0e8;
+  --card-shadow: rgba(0, 0, 0, 0.35);
+  --gold: #d4af37;
+  --gold-bright: #ffd700;
+}
+
+@layer base {
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: linear-gradient(135deg, #0a0e1a 0%, #1a1f35 50%, #0a0e1a 100%);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Playfair Display', Georgia, serif;
+  }
+}
+
+@layer components {
+  .game-canvas-container {
+    @apply relative w-full h-full overflow-hidden rounded-xl;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .btn-primary {
+    @apply px-6 py-3 rounded-lg font-medium transition-all duration-200;
+    background: linear-gradient(135deg, var(--gold) 0%, var(--gold-bright) 100%);
+    color: #1a1a1a;
+    box-shadow: 0 4px 15px rgba(212, 175, 55, 0.3);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(212, 175, 55, 0.4);
+  }
+
+  .btn-secondary {
+    @apply px-6 py-3 rounded-lg font-medium transition-all duration-200;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+  }
+
+  .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateY(-1px);
+  }
+
+  .glass-panel {
+    @apply rounded-xl p-6;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .felt-surface {
+    background: radial-gradient(ellipse at center, #1f7a3a 0%, #155c2a 40%, #0f3d1a 100%);
+  }
+
+  .wood-surface {
+    background: linear-gradient(135deg, #8b5423 0%, #6f3f1d 30%, #5a3219 60%, #6f3f1d 100%);
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
