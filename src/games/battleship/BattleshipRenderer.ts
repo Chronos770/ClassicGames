@@ -4,7 +4,7 @@ import { BattleshipState, GRID_SIZE, CellState, Ship } from './rules';
 import { BattleshipEffects } from './BattleshipEffects';
 import { drawShipSprite } from './BattleshipShips';
 
-const CELL_SIZE = 32;
+const CELL_SIZE = 36;
 const GRID_PADDING = 20;
 const LABEL_SIZE = 16;
 
@@ -50,49 +50,47 @@ export class BattleshipRenderer {
 
     const w = this.app.screen.width;
     const gridWidth = GRID_SIZE * CELL_SIZE;
+    const gridX = (w - gridWidth) / 2;
 
-    // AI board (left) - player fires here
-    const aiGridX = (w / 2 - gridWidth) / 2;
-    const gridY = 50;
-
-    // Player board (right) - shows player's ships
-    const playerGridX = w / 2 + (w / 2 - gridWidth) / 2;
+    // Enemy board on top - player fires here
+    const aiGridY = 35;
+    // Player board on bottom - shows player's ships
+    const playerGridY = aiGridY + gridWidth + 55;
 
     // Headers
-    const headerStyle = new TextStyle({ fontSize: 14, fill: '#ffffff', fontFamily: 'Inter, sans-serif', fontWeight: 'bold' });
+    const headerStyle = new TextStyle({ fontSize: 13, fill: '#ffffff', fontFamily: 'Inter, sans-serif', fontWeight: 'bold' });
     const aiHeader = new Text({ text: 'Enemy Waters', style: headerStyle });
     aiHeader.anchor.set(0.5, 0);
-    aiHeader.x = aiGridX + gridWidth / 2;
-    aiHeader.y = 15;
+    aiHeader.x = gridX + gridWidth / 2;
+    aiHeader.y = aiGridY - 22;
     this.mainContainer.addChild(aiHeader);
 
     const playerHeader = new Text({ text: 'Your Fleet', style: headerStyle });
     playerHeader.anchor.set(0.5, 0);
-    playerHeader.x = playerGridX + gridWidth / 2;
-    playerHeader.y = 15;
+    playerHeader.x = gridX + gridWidth / 2;
+    playerHeader.y = playerGridY - 22;
     this.mainContainer.addChild(playerHeader);
 
-    // Draw grids
-    this.drawGrid(state.aiBoard.grid, aiGridX, gridY, 'ai', state.phase === 'playing', false, state.aiBoard.ships);
-    this.drawGrid(state.playerBoard.grid, playerGridX, gridY, 'player', state.phase === 'placement', true, state.playerBoard.ships);
+    // Ship status - inline next to headers
+    this.drawShipStatusInline(state.aiBoard.ships, gridX + gridWidth + 15, aiGridY, 'Enemy');
+    this.drawShipStatusInline(state.playerBoard.ships, gridX + gridWidth + 15, playerGridY, 'Your');
 
-    // Draw ship sprites on player board
-    this.drawShips(state.playerBoard.ships, playerGridX, gridY, true);
-    // Draw sunk AI ships so player sees them
-    this.drawShips(state.aiBoard.ships.filter(s => s.sunk), aiGridX, gridY, false);
+    // Draw grids
+    this.drawGrid(state.aiBoard.grid, gridX, aiGridY, 'ai', state.phase === 'playing', false, state.aiBoard.ships);
+    this.drawGrid(state.playerBoard.grid, gridX, playerGridY, 'player', state.phase === 'placement', true, state.playerBoard.ships);
+
+    // Draw ship sprites
+    this.drawShips(state.playerBoard.ships, gridX, playerGridY, true);
+    this.drawShips(state.aiBoard.ships.filter(s => s.sunk), gridX, aiGridY, false);
 
     // Column/row labels
-    this.drawLabels(aiGridX, gridY);
-    this.drawLabels(playerGridX, gridY);
+    this.drawLabels(gridX, aiGridY);
+    this.drawLabels(gridX, playerGridY);
 
     // Placement preview
     if (placementPreview && state.phase === 'placement') {
-      this.drawPlacementPreview(placementPreview, playerGridX, gridY);
+      this.drawPlacementPreview(placementPreview, gridX, playerGridY);
     }
-
-    // Ship status panels
-    this.drawShipStatus(state.aiBoard.ships, aiGridX, gridY + gridWidth + 30, 'Enemy');
-    this.drawShipStatus(state.playerBoard.ships, playerGridX, gridY + gridWidth + 30, 'Your');
 
     // Phase info
     if (state.phase === 'placement') {
@@ -104,7 +102,7 @@ export class BattleshipRenderer {
       });
       info.anchor.set(0.5);
       info.x = w / 2;
-      info.y = gridY + gridWidth + 15;
+      info.y = playerGridY + gridWidth + 12;
       this.mainContainer.addChild(info);
     }
   }
@@ -227,13 +225,7 @@ export class BattleshipRenderer {
     }
   }
 
-  private drawShipStatus(ships: Ship[], x: number, y: number, label: string): void {
-    const titleStyle = new TextStyle({ fontSize: 11, fill: '#ffffff88', fontFamily: 'Inter, sans-serif' });
-    const title = new Text({ text: `${label} Fleet`, style: titleStyle });
-    title.x = x;
-    title.y = y;
-    this.mainContainer.addChild(title);
-
+  private drawShipStatusInline(ships: Ship[], x: number, y: number, label: string): void {
     ships.forEach((ship, i) => {
       const text = new Text({
         text: `${ship.sunk ? '\u2717' : '\u2713'} ${ship.name}`,
@@ -244,7 +236,7 @@ export class BattleshipRenderer {
         }),
       });
       text.x = x;
-      text.y = y + 18 + i * 15;
+      text.y = y + i * 14;
       this.mainContainer.addChild(text);
     });
   }
@@ -253,10 +245,8 @@ export class BattleshipRenderer {
   playAttackAnimation(row: number, col: number, board: 'player' | 'ai', isHit: boolean, onComplete: () => void): void {
     const w = this.app.screen.width;
     const gridWidth = GRID_SIZE * CELL_SIZE;
-    const gridX = board === 'ai'
-      ? (w / 2 - gridWidth) / 2
-      : w / 2 + (w / 2 - gridWidth) / 2;
-    const gridY = 50;
+    const gridX = (w - gridWidth) / 2;
+    const gridY = board === 'ai' ? 35 : 35 + gridWidth + 55;
 
     const targetX = gridX + col * CELL_SIZE + CELL_SIZE / 2;
     const targetY = gridY + row * CELL_SIZE + CELL_SIZE / 2;

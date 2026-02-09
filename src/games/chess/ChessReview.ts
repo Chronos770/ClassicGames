@@ -101,6 +101,16 @@ export const QUALITY_COLORS: Record<MoveQuality, string> = {
   blunder: '#ef5350',
 };
 
+export const QUALITY_COLORS_HEX: Record<MoveQuality, number> = {
+  brilliant: 0x26c6da,
+  great: 0x66bb6a,
+  good: 0x81c784,
+  book: 0xa5d6a7,
+  inaccuracy: 0xffb74d,
+  mistake: 0xff8a65,
+  blunder: 0xef5350,
+};
+
 export const QUALITY_SYMBOLS: Record<MoveQuality, string> = {
   brilliant: '!!',
   great: '!',

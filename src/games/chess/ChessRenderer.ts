@@ -370,6 +370,105 @@ export class ChessRenderer {
     this.legalMoveSquares = [];
   }
 
+  showReviewMove(from: Square, to: Square, qualityColor: number): void {
+    const fromCoords = squareToCoords(from);
+    const toCoords = squareToCoords(to);
+
+    // Highlight from square
+    const hFrom = new Graphics();
+    hFrom.rect(
+      BOARD_X + BORDER + fromCoords.col * CELL_SIZE,
+      BOARD_Y + BORDER + fromCoords.row * CELL_SIZE,
+      CELL_SIZE,
+      CELL_SIZE
+    );
+    hFrom.fill({ color: qualityColor, alpha: 0.3 });
+    this.highlightsContainer.addChild(hFrom);
+
+    // Highlight to square (stronger)
+    const hTo = new Graphics();
+    hTo.rect(
+      BOARD_X + BORDER + toCoords.col * CELL_SIZE,
+      BOARD_Y + BORDER + toCoords.row * CELL_SIZE,
+      CELL_SIZE,
+      CELL_SIZE
+    );
+    hTo.fill({ color: qualityColor, alpha: 0.45 });
+    this.highlightsContainer.addChild(hTo);
+
+    // Arrow
+    const fromPx = this.getSquarePixel(from);
+    const toPx = this.getSquarePixel(to);
+    const g = new Graphics();
+    const angle = Math.atan2(toPx.y - fromPx.y, toPx.x - fromPx.x);
+    const headLen = 16;
+    const shaftEndX = toPx.x - Math.cos(angle) * headLen;
+    const shaftEndY = toPx.y - Math.sin(angle) * headLen;
+
+    g.moveTo(fromPx.x, fromPx.y);
+    g.lineTo(shaftEndX, shaftEndY);
+    g.stroke({ color: qualityColor, width: 6, alpha: 0.5 });
+
+    const left = angle + Math.PI * 0.75;
+    const right = angle - Math.PI * 0.75;
+    g.moveTo(toPx.x, toPx.y);
+    g.lineTo(toPx.x + Math.cos(left) * headLen, toPx.y + Math.sin(left) * headLen);
+    g.lineTo(toPx.x + Math.cos(right) * headLen, toPx.y + Math.sin(right) * headLen);
+    g.closePath();
+    g.fill({ color: qualityColor, alpha: 0.5 });
+
+    this.highlightsContainer.addChild(g);
+  }
+
+  showHint(from: Square, to: Square): void {
+    // Draw a pulsing highlight on from/to squares
+    const fromCoords = squareToCoords(from);
+    const toCoords = squareToCoords(to);
+
+    const hintFrom = new Graphics();
+    hintFrom.rect(
+      BOARD_X + BORDER + fromCoords.col * CELL_SIZE,
+      BOARD_Y + BORDER + fromCoords.row * CELL_SIZE,
+      CELL_SIZE,
+      CELL_SIZE
+    );
+    hintFrom.fill({ color: 0x00ccff, alpha: 0.35 });
+    this.highlightsContainer.addChild(hintFrom);
+
+    const hintTo = new Graphics();
+    hintTo.rect(
+      BOARD_X + BORDER + toCoords.col * CELL_SIZE,
+      BOARD_Y + BORDER + toCoords.row * CELL_SIZE,
+      CELL_SIZE,
+      CELL_SIZE
+    );
+    hintTo.fill({ color: 0x00ccff, alpha: 0.35 });
+    this.highlightsContainer.addChild(hintTo);
+
+    // Draw arrow from -> to
+    const fromPx = this.getSquarePixel(from);
+    const toPx = this.getSquarePixel(to);
+    const g = new Graphics();
+    const angle = Math.atan2(toPx.y - fromPx.y, toPx.x - fromPx.x);
+    const headLen = 18;
+    const shaftEndX = toPx.x - Math.cos(angle) * headLen;
+    const shaftEndY = toPx.y - Math.sin(angle) * headLen;
+
+    g.moveTo(fromPx.x, fromPx.y);
+    g.lineTo(shaftEndX, shaftEndY);
+    g.stroke({ color: 0x00ccff, width: 8, alpha: 0.6 });
+
+    const left = angle + Math.PI * 0.75;
+    const right = angle - Math.PI * 0.75;
+    g.moveTo(toPx.x, toPx.y);
+    g.lineTo(toPx.x + Math.cos(left) * headLen, toPx.y + Math.sin(left) * headLen);
+    g.lineTo(toPx.x + Math.cos(right) * headLen, toPx.y + Math.sin(right) * headLen);
+    g.closePath();
+    g.fill({ color: 0x00ccff, alpha: 0.6 });
+
+    this.highlightsContainer.addChild(g);
+  }
+
   // ---- Animation methods (Phase 2) ----
 
   private getSquarePixel(square: Square): { x: number; y: number } {

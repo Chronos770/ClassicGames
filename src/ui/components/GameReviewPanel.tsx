@@ -50,39 +50,6 @@ export default function GameReviewPanel({ review, onSelectMove, currentMoveIndex
         </div>
       )}
 
-      {/* Eval bar */}
-      <div className="h-4 bg-gray-800 rounded-full overflow-hidden flex">
-        {(() => {
-          const currentMove = review.moves[currentMoveIndex];
-          const eval_ = currentMove?.evalAfter ?? 0;
-          const whitePercent = Math.max(5, Math.min(95,
-            50 + (eval_ / 100) * 25
-          ));
-          return (
-            <>
-              <div
-                className="bg-white transition-all duration-300 rounded-l-full"
-                style={{ width: `${whitePercent}%` }}
-              />
-              <div
-                className="bg-gray-600 transition-all duration-300 rounded-r-full"
-                style={{ width: `${100 - whitePercent}%` }}
-              />
-            </>
-          );
-        })()}
-      </div>
-      <div className="flex justify-between text-[10px] text-white/30">
-        <span>White</span>
-        <span className="font-mono">
-          {(() => {
-            const e = review.moves[currentMoveIndex]?.evalAfter ?? 0;
-            return e >= 0 ? `+${(e / 100).toFixed(1)}` : (e / 100).toFixed(1);
-          })()}
-        </span>
-        <span>Black</span>
-      </div>
-
       {/* Move navigation */}
       <div className="flex gap-1 justify-center">
         <button

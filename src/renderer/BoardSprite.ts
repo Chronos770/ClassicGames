@@ -30,11 +30,11 @@ export const CHESS_BOARD_THEMES: Record<ChessBoardTheme, BoardThemeColors> = {
 export const CHESS_BOARD_CONFIG: BoardConfig = {
   rows: 8,
   cols: 8,
-  cellSize: 70,
+  cellSize: 80,
   lightColor: 0xe8d5a8,
   darkColor: 0x8b5e3c,
   borderColor: 0x4a2916,
-  borderWidth: 16,
+  borderWidth: 18,
 };
 
 export function getThemedChessBoardConfig(theme: ChessBoardTheme): BoardConfig {

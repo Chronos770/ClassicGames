@@ -7,7 +7,7 @@ import { ChessGame } from './ChessGame';
 import { ChessRenderer } from './ChessRenderer';
 import { getBestMove, evaluateBoard } from './ChessAI';
 import { generateCommentary, getPersonalityComment } from './ChessCommentary';
-import { reviewGame, GameReviewResult } from './ChessReview';
+import { reviewGame, GameReviewResult, QUALITY_COLORS_HEX } from './ChessReview';
 import { ChessGameState, ChessMoveResult, Square, PieceSymbol } from './rules';
 import { useGameStore } from '../../stores/gameStore';
 import { useUserStore } from '../../stores/userStore';
@@ -50,6 +50,9 @@ export default function ChessPage() {
   const [reviewResult, setReviewResult] = useState<GameReviewResult | null>(null);
   const [reviewMoveIndex, setReviewMoveIndex] = useState(0);
   const [plannedArrows, setPlannedArrows] = useState<{ from: string; to: string; color: number }[]>([]);
+  const [hinting, setHinting] = useState(false);
+  const [reviewEval, setReviewEval] = useState(0);
+  const savedFenRef = useRef<string | null>(null);
 
   const commentaryEnabled = useSettingsStore((s) => s.chessCommentary);
 
@@ -145,8 +148,8 @@ export default function ChessPage() {
     const init = async () => {
       const app = new Application();
       await app.init({
-        width: 700,
-        height: 700,
+        width: 800,
+        height: 800,
         backgroundColor: 0x3d2b1f,
         antialias: true,
         resolution: window.devicePixelRatio || 1,
@@ -265,6 +268,22 @@ export default function ChessPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const handleHint = async () => {
+    const game = gameRef.current;
+    const renderer = rendererRef.current;
+    if (!game || !renderer || thinking || hinting) return;
+    if (state?.turn !== 'w' || state?.isGameOver) return;
+
+    setHinting(true);
+    const hint = await getBestMove(game.getFEN(), 'hard');
+    setHinting(false);
+
+    if (hint && renderer) {
+      renderer.render(game.getState());
+      renderer.showHint(hint.from, hint.to);
+    }
+  };
+
   const handleUndo = () => {
     const game = gameRef.current;
     const renderer = rendererRef.current;
@@ -296,23 +315,28 @@ export default function ChessPage() {
 
   const handleReviewGame = () => {
     if (!state || state.moveHistory.length === 0) return;
+    const game = gameRef.current;
+    if (!game) return;
+
+    // Save current position so we can restore on exit
+    savedFenRef.current = game.getFEN();
+
     const result = reviewGame(state.moveHistory);
     setReviewResult(result);
     setReviewMode(true);
-    setReviewMoveIndex(result.moves.length - 1);
+    const lastIdx = result.moves.length - 1;
+    setReviewMoveIndex(lastIdx);
+    setReviewEval(result.moves[lastIdx]?.evalAfter ?? 0);
     setGameOver(false);
   };
 
   const handleReviewSelectMove = (index: number) => {
     setReviewMoveIndex(index);
-    // Replay the game up to this move
     const game = gameRef.current;
     const renderer = rendererRef.current;
     if (!game || !renderer || !reviewResult) return;
 
     const chess = game.getChess();
-    const ogFen = chess.fen();
-    // Reset and replay
     chess.reset();
     for (let i = 0; i <= index; i++) {
       chess.move(reviewResult.moves[i].move.san);
@@ -321,20 +345,34 @@ export default function ChessPage() {
     setState(replayState);
     renderer.clearSelection();
     renderer.render(replayState);
+
+    // Show quality-colored highlight on the move
+    const rm = reviewResult.moves[index];
+    renderer.showReviewMove(
+      rm.move.from as Square,
+      rm.move.to as Square,
+      QUALITY_COLORS_HEX[rm.quality]
+    );
+    setReviewEval(rm.evalAfter);
   };
 
   const handleExitReview = () => {
     setReviewMode(false);
     setReviewResult(null);
-    // Restore game to final position
+    setReviewEval(0);
     const game = gameRef.current;
     const renderer = rendererRef.current;
     if (!game || !renderer) return;
-    game.initialize();
-    // We can't easily restore, so just show new game state
-    const newState = game.getState();
-    setState(newState);
-    renderer.render(newState);
+
+    // Restore to the saved position
+    if (savedFenRef.current) {
+      game.getChess().load(savedFenRef.current);
+      savedFenRef.current = null;
+    }
+    const restoredState = game.getState();
+    setState(restoredState);
+    renderer.clearSelection();
+    renderer.render(restoredState);
   };
 
   const capturedPieceSymbols = (pieces: PieceSymbol[], color: 'w' | 'b'): string => {
@@ -352,7 +390,7 @@ export default function ChessPage() {
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-[900px] flex items-center justify-between mb-3"
+        className="w-full max-w-[1080px] flex items-center justify-between mb-3"
       >
         <button
           onClick={() => navigate('/lobby/chess')}
@@ -374,7 +412,7 @@ export default function ChessPage() {
       </motion.div>
 
       {/* Player info + captured pieces */}
-      <div className="w-full max-w-[900px] flex justify-between items-center mb-2 px-1">
+      <div className="w-full max-w-[1080px] flex justify-between items-center mb-2 px-1">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-lg">
             {selectedOpponent?.avatar ?? '\u{1F916}'}
@@ -396,14 +434,53 @@ export default function ChessPage() {
       </div>
 
       <div className="flex flex-col lg:flex-row gap-4 items-start">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.98 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="game-canvas-container"
-          style={{ width: 700, height: 700 }}
-        >
-          <div ref={canvasRef} />
-        </motion.div>
+        <div className="flex gap-1 items-stretch">
+          {/* Vertical eval bar - visible during review */}
+          {reviewMode && (
+            <div className="w-6 rounded-lg overflow-hidden flex flex-col" style={{ height: 800 }}>
+              {(() => {
+                // Clamp eval to a reasonable display range (-1000 to 1000 centipawns)
+                const clampedEval = Math.max(-1000, Math.min(1000, reviewEval));
+                const blackPercent = Math.max(3, Math.min(97, 50 - (clampedEval / 1000) * 50));
+                const evalDisplay = reviewEval >= 0
+                  ? `+${(reviewEval / 100).toFixed(1)}`
+                  : (reviewEval / 100).toFixed(1);
+                return (
+                  <>
+                    <div
+                      className="bg-gray-700 transition-all duration-300 relative flex items-center justify-center"
+                      style={{ height: `${blackPercent}%` }}
+                    >
+                      {blackPercent > 15 && (
+                        <span className="text-[9px] font-mono text-white/60 rotate-0">
+                          {reviewEval < 0 ? evalDisplay : ''}
+                        </span>
+                      )}
+                    </div>
+                    <div
+                      className="bg-white transition-all duration-300 relative flex items-center justify-center"
+                      style={{ height: `${100 - blackPercent}%` }}
+                    >
+                      {(100 - blackPercent) > 15 && (
+                        <span className="text-[9px] font-mono text-gray-700 rotate-0">
+                          {reviewEval >= 0 ? evalDisplay : ''}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="game-canvas-container"
+            style={{ width: 800, height: 800 }}
+          >
+            <div ref={canvasRef} />
+          </motion.div>
+        </div>
 
         {/* Side panel - move history, commentary, review */}
         <div className="w-full lg:w-56 space-y-3">
@@ -443,11 +520,16 @@ export default function ChessPage() {
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-[700px] flex items-center justify-center gap-3 mt-3"
+        className="w-full max-w-[800px] flex items-center justify-center gap-3 mt-3"
       >
         <button onClick={handleUndo} className="btn-secondary text-sm py-2 px-4" disabled={thinking}>
           Undo
         </button>
+        {!isMultiplayer && (
+          <button onClick={handleHint} className="btn-secondary text-sm py-2 px-4" disabled={thinking || hinting || state?.turn !== 'w'}>
+            {hinting ? 'Thinking...' : 'Hint'}
+          </button>
+        )}
         <button onClick={handleNewGame} className="btn-secondary text-sm py-2 px-4">
           New Game
         </button>

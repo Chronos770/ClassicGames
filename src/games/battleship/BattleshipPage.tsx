@@ -79,8 +79,8 @@ export default function BattleshipPage() {
     const init = async () => {
       const app = new Application();
       await app.init({
-        width: 750,
-        height: 550,
+        width: 550,
+        height: 830,
         backgroundColor: 0x0a3d5c,
         antialias: true,
         resolution: window.devicePixelRatio || 1,
@@ -222,19 +222,19 @@ export default function BattleshipPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center py-4 px-4">
-      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-[750px] flex items-center justify-between mb-3">
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-[550px] flex items-center justify-between mb-3">
         <button onClick={() => navigate('/lobby/battleship')} className="text-sm text-white/40 hover:text-white/70 transition-colors">&#8592; Back</button>
         <h2 className="text-lg font-display font-bold text-white">Battleship</h2>
         <span className="text-sm text-white/60">{getStatusText()}</span>
       </motion.div>
 
-      {message && <div className="w-full max-w-[750px] text-center text-sm text-amber-400 mb-2">{message}</div>}
+      {message && <div className="w-full max-w-[550px] text-center text-sm text-amber-400 mb-2">{message}</div>}
 
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="game-canvas-container" style={{ width: 750, height: 550 }}>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="game-canvas-container" style={{ width: 550, height: 830 }}>
         <div ref={canvasRef} />
       </motion.div>
 
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-[750px] flex items-center justify-center gap-3 mt-3">
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-[550px] flex items-center justify-center gap-3 mt-3">
         {state?.phase === 'placement' && (
           <>
             <button onClick={handleRandomPlace} className="btn-primary text-sm py-2 px-4">Random Placement</button>
