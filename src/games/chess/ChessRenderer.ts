@@ -22,6 +22,7 @@ export class ChessRenderer {
   private highlightsContainer: Container;
   private animationContainer: Container;
   private arrowsContainer: Container;
+  private labelsContainer: Container;
   private celebration: WinCelebration | null = null;
   private animationQueue: AnimationQueue;
   private isAnimating: boolean = false;
@@ -40,6 +41,10 @@ export class ChessRenderer {
   private arrows: { from: Square; to: Square; color: number }[] = [];
   private arrowDragStart: Square | null = null;
 
+  // Board orientation and multiplayer
+  private flipped: boolean = false;
+  private playerColor: 'w' | 'b' | null = null; // null = both sides (single player)
+
   constructor(app: Application, game: ChessGame) {
     this.app = app;
     this.game = game;
@@ -49,6 +54,7 @@ export class ChessRenderer {
     this.piecesContainer = new Container();
     this.animationContainer = new Container();
     this.arrowsContainer = new Container();
+    this.labelsContainer = new Container();
     this.animationQueue = new AnimationQueue();
 
     // Wood background
@@ -70,6 +76,7 @@ export class ChessRenderer {
     this.mainContainer.addChild(this.piecesContainer);
     this.mainContainer.addChild(this.animationContainer);
     this.mainContainer.addChild(this.arrowsContainer);
+    this.mainContainer.addChild(this.labelsContainer);
 
     app.stage.addChild(this.mainContainer);
 
@@ -88,27 +95,51 @@ export class ChessRenderer {
     this.onArrowsChange = cb;
   }
 
+  setFlipped(flipped: boolean): void {
+    this.flipped = flipped;
+    this.renderLabels();
+  }
+
+  setPlayerColor(color: 'w' | 'b' | null): void {
+    this.playerColor = color;
+  }
+
+  /** Convert logical board coordinates to display coordinates (accounting for flip) */
+  private toDisplay(row: number, col: number): { row: number; col: number } {
+    return this.flipped ? { row: 7 - row, col: 7 - col } : { row, col };
+  }
+
+  /** Convert display coordinates back to logical coordinates */
+  private fromDisplay(row: number, col: number): { row: number; col: number } {
+    return this.flipped ? { row: 7 - row, col: 7 - col } : { row, col };
+  }
+
   private renderLabels(): void {
+    this.labelsContainer.removeChildren();
+
     const labelStyle = new TextStyle({
-      fontSize: 11,
+      fontSize: 14,
+      fontWeight: 'bold',
       fill: '#ccaa77',
       fontFamily: 'Georgia, serif',
     });
 
     for (let i = 0; i < 8; i++) {
-      // File labels (a-h)
-      const fileLabel = new Text({ text: String.fromCharCode(97 + i), style: labelStyle });
+      // File labels
+      const fileChar = this.flipped ? String.fromCharCode(104 - i) : String.fromCharCode(97 + i);
+      const fileLabel = new Text({ text: fileChar, style: labelStyle });
       fileLabel.anchor.set(0.5);
       fileLabel.x = BOARD_X + BORDER + i * CELL_SIZE + CELL_SIZE / 2;
       fileLabel.y = BOARD_Y + BORDER + 8 * CELL_SIZE + BORDER / 2 + 4;
-      this.mainContainer.addChild(fileLabel);
+      this.labelsContainer.addChild(fileLabel);
 
-      // Rank labels (8-1)
-      const rankLabel = new Text({ text: (8 - i).toString(), style: labelStyle });
+      // Rank labels
+      const rankNum = this.flipped ? (i + 1).toString() : (8 - i).toString();
+      const rankLabel = new Text({ text: rankNum, style: labelStyle });
       rankLabel.anchor.set(0.5);
       rankLabel.x = BOARD_X + BORDER / 2 - 2;
       rankLabel.y = BOARD_Y + BORDER + i * CELL_SIZE + CELL_SIZE / 2;
-      this.mainContainer.addChild(rankLabel);
+      this.labelsContainer.addChild(rankLabel);
     }
   }
 
@@ -121,7 +152,8 @@ export class ChessRenderer {
 
     // Render highlights
     if (this.selectedSquare) {
-      const { row, col } = squareToCoords(this.selectedSquare);
+      const { row: lr, col: lc } = squareToCoords(this.selectedSquare);
+      const { row, col } = this.toDisplay(lr, lc);
       const selHighlight = new Graphics();
       selHighlight.rect(
         BOARD_X + BORDER + col * CELL_SIZE,
@@ -134,13 +166,14 @@ export class ChessRenderer {
     }
 
     for (const sq of this.legalMoveSquares) {
-      const { row, col } = squareToCoords(sq);
+      const { row: lr, col: lc } = squareToCoords(sq);
+      const { row, col } = this.toDisplay(lr, lc);
       const dot = new Graphics();
       const cx = BOARD_X + BORDER + col * CELL_SIZE + CELL_SIZE / 2;
       const cy = BOARD_Y + BORDER + row * CELL_SIZE + CELL_SIZE / 2;
 
       // Check if there's a capturable piece
-      const piece = board[row][col];
+      const piece = board[lr][lc];
       if (piece) {
         dot.circle(cx, cy, CELL_SIZE * 0.45);
         dot.stroke({ color: 0x44ff44, width: 3, alpha: 0.5 });
@@ -155,7 +188,8 @@ export class ChessRenderer {
     if (state.isCheck) {
       const kingSquare = this.findKing(board, state.turn);
       if (kingSquare) {
-        const { row, col } = squareToCoords(kingSquare);
+        const { row: lr, col: lc } = squareToCoords(kingSquare);
+        const { row, col } = this.toDisplay(lr, lc);
         const checkHighlight = new Graphics();
         checkHighlight.rect(
           BOARD_X + BORDER + col * CELL_SIZE,
@@ -180,18 +214,22 @@ export class ChessRenderer {
           if (dragCoords.row === row && dragCoords.col === col) continue;
         }
 
+        const { row: dr, col: dc } = this.toDisplay(row, col);
+
         const sprite = createChessPiece(
           piece.type,
           piece.color === 'w' ? 'white' : 'black',
           CELL_SIZE
         );
 
-        sprite.x = BOARD_X + BORDER + col * CELL_SIZE + CELL_SIZE / 2;
-        sprite.y = BOARD_Y + BORDER + row * CELL_SIZE + CELL_SIZE / 2;
+        sprite.x = BOARD_X + BORDER + dc * CELL_SIZE + CELL_SIZE / 2;
+        sprite.y = BOARD_Y + BORDER + dr * CELL_SIZE + CELL_SIZE / 2;
 
-        // Drag-and-drop + click for player's pieces
-        const isPlayerPiece = piece.color === state.turn;
-        if (isPlayerPiece) {
+        // Only allow moving pieces that are the player's color AND it's their turn
+        const canMove = piece.color === state.turn &&
+          (!this.playerColor || piece.color === this.playerColor);
+
+        if (canMove) {
           sprite.cursor = 'grab';
 
           let dragStartX = 0;
@@ -261,10 +299,12 @@ export class ChessRenderer {
       for (let col = 0; col < 8; col++) {
         if (board[row][col]) continue;
 
+        const { row: dr, col: dc } = this.toDisplay(row, col);
+
         const hitArea = new Graphics();
         hitArea.rect(
-          BOARD_X + BORDER + col * CELL_SIZE,
-          BOARD_Y + BORDER + row * CELL_SIZE,
+          BOARD_X + BORDER + dc * CELL_SIZE,
+          BOARD_Y + BORDER + dr * CELL_SIZE,
           CELL_SIZE,
           CELL_SIZE
         );
@@ -341,7 +381,10 @@ export class ChessRenderer {
     const board = this.game.getBoard();
     const piece = board[row][col];
 
-    if (piece && piece.color === state.turn) {
+    const canSelect = piece && piece.color === state.turn &&
+      (!this.playerColor || piece.color === this.playerColor);
+
+    if (canSelect) {
       this.selectedSquare = square;
       const moves = this.game.getLegalMoves(square);
       this.legalMoveSquares = moves.map((m) => m.to as Square);
@@ -373,12 +416,14 @@ export class ChessRenderer {
   showReviewMove(from: Square, to: Square, qualityColor: number): void {
     const fromCoords = squareToCoords(from);
     const toCoords = squareToCoords(to);
+    const { row: fdr, col: fdc } = this.toDisplay(fromCoords.row, fromCoords.col);
+    const { row: tdr, col: tdc } = this.toDisplay(toCoords.row, toCoords.col);
 
     // Highlight from square
     const hFrom = new Graphics();
     hFrom.rect(
-      BOARD_X + BORDER + fromCoords.col * CELL_SIZE,
-      BOARD_Y + BORDER + fromCoords.row * CELL_SIZE,
+      BOARD_X + BORDER + fdc * CELL_SIZE,
+      BOARD_Y + BORDER + fdr * CELL_SIZE,
       CELL_SIZE,
       CELL_SIZE
     );
@@ -388,8 +433,8 @@ export class ChessRenderer {
     // Highlight to square (stronger)
     const hTo = new Graphics();
     hTo.rect(
-      BOARD_X + BORDER + toCoords.col * CELL_SIZE,
-      BOARD_Y + BORDER + toCoords.row * CELL_SIZE,
+      BOARD_X + BORDER + tdc * CELL_SIZE,
+      BOARD_Y + BORDER + tdr * CELL_SIZE,
       CELL_SIZE,
       CELL_SIZE
     );
@@ -421,14 +466,15 @@ export class ChessRenderer {
   }
 
   showHint(from: Square, to: Square): void {
-    // Draw a pulsing highlight on from/to squares
     const fromCoords = squareToCoords(from);
     const toCoords = squareToCoords(to);
+    const { row: fdr, col: fdc } = this.toDisplay(fromCoords.row, fromCoords.col);
+    const { row: tdr, col: tdc } = this.toDisplay(toCoords.row, toCoords.col);
 
     const hintFrom = new Graphics();
     hintFrom.rect(
-      BOARD_X + BORDER + fromCoords.col * CELL_SIZE,
-      BOARD_Y + BORDER + fromCoords.row * CELL_SIZE,
+      BOARD_X + BORDER + fdc * CELL_SIZE,
+      BOARD_Y + BORDER + fdr * CELL_SIZE,
       CELL_SIZE,
       CELL_SIZE
     );
@@ -437,8 +483,8 @@ export class ChessRenderer {
 
     const hintTo = new Graphics();
     hintTo.rect(
-      BOARD_X + BORDER + toCoords.col * CELL_SIZE,
-      BOARD_Y + BORDER + toCoords.row * CELL_SIZE,
+      BOARD_X + BORDER + tdc * CELL_SIZE,
+      BOARD_Y + BORDER + tdr * CELL_SIZE,
       CELL_SIZE,
       CELL_SIZE
     );
@@ -469,13 +515,14 @@ export class ChessRenderer {
     this.highlightsContainer.addChild(g);
   }
 
-  // ---- Animation methods (Phase 2) ----
+  // ---- Animation methods ----
 
   private getSquarePixel(square: Square): { x: number; y: number } {
     const { row, col } = squareToCoords(square);
+    const { row: dr, col: dc } = this.toDisplay(row, col);
     return {
-      x: BOARD_X + BORDER + col * CELL_SIZE + CELL_SIZE / 2,
-      y: BOARD_Y + BORDER + row * CELL_SIZE + CELL_SIZE / 2,
+      x: BOARD_X + BORDER + dc * CELL_SIZE + CELL_SIZE / 2,
+      y: BOARD_Y + BORDER + dr * CELL_SIZE + CELL_SIZE / 2,
     };
   }
 
@@ -523,7 +570,7 @@ export class ChessRenderer {
     return this.isAnimating;
   }
 
-  // ---- Arrow overlay methods (Phase 4) ----
+  // ---- Arrow overlay methods ----
 
   private canvasToLogical(clientX: number, clientY: number): { x: number; y: number } {
     const canvas = this.app.canvas as HTMLCanvasElement;
@@ -534,60 +581,57 @@ export class ChessRenderer {
     return { x, y };
   }
 
+  private arrowContextMenu = (e: Event) => { e.preventDefault(); };
+  private arrowPointerDown = (e: PointerEvent) => {
+    if (e.button !== 2) return;
+    const { x, y } = this.canvasToLogical(e.clientX, e.clientY);
+    const sq = this.pixelToSquare(x, y);
+    if (sq) this.arrowDragStart = sq;
+  };
+  private arrowPointerUp = (e: PointerEvent) => {
+    if (e.button !== 2 || !this.arrowDragStart) return;
+    const { x, y } = this.canvasToLogical(e.clientX, e.clientY);
+    const sq = this.pixelToSquare(x, y);
+
+    if (sq && sq !== this.arrowDragStart) {
+      const legalMoves = this.game.getLegalMoves(this.arrowDragStart);
+      const isLegal = legalMoves.some((m) => m.to === sq);
+      if (!isLegal) {
+        this.arrowDragStart = null;
+        return;
+      }
+
+      let color = 0xff8c00;
+      if (e.shiftKey) color = 0x44ff44;
+      else if (e.ctrlKey) color = 0x4488ff;
+      else if (e.altKey) color = 0xff4444;
+
+      const idx = this.arrows.findIndex(
+        (a) => a.from === this.arrowDragStart && a.to === sq
+      );
+      if (idx >= 0) {
+        this.arrows.splice(idx, 1);
+      } else {
+        this.arrows.push({ from: this.arrowDragStart, to: sq, color });
+      }
+      this.renderArrows();
+      this.onArrowsChange?.([...this.arrows]);
+    }
+    this.arrowDragStart = null;
+  };
+
   private setupArrowHandlers(): void {
     const canvas = this.app.canvas as HTMLCanvasElement;
-
-    canvas.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-    });
-
-    canvas.addEventListener('pointerdown', (e) => {
-      if (e.button !== 2) return; // Right-click only
-      const { x, y } = this.canvasToLogical(e.clientX, e.clientY);
-      const sq = this.pixelToSquare(x, y);
-      if (sq) this.arrowDragStart = sq;
-    });
-
-    canvas.addEventListener('pointerup', (e) => {
-      if (e.button !== 2 || !this.arrowDragStart) return;
-      const { x, y } = this.canvasToLogical(e.clientX, e.clientY);
-      const sq = this.pixelToSquare(x, y);
-
-      if (sq && sq !== this.arrowDragStart) {
-        // Only allow arrows that represent legal moves
-        const legalMoves = this.game.getLegalMoves(this.arrowDragStart);
-        const isLegal = legalMoves.some((m) => m.to === sq);
-        if (!isLegal) {
-          this.arrowDragStart = null;
-          return;
-        }
-
-        // Determine color based on modifier keys
-        let color = 0xff8c00; // orange default
-        if (e.shiftKey) color = 0x44ff44; // green
-        else if (e.ctrlKey) color = 0x4488ff; // blue
-        else if (e.altKey) color = 0xff4444; // red
-
-        // Toggle: remove if same arrow exists
-        const idx = this.arrows.findIndex(
-          (a) => a.from === this.arrowDragStart && a.to === sq
-        );
-        if (idx >= 0) {
-          this.arrows.splice(idx, 1);
-        } else {
-          this.arrows.push({ from: this.arrowDragStart, to: sq, color });
-        }
-        this.renderArrows();
-        this.onArrowsChange?.([...this.arrows]);
-      }
-      this.arrowDragStart = null;
-    });
+    canvas.addEventListener('contextmenu', this.arrowContextMenu);
+    canvas.addEventListener('pointerdown', this.arrowPointerDown);
+    canvas.addEventListener('pointerup', this.arrowPointerUp);
   }
 
   private pixelToSquare(x: number, y: number): Square | null {
-    const col = Math.floor((x - BOARD_X - BORDER) / CELL_SIZE);
-    const row = Math.floor((y - BOARD_Y - BORDER) / CELL_SIZE);
-    if (col < 0 || col > 7 || row < 0 || row > 7) return null;
+    const dc = Math.floor((x - BOARD_X - BORDER) / CELL_SIZE);
+    const dr = Math.floor((y - BOARD_Y - BORDER) / CELL_SIZE);
+    if (dc < 0 || dc > 7 || dr < 0 || dr > 7) return null;
+    const { row, col } = this.fromDisplay(dr, dc);
     return coordsToSquare(row, col);
   }
 
@@ -640,6 +684,10 @@ export class ChessRenderer {
   }
 
   destroy(): void {
+    const canvas = this.app.canvas as HTMLCanvasElement;
+    canvas.removeEventListener('contextmenu', this.arrowContextMenu);
+    canvas.removeEventListener('pointerdown', this.arrowPointerDown);
+    canvas.removeEventListener('pointerup', this.arrowPointerUp);
     this.celebration?.destroy();
     this.app.stage.removeChildren();
   }

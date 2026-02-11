@@ -69,7 +69,7 @@ export default function SolitairePage() {
     const init = async () => {
       const app = new Application();
       await app.init({
-        width: 700,
+        width: 900,
         height: 700,
         backgroundColor: 0x155c2a,
         antialias: true,
@@ -176,7 +176,7 @@ export default function SolitairePage() {
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-[700px] flex items-center justify-between mb-3"
+        className="w-full max-w-[900px] flex items-center justify-between mb-3"
       >
         <button
           onClick={() => navigate('/lobby/solitaire')}
@@ -199,7 +199,7 @@ export default function SolitairePage() {
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
         className="game-canvas-container"
-        style={{ width: 700, height: 700 }}
+        style={{ maxWidth: 900, aspectRatio: '900 / 700' }}
       >
         <div ref={canvasRef} />
       </motion.div>
@@ -209,7 +209,7 @@ export default function SolitairePage() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="w-full max-w-[700px] flex items-center justify-center gap-3 mt-3"
+        className="w-full max-w-[900px] flex items-center justify-center gap-3 mt-3"
       >
         <button onClick={handleUndo} className="btn-secondary text-sm py-2 px-4">
           Undo

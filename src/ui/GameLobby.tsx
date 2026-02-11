@@ -10,8 +10,7 @@ const GAME_NAMES: Record<string, string> = {
   hearts: 'Hearts',
   checkers: 'Checkers',
   rummy: 'Gin Rummy',
-  battleship: 'Battleship',
-  towerdefense: 'Tower Defense',
+  battleship: 'Sea Battle',
 };
 
 const GAME_DESCRIPTIONS: Record<string, string> = {
@@ -21,7 +20,6 @@ const GAME_DESCRIPTIONS: Record<string, string> = {
   checkers: 'Jump and capture to eliminate all opponent pieces.',
   rummy: 'Form melds of sets and runs. Be first to go gin!',
   battleship: 'Hide your fleet and sink the enemy ships.',
-  towerdefense: 'Build towers, stop the waves! A real-time strategy challenge.',
 };
 
 export default function GameLobby() {
@@ -36,17 +34,13 @@ export default function GameLobby() {
   const gameName = GAME_NAMES[gameId ?? ''] ?? 'Unknown Game';
   const gameDesc = GAME_DESCRIPTIONS[gameId ?? ''] ?? '';
   const isSolitaire = gameId === 'solitaire';
-  const isTowerDefense = gameId === 'towerdefense';
-  const isSinglePlayer = isSolitaire || isTowerDefense;
+  const isSinglePlayer = isSolitaire;
   const availableAIs = isSinglePlayer ? [] : getAIsForGame(gameId ?? '');
 
-  const [selectedDifficulty, setSelectedDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
 
   const startGame = () => {
     reset();
-    if (isTowerDefense) {
-      setGameDifficulty(selectedDifficulty);
-    } else if (selectedAI) {
+    if (selectedAI) {
       setGameDifficulty(selectedAI.difficulty);
       setSelectedOpponent(selectedAI);
     }
@@ -70,40 +64,6 @@ export default function GameLobby() {
 
         <h2 className="text-3xl font-display font-bold text-white mb-2">{gameName}</h2>
         <p className="text-white/50 mb-8">{gameDesc}</p>
-
-        {isTowerDefense && (
-          <div className="mb-8">
-            <label className="block text-sm text-white/60 mb-3 uppercase tracking-wider">
-              Difficulty
-            </label>
-            <div className="grid grid-cols-3 gap-3">
-              {(['easy', 'medium', 'hard'] as const).map((diff) => (
-                <button
-                  key={diff}
-                  onClick={() => setSelectedDifficulty(diff)}
-                  className={`p-4 rounded-lg text-center transition-all border-2 capitalize ${
-                    selectedDifficulty === diff
-                      ? 'border-amber-500 bg-amber-500/10'
-                      : 'border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20'
-                  }`}
-                >
-                  <div className={`text-sm font-medium ${
-                    diff === 'easy' ? 'text-green-400' :
-                    diff === 'medium' ? 'text-yellow-400' :
-                    'text-red-400'
-                  }`}>
-                    {diff}
-                  </div>
-                  <div className="text-xs text-white/40 mt-1">
-                    {diff === 'easy' ? 'Fewer, weaker enemies' :
-                     diff === 'medium' ? 'Balanced challenge' :
-                     'More, stronger enemies'}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         {!isSinglePlayer && (
           <div className="mb-8">

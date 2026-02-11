@@ -56,17 +56,21 @@ function minimax(
   if (maximizing) {
     let maxEval = -Infinity;
     for (const move of moves) {
+      const wasKing = board[move.fromRow][move.fromCol]?.isKing ?? false;
       const newBoard = applyMove(board, move);
 
       let nextColor: PieceColor = currentColor === 'red' ? 'black' : 'red';
       let nextJumping: { row: number; col: number } | null = null;
 
-      // Multi-jump
+      // Multi-jump (but not if piece was just promoted to king)
       if (move.isJump) {
-        const furtherJumps = getValidMoves(newBoard, move.toRow, move.toCol, { row: move.toRow, col: move.toCol });
-        if (furtherJumps.some((m) => m.isJump)) {
-          nextColor = currentColor;
-          nextJumping = { row: move.toRow, col: move.toCol };
+        const justPromoted = !wasKing && (newBoard[move.toRow][move.toCol]?.isKing ?? false);
+        if (!justPromoted) {
+          const furtherJumps = getValidMoves(newBoard, move.toRow, move.toCol, { row: move.toRow, col: move.toCol });
+          if (furtherJumps.some((m) => m.isJump)) {
+            nextColor = currentColor;
+            nextJumping = { row: move.toRow, col: move.toCol };
+          }
         }
       }
 
@@ -79,16 +83,20 @@ function minimax(
   } else {
     let minEval = Infinity;
     for (const move of moves) {
+      const wasKing = board[move.fromRow][move.fromCol]?.isKing ?? false;
       const newBoard = applyMove(board, move);
 
       let nextColor: PieceColor = currentColor === 'red' ? 'black' : 'red';
       let nextJumping: { row: number; col: number } | null = null;
 
       if (move.isJump) {
-        const furtherJumps = getValidMoves(newBoard, move.toRow, move.toCol, { row: move.toRow, col: move.toCol });
-        if (furtherJumps.some((m) => m.isJump)) {
-          nextColor = currentColor;
-          nextJumping = { row: move.toRow, col: move.toCol };
+        const justPromoted = !wasKing && (newBoard[move.toRow][move.toCol]?.isKing ?? false);
+        if (!justPromoted) {
+          const furtherJumps = getValidMoves(newBoard, move.toRow, move.toCol, { row: move.toRow, col: move.toCol });
+          if (furtherJumps.some((m) => m.isJump)) {
+            nextColor = currentColor;
+            nextJumping = { row: move.toRow, col: move.toCol };
+          }
         }
       }
 
@@ -119,16 +127,20 @@ export function getBestMove(
   let bestScore = -Infinity;
 
   for (const move of moves) {
+    const wasKing = state.board[move.fromRow][move.fromCol]?.isKing ?? false;
     const newBoard = applyMove(state.board, move);
 
     let nextColor: PieceColor = state.currentPlayer === 'red' ? 'black' : 'red';
     let nextJumping: { row: number; col: number } | null = null;
 
     if (move.isJump) {
-      const furtherJumps = getValidMoves(newBoard, move.toRow, move.toCol, { row: move.toRow, col: move.toCol });
-      if (furtherJumps.some((m) => m.isJump)) {
-        nextColor = state.currentPlayer;
-        nextJumping = { row: move.toRow, col: move.toCol };
+      const justPromoted = !wasKing && (newBoard[move.toRow][move.toCol]?.isKing ?? false);
+      if (!justPromoted) {
+        const furtherJumps = getValidMoves(newBoard, move.toRow, move.toCol, { row: move.toRow, col: move.toCol });
+        if (furtherJumps.some((m) => m.isJump)) {
+          nextColor = state.currentPlayer;
+          nextJumping = { row: move.toRow, col: move.toCol };
+        }
       }
     }
 

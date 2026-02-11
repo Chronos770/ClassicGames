@@ -7,7 +7,7 @@ interface GameOverModalProps {
   won: boolean;
   title: string;
   stats?: { label: string; value: string }[];
-  onPlayAgain: () => void;
+  onPlayAgain?: () => void;
   gameId: string;
   extraButton?: ReactNode;
 }
@@ -63,9 +63,11 @@ export default function GameOverModal({
                 Lobby
               </button>
               {extraButton}
-              <button onClick={onPlayAgain} className="btn-primary flex-1">
-                Play Again
-              </button>
+              {onPlayAgain && (
+                <button onClick={onPlayAgain} className="btn-primary flex-1">
+                  Play Again
+                </button>
+              )}
             </div>
           </motion.div>
         </motion.div>

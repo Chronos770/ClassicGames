@@ -9,6 +9,7 @@ import { CheckersState, CheckerMove } from './rules';
 import { useGameStore } from '../../stores/gameStore';
 import { useUserStore } from '../../stores/userStore';
 import { SoundManager } from '../../engine/SoundManager';
+import { useAuthStore } from '../../stores/authStore';
 import { MultiplayerGameAdapter } from '../../lib/multiplayerGameAdapter';
 import GameOverModal from '../../ui/GameOverModal';
 
@@ -21,30 +22,34 @@ export default function CheckersPage() {
 
   const difficulty = useGameStore((s) => s.difficulty);
   const isMultiplayer = useGameStore((s) => s.isMultiplayer);
+  const playerColor = useGameStore((s) => s.playerColor);
+  const selectedOpponent = useGameStore((s) => s.selectedOpponent);
   const recordGame = useUserStore((s) => s.recordGame);
   const adapterRef = useRef<MultiplayerGameAdapter | null>(null);
 
   const [state, setState] = useState<CheckersState | null>(null);
   const [validMoves, setValidMoves] = useState<CheckerMove[]>([]);
   const [gameOver, setGameOver] = useState(false);
+  const [playerWon, setPlayerWon] = useState<boolean | null>(null);
   const [thinking, setThinking] = useState(false);
 
-  // FIX BUG 2: Use refs to hold mutable values that the PixiJS click callback needs.
-  // This avoids stale closures -- the callback reads from the ref, which always
-  // points to the latest value.
   const validMovesRef = useRef<CheckerMove[]>([]);
   const thinkingRef = useRef(false);
   const recordGameRef = useRef(recordGame);
   const difficultyRef = useRef(difficulty);
 
-  // Keep refs in sync with state/props
   useEffect(() => { validMovesRef.current = validMoves; }, [validMoves]);
   useEffect(() => { thinkingRef.current = thinking; }, [thinking]);
   useEffect(() => { recordGameRef.current = recordGame; }, [recordGame]);
   useEffect(() => { difficultyRef.current = difficulty; }, [difficulty]);
 
-  // FIX BUG 7: Use a ref to prevent concurrent AI move executions
   const aiRunningRef = useRef(false);
+
+  // In multiplayer: 'w' = red (host), 'b' = black (joiner)
+  const localColor = isMultiplayer ? (playerColor === 'w' ? 'red' : 'black') : 'red';
+  const remoteColor = localColor === 'red' ? 'black' : 'red';
+  const multiplayerOpponentName = useGameStore((s) => s.multiplayerOpponentName);
+  const opponentName = isMultiplayer ? (multiplayerOpponentName || 'Opponent') : (selectedOpponent?.name ?? 'AI');
 
   const doAIMove = useCallback(async (game: CheckersGame, renderer: CheckersRenderer) => {
     if (aiRunningRef.current) return;
@@ -52,7 +57,6 @@ export default function CheckersPage() {
     setThinking(true);
     await new Promise((r) => setTimeout(r, 300 + Math.random() * 400));
 
-    // FIX BUG 6: Mark start of AI turn for proper undo
     game.markTurnStart();
 
     let madeMove = true;
@@ -67,7 +71,6 @@ export default function CheckersPage() {
         setState({ ...newState });
         renderer.render(newState);
 
-        // Check if multi-jump continues
         if (newState.jumpingPiece && newState.currentPlayer === 'black') {
           await new Promise((r) => setTimeout(r, 300));
           continue;
@@ -86,14 +89,8 @@ export default function CheckersPage() {
     }
     setThinking(false);
     aiRunningRef.current = false;
-  // FIX BUG 1: Remove all volatile deps. doAIMove now reads from refs,
-  // so it never needs to change identity.
   }, []);
 
-  // FIX BUG 1: The useEffect dependency array must contain ONLY stable values.
-  // Previously it included [doAIMove, thinking, validMoves, recordGame] which
-  // caused the entire PixiJS app to be destroyed and recreated on every state change.
-  // Now it only depends on [] (mount/unmount).
   useEffect(() => {
     if (!canvasRef.current) return;
     let destroyed = false;
@@ -101,8 +98,8 @@ export default function CheckersPage() {
     const init = async () => {
       const app = new Application();
       await app.init({
-        width: 720,
-        height: 650,
+        width: 800,
+        height: 800,
         backgroundColor: 0x3d2b1f,
         antialias: true,
         resolution: window.devicePixelRatio || 1,
@@ -120,16 +117,16 @@ export default function CheckersPage() {
       const renderer = new CheckersRenderer(app);
       rendererRef.current = renderer;
 
-      // FIX BUG 2: The click handler reads from refs instead of closed-over
-      // React state variables. This ensures it always sees the latest values.
+      const storeState = useGameStore.getState();
+      const myColor = storeState.isMultiplayer ? (storeState.playerColor === 'w' ? 'red' : 'black') : 'red';
+
       renderer.setOnCellClick((row, col) => {
         if (thinkingRef.current) return;
         const s = game.getState();
-        if (s.currentPlayer !== 'red' || s.phase === 'finished') return;
+        if (s.currentPlayer !== myColor || s.phase === 'finished') return;
 
         const piece = s.board[row][col];
 
-        // If clicking a valid move target
         const currentValidMoves = validMovesRef.current;
         const matchingMove = currentValidMoves.find((m) => m.toRow === row && m.toCol === col);
         if (matchingMove) {
@@ -139,8 +136,18 @@ export default function CheckersPage() {
           setState({ ...newState });
           setValidMoves([]);
 
+          // Send move to remote player
+          if (adapterRef.current) {
+            adapterRef.current.sendMove({
+              fromRow: matchingMove.fromRow,
+              fromCol: matchingMove.fromCol,
+              toRow: matchingMove.toRow,
+              toCol: matchingMove.toCol,
+            });
+          }
+
           // Check for multi-jump
-          if (newState.jumpingPiece && newState.currentPlayer === 'red') {
+          if (newState.jumpingPiece && newState.currentPlayer === myColor) {
             const nextMoves = game.selectPiece(newState.jumpingPiece.row, newState.jumpingPiece.col);
             setValidMoves(nextMoves);
             renderer.render(newState, nextMoves);
@@ -151,21 +158,21 @@ export default function CheckersPage() {
 
           if (newState.phase === 'finished') {
             setGameOver(true);
-            const opName2 = useGameStore.getState().selectedOpponent?.name ?? 'AI';
-            recordGameRef.current('checkers', newState.winner === 'red', opName2);
-            SoundManager.getInstance().play(newState.winner === 'red' ? 'game-win' : 'game-lose');
+            const mp = useGameStore.getState().isMultiplayer;
+            const localWon = mp ? newState.winner === myColor : newState.winner === 'red';
+            const opName2 = mp ? (useGameStore.getState().multiplayerOpponentName || 'Opponent') : (useGameStore.getState().selectedOpponent?.name ?? 'AI');
+            recordGameRef.current('checkers', localWon, opName2);
+            SoundManager.getInstance().play(localWon ? 'game-win' : 'game-lose');
             renderer.showWin();
-          } else if (newState.currentPlayer === 'black') {
+          } else if (!adapterRef.current && newState.currentPlayer === 'black') {
             doAIMove(game, renderer);
           }
           return;
         }
 
         // Select a piece
-        if (piece && piece.color === 'red') {
+        if (piece && piece.color === myColor) {
           SoundManager.getInstance().play('piece-click');
-          // FIX BUG 6: Mark start of player turn when they select their first piece
-          // (only if not already in a multi-jump)
           if (!s.jumpingPiece) {
             game.markTurnStart();
           }
@@ -180,22 +187,47 @@ export default function CheckersPage() {
       renderer.render(initialState);
 
       // Multiplayer adapter
-      if (useGameStore.getState().isMultiplayer) {
+      if (storeState.isMultiplayer) {
         const adapter = new MultiplayerGameAdapter('checkers');
         adapterRef.current = adapter;
-        adapter.connect((moveData: { fromRow: number; fromCol: number; toRow: number; toCol: number }) => {
+        adapter.connect((moveData: any) => {
+          // Handle name exchange
+          if (moveData.type === 'player-info') {
+            useGameStore.getState().setMultiplayerOpponentName(moveData.name || 'Opponent');
+            return;
+          }
+          // Handle resign
+          if (moveData.type === 'resign') {
+            setPlayerWon(true);
+            setGameOver(true);
+            recordGameRef.current('checkers', true, useGameStore.getState().multiplayerOpponentName || 'Opponent');
+            SoundManager.getInstance().play('game-win');
+            renderer.showWin();
+            return;
+          }
           const moves = game.selectPiece(moveData.fromRow, moveData.fromCol);
-          const move = moves.find(m => m.toRow === moveData.toRow && m.toCol === moveData.toCol);
+          const move = moves.find((m: CheckerMove) => m.toRow === moveData.toRow && m.toCol === moveData.toCol);
           if (move) {
             game.makeMove(move);
+            SoundManager.getInstance().play(move.isJump ? 'piece-capture' : 'board-move');
             const newState = game.getState();
             setState({ ...newState });
+            setValidMoves([]);
             renderer.render(newState);
             if (newState.phase === 'finished') {
               setGameOver(true);
+              const localWon = newState.winner === myColor;
+              recordGameRef.current('checkers', localWon, useGameStore.getState().multiplayerOpponentName || 'Opponent');
+              SoundManager.getInstance().play(localWon ? 'game-win' : 'game-lose');
+              if (localWon) renderer.showWin();
             }
           }
         });
+
+        // Announce our name
+        const profile = useAuthStore.getState().profile;
+        const myName = profile?.display_name || 'Player';
+        setTimeout(() => adapter.sendMove({ type: 'player-info', name: myName }), 300);
       }
     };
 
@@ -213,10 +245,10 @@ export default function CheckersPage() {
     const renderer = rendererRef.current;
     if (!game || !renderer) return;
     setGameOver(false);
+    setPlayerWon(null);
     setValidMoves([]);
     setThinking(false);
     aiRunningRef.current = false;
-    // FIX BUG 5: Stop the celebration effect before starting a new game
     renderer.stopCelebration();
     game.initialize();
     const s = game.getState();
@@ -224,55 +256,100 @@ export default function CheckersPage() {
     renderer.render(s);
   };
 
-  // FIX BUG 4/6: Undo uses undoTurn() to properly undo an entire turn
-  // (including multi-jump sequences), then does it twice to undo both
-  // the AI's turn and the player's turn.
   const handleUndo = () => {
     const game = gameRef.current;
     const renderer = rendererRef.current;
     if (!game || !renderer || thinking) return;
-    // Undo AI turn
     game.undoTurn();
-    // Undo player turn
     game.undoTurn();
     setValidMoves([]);
     setGameOver(false);
-    // FIX BUG 5: Stop celebration if undoing from a finished game
     renderer.stopCelebration();
     const s = game.getState();
     setState({ ...s });
     renderer.render(s);
   };
 
+  const handleResign = () => {
+    if (!isMultiplayer || gameOver) return;
+    adapterRef.current?.sendMove({ type: 'resign' });
+    setPlayerWon(false);
+    setGameOver(true);
+    SoundManager.getInstance().play('game-lose');
+    recordGameRef.current('checkers', false, multiplayerOpponentName || 'Opponent');
+  };
+
+  const isLocalTurn = state ? state.currentPlayer === localColor : false;
+
   return (
     <div className="min-h-screen flex flex-col items-center py-4 px-4">
-      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-[720px] flex items-center justify-between mb-3">
-        <button onClick={() => navigate('/lobby/checkers')} className="text-sm text-white/40 hover:text-white/70 transition-colors">&#8592; Back</button>
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-[800px] flex items-center justify-between mb-3">
+        <button onClick={() => {
+          if (isMultiplayer && !gameOver) {
+            if (!window.confirm('Leaving will count as a resignation. Are you sure?')) return;
+            adapterRef.current?.sendMove({ type: 'resign' });
+          }
+          navigate('/lobby/checkers');
+        }} className="text-sm text-white/50 hover:text-white/80 transition-colors bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg">{'\u2190'} Back</button>
         <h2 className="text-lg font-display font-bold text-white">Checkers</h2>
         <span className="text-sm text-white/60">
-          {thinking ? <span className="text-amber-400 animate-pulse">AI thinking...</span> : state?.currentPlayer === 'red' ? 'Your turn (Red)' : ''}
+          {thinking && !isMultiplayer ? (
+            <span className="text-amber-400 animate-pulse">
+              {selectedOpponent ? `${selectedOpponent.avatar} thinking...` : 'AI thinking...'}
+            </span>
+          ) : isLocalTurn ? 'Your turn' : `${opponentName}'s turn`}
         </span>
       </motion.div>
 
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="game-canvas-container" style={{ width: 720, height: 650 }}>
+      {/* Player info bar */}
+      <div className="w-full max-w-[800px] flex justify-between items-center mb-2 px-1">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-sm">
+            {isMultiplayer ? '\u{1F464}' : (selectedOpponent?.avatar ?? '\u{1F916}')}
+          </div>
+          <div className="text-xs text-white/60">{opponentName} ({remoteColor === 'red' ? 'Red' : 'Black'})</div>
+          <div className="text-xs text-white/40 ml-1">Pieces: {remoteColor === 'red' ? state?.redCount ?? 0 : state?.blackCount ?? 0}</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="text-xs text-white/40 mr-1">Pieces: {localColor === 'red' ? state?.redCount ?? 0 : state?.blackCount ?? 0}</div>
+          <div className="text-xs text-white/60">You ({localColor === 'red' ? 'Red' : 'Black'})</div>
+          <div className="w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-sm">{'\u265A'}</div>
+        </div>
+      </div>
+
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="game-canvas-container" style={{ maxWidth: 800, aspectRatio: '800 / 800' }}>
         <div ref={canvasRef} />
       </motion.div>
 
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-[720px] flex items-center justify-center gap-3 mt-3">
-        <button onClick={handleUndo} className="btn-secondary text-sm py-2 px-4" disabled={thinking}>Undo</button>
-        <button onClick={handleNewGame} className="btn-secondary text-sm py-2 px-4">New Game</button>
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-[800px] flex items-center justify-center gap-3 mt-3">
+        {!isMultiplayer && (
+          <button onClick={handleUndo} className="btn-secondary text-sm py-2 px-4" disabled={thinking || gameOver}>Undo</button>
+        )}
+        {isMultiplayer && !gameOver && (
+          <button onClick={handleResign} className="text-sm py-2 px-4 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors">
+            Resign
+          </button>
+        )}
+        {!isMultiplayer && (
+          <button onClick={handleNewGame} className="btn-secondary text-sm py-2 px-4">New Game</button>
+        )}
       </motion.div>
 
       <GameOverModal
         isOpen={gameOver}
-        won={state?.winner === 'red'}
-        title={state?.winner === 'red' ? 'You Win!' : 'AI Wins!'}
+        won={playerWon ?? (state ? state.winner === localColor : false)}
+        title={playerWon === true
+          ? 'Opponent Resigned - You Win!'
+          : playerWon === false
+            ? 'You Resigned'
+            : state ? (state.winner === localColor ? 'You Win!' : `${opponentName} Wins!`) : ''}
         gameId="checkers"
         stats={[
-          { label: 'Your Pieces', value: (state?.redCount ?? 0).toString() },
-          { label: 'AI Pieces', value: (state?.blackCount ?? 0).toString() },
+          { label: 'Your Pieces', value: (localColor === 'red' ? state?.redCount ?? 0 : state?.blackCount ?? 0).toString() },
+          { label: `${opponentName} Pieces`, value: (remoteColor === 'red' ? state?.redCount ?? 0 : state?.blackCount ?? 0).toString() },
+          ...(isMultiplayer ? [] : [{ label: 'Difficulty', value: difficulty }]),
         ]}
-        onPlayAgain={handleNewGame}
+        onPlayAgain={isMultiplayer ? undefined : handleNewGame}
       />
     </div>
   );

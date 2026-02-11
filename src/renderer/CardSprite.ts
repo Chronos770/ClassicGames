@@ -35,25 +35,27 @@ export function createCardGraphics(card: Card, faceUp?: boolean): Container {
 
     // Rank text top-left
     const rankStyle = new TextStyle({
-      fontSize: 16,
+      fontSize: 14,
       fontWeight: 'bold',
       fontFamily: 'Georgia, serif',
       fill: color,
     });
     const rankText = new Text({ text: card.rank, style: rankStyle });
-    rankText.x = 5;
-    rankText.y = 3;
+    rankText.anchor.set(0.5, 0);
+    rankText.x = 12;
+    rankText.y = 5;
     container.addChild(rankText);
 
     // Suit symbol top-left
     const suitStyle = new TextStyle({
-      fontSize: 13,
+      fontSize: 12,
       fontFamily: 'Georgia, serif',
       fill: color,
     });
     const suitText = new Text({ text: symbol, style: suitStyle });
-    suitText.x = 6;
-    suitText.y = 20;
+    suitText.anchor.set(0.5, 0);
+    suitText.x = 12;
+    suitText.y = 21;
     container.addChild(suitText);
 
     // Center suit (large)
@@ -70,20 +72,18 @@ export function createCardGraphics(card: Card, faceUp?: boolean): Container {
 
     // Bottom-right rank (inverted)
     const rankBottom = new Text({ text: card.rank, style: rankStyle });
-    rankBottom.anchor.set(1, 1);
-    rankBottom.x = CARD_WIDTH - 5;
-    rankBottom.y = CARD_HEIGHT - 3;
+    rankBottom.anchor.set(0.5, 0);
     rankBottom.rotation = Math.PI;
-    rankBottom.x = CARD_WIDTH - 5;
-    rankBottom.y = CARD_HEIGHT - 3;
+    rankBottom.x = CARD_WIDTH - 12;
+    rankBottom.y = CARD_HEIGHT - 5;
     container.addChild(rankBottom);
 
     // Bottom-right suit (inverted)
     const suitBottom = new Text({ text: symbol, style: suitStyle });
-    suitBottom.anchor.set(1, 1);
+    suitBottom.anchor.set(0.5, 0);
     suitBottom.rotation = Math.PI;
-    suitBottom.x = CARD_WIDTH - 6;
-    suitBottom.y = CARD_HEIGHT - 20;
+    suitBottom.x = CARD_WIDTH - 12;
+    suitBottom.y = CARD_HEIGHT - 21;
     container.addChild(suitBottom);
   } else {
     // Card back - themed

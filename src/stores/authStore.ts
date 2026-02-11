@@ -8,12 +8,32 @@ interface AuthState {
   session: Session | null;
   isLoading: boolean;
   isGuest: boolean;
-  profile: { display_name: string; avatar_emoji: string; avatar_url: string | null } | null;
+  profile: { display_name: string; avatar_emoji: string; avatar_url: string | null; role: string } | null;
+  _presenceInterval: ReturnType<typeof setInterval> | null;
   initialize: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<{ error: string | null }>;
   signUpWithEmail: (email: string, password: string, name: string) => Promise<{ error: string | null }>;
+  resetPassword: (email: string) => Promise<{ error: string | null }>;
+  updatePassword: (newPassword: string) => Promise<{ error: string | null }>;
+  updateEmail: (newEmail: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   fetchProfile: () => Promise<void>;
+}
+
+async function initSocial(userId: string): Promise<void> {
+  const { useSocialStore } = await import('./socialStore');
+  useSocialStore.getState().initialize(userId);
+}
+
+async function cleanupSocial(): Promise<void> {
+  const { useSocialStore } = await import('./socialStore');
+  useSocialStore.getState().cleanup();
+}
+
+async function startPresenceHeartbeat(userId: string): Promise<ReturnType<typeof setInterval>> {
+  const { updatePresence } = await import('../lib/friendsService');
+  updatePresence(userId);
+  return setInterval(() => updatePresence(userId), 2 * 60 * 1000);
 }
 
 export const useAuthStore = create<AuthState>()((set, get) => ({
@@ -22,6 +42,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   isLoading: true,
   isGuest: true,
   profile: null,
+  _presenceInterval: null,
 
   initialize: async () => {
     if (!supabase) {
@@ -33,10 +54,26 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     if (session) {
       set({ user: session.user, session, isGuest: false });
       get().fetchProfile();
+      initSocial(session.user.id);
+      startPresenceHeartbeat(session.user.id).then(interval => {
+        set({ _presenceInterval: interval });
+      });
     }
     set({ isLoading: false });
 
-    supabase.auth.onAuthStateChange((_event, session) => {
+    supabase.auth.onAuthStateChange((event, session) => {
+      // Handle password recovery: redirect to reset page instead of normal sign-in
+      if (event === 'PASSWORD_RECOVERY') {
+        set({
+          user: session?.user ?? null,
+          session,
+          isGuest: !session,
+        });
+        window.location.replace('/reset-password');
+        return;
+      }
+
+      const prev = get().user;
       set({
         user: session?.user ?? null,
         session,
@@ -44,8 +81,20 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       });
       if (session) {
         get().fetchProfile();
+        if (!prev) {
+          initSocial(session.user.id);
+          startPresenceHeartbeat(session.user.id).then(interval => {
+            set({ _presenceInterval: interval });
+          });
+        }
       } else {
         set({ profile: null });
+        cleanupSocial().catch(() => {});
+        const interval = get()._presenceInterval;
+        if (interval) {
+          clearInterval(interval);
+          set({ _presenceInterval: null });
+        }
       }
     });
   },
@@ -55,7 +104,11 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     const { error, data } = await supabase.auth.signInWithPassword({ email, password });
     if (!error && data.user) {
       // Merge local stats to Supabase
-      await mergeLocalStats(data.user.id);
+      try {
+        await mergeLocalStats(data.user.id);
+      } catch {
+        // Non-fatal: stats merge failure shouldn't block login
+      }
     }
     return { error: error?.message ?? null };
   },
@@ -70,8 +123,34 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     return { error: error?.message ?? null };
   },
 
+  resetPassword: async (email) => {
+    if (!supabase) return { error: 'Supabase not configured' };
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    return { error: error?.message ?? null };
+  },
+
+  updatePassword: async (newPassword) => {
+    if (!supabase) return { error: 'Supabase not configured' };
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    return { error: error?.message ?? null };
+  },
+
+  updateEmail: async (newEmail) => {
+    if (!supabase) return { error: 'Supabase not configured' };
+    const { error } = await supabase.auth.updateUser({ email: newEmail });
+    return { error: error?.message ?? null };
+  },
+
   signOut: async () => {
     if (!supabase) return;
+    const interval = get()._presenceInterval;
+    if (interval) {
+      clearInterval(interval);
+      set({ _presenceInterval: null });
+    }
+    await cleanupSocial();
     await supabase.auth.signOut();
     set({ user: null, session: null, isGuest: true, profile: null });
   },
@@ -81,14 +160,24 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     const user = get().user;
     if (!user) return;
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
-      .select('display_name, avatar_emoji, avatar_url')
+      .select('display_name, avatar_emoji, avatar_url, role')
       .eq('id', user.id)
       .single();
 
     if (data) {
-      set({ profile: data });
+      set({ profile: { ...data, role: data.role ?? 'user' } });
+    } else if (error) {
+      // Fallback: role column may not exist yet (pre-migration)
+      const { data: fallback } = await supabase
+        .from('profiles')
+        .select('display_name, avatar_emoji, avatar_url')
+        .eq('id', user.id)
+        .single();
+      if (fallback) {
+        set({ profile: { ...fallback, role: 'user' } });
+      }
     }
   },
 }));
@@ -114,7 +203,7 @@ async function mergeLocalStats(userId: string): Promise<void> {
       game_id: gameId,
       played: (existing?.played ?? 0) + stats.played,
       won: (existing?.won ?? 0) + stats.won,
-      streak: stats.streak,
+      streak: Math.max(existing?.streak ?? 0, stats.streak),
       best_streak: Math.max(existing?.best_streak ?? 0, stats.bestStreak),
     };
 

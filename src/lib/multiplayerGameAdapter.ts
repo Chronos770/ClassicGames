@@ -14,10 +14,10 @@ export class MultiplayerGameAdapter {
     this.gameType = gameType;
   }
 
-  /** Start listening for remote moves */
+  /** Start listening for remote moves (merges with existing handlers) */
   connect(onRemoteMove: (moveData: any) => void): void {
     this.onRemoteMove = onRemoteMove;
-    multiplayerService.setHandlers({
+    multiplayerService.updateHandlers({
       onMoveReceived: (payload: GameMovePayload) => {
         if (payload.gameType === this.gameType) {
           this.onRemoteMove?.(payload.moveData);

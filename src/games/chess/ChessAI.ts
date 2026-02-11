@@ -1,42 +1,155 @@
 import { Chess } from 'chess.js';
 import { Difficulty } from '../../engine/types';
-import { ChessMoveResult, Square } from './rules';
+import { Square } from './rules';
 
-// Simple AI that doesn't require Stockfish WASM
-// Uses minimax with basic evaluation for a self-contained implementation
-// Stockfish integration can be added later as an enhancement
+// ─── Web Worker for off-thread search ───────────────────────────────────────
+
+let worker: Worker | null = null;
+let requestId = 0;
+const pendingRequests = new Map<number, (result: any) => void>();
+
+function getWorker(): Worker {
+  if (!worker) {
+    worker = new Worker(new URL('./chessWorker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (e: MessageEvent) => {
+      const { id, result } = e.data;
+      const resolve = pendingRequests.get(id);
+      if (resolve) {
+        pendingRequests.delete(id);
+        resolve(result);
+      }
+    };
+    worker.onerror = () => {
+      // Worker crashed — resolve all pending requests with null so the game doesn't freeze
+      for (const [, resolve] of pendingRequests) {
+        resolve(null);
+      }
+      pendingRequests.clear();
+      worker?.terminate();
+      worker = null;
+    };
+  }
+  return worker;
+}
+
+export async function getBestMove(
+  fen: string,
+  difficulty: Difficulty,
+  remainingTimeMs?: number
+): Promise<{ from: Square; to: Square; eval?: number } | null> {
+  const id = ++requestId;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (result: any) => {
+      if (settled) return;
+      settled = true;
+      pendingRequests.delete(id);
+      if (!result) {
+        resolve(null);
+      } else {
+        resolve({
+          from: result.from as Square,
+          to: result.to as Square,
+          eval: result.eval,
+        });
+      }
+    };
+
+    pendingRequests.set(id, settle);
+
+    // Safety timeout: if worker doesn't respond in 15s, resolve null so game doesn't freeze
+    setTimeout(() => settle(null), 15000);
+
+    getWorker().postMessage({ id, fen, difficulty, remainingTimeMs });
+  });
+}
+
+// ─── Evaluation (kept here for ChessReview.ts which runs on main thread) ───
 
 const PIECE_VALUES: Record<string, number> = {
   p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000,
 };
 
-// Piece-square tables for positional evaluation
 const PAWN_TABLE = [
-  0,  0,  0,  0,  0,  0,  0,  0,
+   0,  0,  0,  0,  0,  0,  0,  0,
   50, 50, 50, 50, 50, 50, 50, 50,
   10, 10, 20, 30, 30, 20, 10, 10,
-  5,  5, 10, 25, 25, 10,  5,  5,
-  0,  0,  0, 20, 20,  0,  0,  0,
-  5, -5,-10,  0,  0,-10, -5,  5,
-  5, 10, 10,-20,-20, 10, 10,  5,
-  0,  0,  0,  0,  0,  0,  0,  0,
+   5,  5, 10, 25, 25, 10,  5,  5,
+   0,  0,  0, 20, 20,  0,  0,  0,
+   5, -5,-10,  0,  0,-10, -5,  5,
+   5, 10, 10,-20,-20, 10, 10,  5,
+   0,  0,  0,  0,  0,  0,  0,  0,
 ];
 
 const KNIGHT_TABLE = [
-  -50,-40,-30,-30,-30,-30,-40,-50,
-  -40,-20,  0,  0,  0,  0,-20,-40,
-  -30,  0, 10, 15, 15, 10,  0,-30,
-  -30,  5, 15, 20, 20, 15,  5,-30,
-  -30,  0, 15, 20, 20, 15,  0,-30,
-  -30,  5, 10, 15, 15, 10,  5,-30,
-  -40,-20,  0,  5,  5,  0,-20,-40,
-  -50,-40,-30,-30,-30,-30,-40,-50,
+ -50,-40,-30,-30,-30,-30,-40,-50,
+ -40,-20,  0,  0,  0,  0,-20,-40,
+ -30,  0, 10, 15, 15, 10,  0,-30,
+ -30,  5, 15, 20, 20, 15,  5,-30,
+ -30,  0, 15, 20, 20, 15,  0,-30,
+ -30,  5, 10, 15, 15, 10,  5,-30,
+ -40,-20,  0,  5,  5,  0,-20,-40,
+ -50,-40,-30,-30,-30,-30,-40,-50,
 ];
 
-const DEPTH_BY_DIFFICULTY: Record<Difficulty, number> = {
-  easy: 1,
-  medium: 3,
-  hard: 4,
+const BISHOP_TABLE = [
+ -20,-10,-10,-10,-10,-10,-10,-20,
+ -10,  0,  0,  0,  0,  0,  0,-10,
+ -10,  0, 10, 10, 10, 10,  0,-10,
+ -10,  5,  5, 10, 10,  5,  5,-10,
+ -10,  0, 10, 10, 10, 10,  0,-10,
+ -10, 10, 10, 10, 10, 10, 10,-10,
+ -10,  5,  0,  0,  0,  0,  5,-10,
+ -20,-10,-10,-10,-10,-10,-10,-20,
+];
+
+const ROOK_TABLE = [
+   0,  0,  0,  0,  0,  0,  0,  0,
+   5, 10, 10, 10, 10, 10, 10,  5,
+  -5,  0,  0,  0,  0,  0,  0, -5,
+  -5,  0,  0,  0,  0,  0,  0, -5,
+  -5,  0,  0,  0,  0,  0,  0, -5,
+  -5,  0,  0,  0,  0,  0,  0, -5,
+  -5,  0,  0,  0,  0,  0,  0, -5,
+   0,  0,  0,  5,  5,  0,  0,  0,
+];
+
+const QUEEN_TABLE = [
+ -20,-10,-10, -5, -5,-10,-10,-20,
+ -10,  0,  0,  0,  0,  0,  0,-10,
+ -10,  0,  5,  5,  5,  5,  0,-10,
+  -5,  0,  5,  5,  5,  5,  0, -5,
+   0,  0,  5,  5,  5,  5,  0, -5,
+ -10,  5,  5,  5,  5,  5,  0,-10,
+ -10,  0,  5,  0,  0,  0,  0,-10,
+ -20,-10,-10, -5, -5,-10,-10,-20,
+];
+
+const KING_MIDGAME_TABLE = [
+ -30,-40,-40,-50,-50,-40,-40,-30,
+ -30,-40,-40,-50,-50,-40,-40,-30,
+ -30,-40,-40,-50,-50,-40,-40,-30,
+ -30,-40,-40,-50,-50,-40,-40,-30,
+ -20,-30,-30,-40,-40,-30,-30,-20,
+ -10,-20,-20,-20,-20,-20,-20,-10,
+  20, 20,  0,  0,  0,  0, 20, 20,
+  20, 30, 10,  0,  0, 10, 30, 20,
+];
+
+const KING_ENDGAME_TABLE = [
+ -50,-40,-30,-20,-20,-30,-40,-50,
+ -30,-20,-10,  0,  0,-10,-20,-30,
+ -30,-10, 20, 30, 30, 20,-10,-30,
+ -30,-10, 30, 40, 40, 30,-10,-30,
+ -30,-10, 30, 40, 40, 30,-10,-30,
+ -30,-10, 20, 30, 30, 20,-10,-30,
+ -30,-30,  0,  0,  0,  0,-30,-30,
+ -50,-30,-30,-30,-30,-30,-30,-50,
+];
+
+const PST: Record<string, number[]> = {
+  p: PAWN_TABLE, n: KNIGHT_TABLE, b: BISHOP_TABLE, r: ROOK_TABLE, q: QUEEN_TABLE,
 };
 
 export function evaluateBoard(chess: Chess): number {
@@ -45,8 +158,19 @@ export function evaluateBoard(chess: Chess): number {
   }
   if (chess.isDraw() || chess.isStalemate()) return 0;
 
-  let score = 0;
   const board = chess.board();
+  let totalQueens = 0, totalMinors = 0;
+  for (let r = 0; r < 8; r++)
+    for (let c = 0; c < 8; c++) {
+      const p = board[r][c];
+      if (!p) continue;
+      if (p.type === 'q') totalQueens++;
+      if (p.type === 'n' || p.type === 'b') totalMinors++;
+    }
+
+  const endgame = totalQueens === 0 || (totalQueens <= 2 && totalMinors <= 2);
+  const kingTable = endgame ? KING_ENDGAME_TABLE : KING_MIDGAME_TABLE;
+  let score = 0;
 
   for (let row = 0; row < 8; row++) {
     for (let col = 0; col < 8; col++) {
@@ -54,93 +178,18 @@ export function evaluateBoard(chess: Chess): number {
       if (!piece) continue;
 
       let value = PIECE_VALUES[piece.type] ?? 0;
-      const tableIndex = piece.color === 'w' ? row * 8 + col : (7 - row) * 8 + col;
+      const idx = piece.color === 'w' ? row * 8 + col : (7 - row) * 8 + col;
 
-      if (piece.type === 'p') value += PAWN_TABLE[tableIndex];
-      if (piece.type === 'n') value += KNIGHT_TABLE[tableIndex];
+      if (piece.type === 'k') {
+        value += kingTable[idx];
+      } else {
+        const table = PST[piece.type];
+        if (table) value += table[idx];
+      }
 
       score += piece.color === 'w' ? value : -value;
     }
   }
 
   return score;
-}
-
-function minimax(chess: Chess, depth: number, alpha: number, beta: number, isMax: boolean): number {
-  if (depth === 0 || chess.isGameOver()) {
-    return evaluateBoard(chess);
-  }
-
-  const moves = chess.moves();
-
-  if (isMax) {
-    let maxEval = -Infinity;
-    for (const move of moves) {
-      chess.move(move);
-      const evalScore = minimax(chess, depth - 1, alpha, beta, false);
-      chess.undo();
-      maxEval = Math.max(maxEval, evalScore);
-      alpha = Math.max(alpha, evalScore);
-      if (beta <= alpha) break;
-    }
-    return maxEval;
-  } else {
-    let minEval = Infinity;
-    for (const move of moves) {
-      chess.move(move);
-      const evalScore = minimax(chess, depth - 1, alpha, beta, true);
-      chess.undo();
-      minEval = Math.min(minEval, evalScore);
-      beta = Math.min(beta, evalScore);
-      if (beta <= alpha) break;
-    }
-    return minEval;
-  }
-}
-
-export async function getBestMove(
-  fen: string,
-  difficulty: Difficulty
-): Promise<{ from: Square; to: Square; eval?: number } | null> {
-  const chess = new Chess(fen);
-  const moves = chess.moves({ verbose: true });
-  if (moves.length === 0) return null;
-
-  const depth = DEPTH_BY_DIFFICULTY[difficulty];
-  const isWhite = chess.turn() === 'w';
-
-  // Add some randomness for easy difficulty
-  if (difficulty === 'easy' && Math.random() < 0.3) {
-    const randomMove = moves[Math.floor(Math.random() * moves.length)];
-    return { from: randomMove.from as Square, to: randomMove.to as Square };
-  }
-
-  let bestMove = moves[0];
-  let bestScore = isWhite ? -Infinity : Infinity;
-
-  for (const move of moves) {
-    chess.move(move);
-    const score = minimax(chess, depth - 1, -Infinity, Infinity, !isWhite);
-    chess.undo();
-
-    if (isWhite ? score > bestScore : score < bestScore) {
-      bestScore = score;
-      bestMove = move;
-    }
-  }
-
-  // Add slight randomness for medium
-  if (difficulty === 'medium' && Math.random() < 0.1) {
-    const goodMoves = moves.filter((m) => {
-      chess.move(m);
-      const s = evaluateBoard(chess);
-      chess.undo();
-      return Math.abs(s - bestScore) < 50;
-    });
-    if (goodMoves.length > 0) {
-      bestMove = goodMoves[Math.floor(Math.random() * goodMoves.length)];
-    }
-  }
-
-  return { from: bestMove.from as Square, to: bestMove.to as Square, eval: bestScore };
 }

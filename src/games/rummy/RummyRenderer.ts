@@ -184,6 +184,96 @@ export class RummyRenderer {
     }
   }
 
+  playDealAnimation(playerCount: number, aiCount: number, onComplete: () => void): void {
+    while (this.mainContainer.children.length > 1) {
+      this.mainContainer.removeChildAt(1);
+    }
+
+    const w = this.app.screen.width;
+    const h = this.app.screen.height;
+    const dealContainer = new Container();
+    this.mainContainer.addChild(dealContainer);
+
+    const centerX = w / 2 - CARD.width / 2;
+    const centerY = h / 2 - CARD.height / 2;
+
+    // Deck stack
+    for (let i = 0; i < 3; i++) {
+      const bg = createCardGraphics({ suit: 'spades', rank: 'A', faceUp: false, id: `deck-${i}` }, false);
+      bg.x = centerX - i * 2;
+      bg.y = centerY - i * 2;
+      bg.eventMode = 'none';
+      dealContainer.addChild(bg);
+    }
+
+    const totalCards = playerCount + aiCount;
+    let dealt = 0;
+    let completedAnims = 0;
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+    const animateCard = (sprite: Container, tx: number, ty: number, duration: number) => {
+      const sx = sprite.x, sy = sprite.y;
+      const start = performance.now();
+      const tick = () => {
+        const p = Math.min((performance.now() - start) / duration, 1);
+        const e = easeOutCubic(p);
+        sprite.x = sx + (tx - sx) * e;
+        sprite.y = sy + (ty - sy) * e;
+        if (p < 1) requestAnimationFrame(tick);
+        else {
+          completedAnims++;
+          if (completedAnims >= totalCards) {
+            setTimeout(() => {
+              dealContainer.destroy({ children: true });
+              onComplete();
+            }, 150);
+          }
+        }
+      };
+      requestAnimationFrame(tick);
+    };
+
+    // Player hand targets (bottom)
+    const playerTargets = (idx: number) => {
+      const tw = Math.min(playerCount * 35, 600);
+      const sp = tw / Math.max(playerCount - 1, 1);
+      return { x: w / 2 - tw / 2 + idx * sp, y: h - 20 - CARD.height };
+    };
+
+    // AI hand targets (top)
+    const aiTargets = (idx: number) => {
+      const tw = Math.min(aiCount * 25, 400);
+      const sp = tw / Math.max(aiCount - 1, 1);
+      return { x: w / 2 - tw / 2 + idx * sp, y: 40 };
+    };
+
+    let playerIdx = 0, aiIdx = 0;
+
+    const dealNext = () => {
+      if (dealt >= totalCards) return;
+      const isPlayer = dealt % 2 === 0 && playerIdx < playerCount;
+      dealt++;
+
+      const sprite = createCardGraphics({ suit: 'spades', rank: 'A', faceUp: false, id: `deal-${dealt}` }, false);
+      sprite.x = centerX;
+      sprite.y = centerY;
+      sprite.eventMode = 'none';
+      dealContainer.addChild(sprite);
+
+      if (isPlayer) {
+        const t = playerTargets(playerIdx++);
+        animateCard(sprite, t.x, t.y, 160);
+      } else {
+        const t = aiTargets(aiIdx++);
+        animateCard(sprite, t.x, t.y, 160);
+      }
+
+      setTimeout(dealNext, 40);
+    };
+
+    setTimeout(dealNext, 300);
+  }
+
   destroy(): void {
     this.app.stage.removeChildren();
   }

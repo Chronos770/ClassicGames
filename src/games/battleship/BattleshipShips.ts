@@ -21,7 +21,8 @@ export function drawShipSprite(
     Battleship: { main: 0x555555, deck: 0x666666, accent: 0x777777 },
     Cruiser:    { main: 0x5a6a5a, deck: 0x6a7a6a, accent: 0x7a8a7a },
     Submarine:  { main: 0x3a4a5a, deck: 0x4a5a6a, accent: 0x5a6a7a },
-    Destroyer:  { main: 0x5a5a4a, deck: 0x6a6a5a, accent: 0x7a7a6a },
+    Destroyer:     { main: 0x5a5a4a, deck: 0x6a6a5a, accent: 0x7a7a6a },
+    'Patrol Boat': { main: 0x4a5a5a, deck: 0x5a6a6a, accent: 0x6a7a7a },
   };
 
   const colors = hullColors[name] ?? hullColors.Destroyer;
@@ -154,13 +155,14 @@ export function drawShipSprite(
   g.lineTo(bowX + 4, cellSize / 2 + 3);
   g.stroke({ color: 0xffffff, width: 0.5, alpha: 0.3 });
 
-  container.addChild(g);
-
-  // Rotate if vertical
+  // Use inner container for rotation so caller can freely set x/y
+  const inner = new Container();
+  inner.addChild(g);
   if (!horizontal) {
-    container.rotation = Math.PI / 2;
-    container.x += cellSize;
+    inner.rotation = Math.PI / 2;
+    inner.x = cellSize;
   }
+  container.addChild(inner);
 
   return container;
 }

@@ -1,12 +1,6 @@
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 
-const FEATURED_GAME = {
-  id: 'towerdefense',
-  name: 'Tower Defense',
-  tagline: 'Build, defend, survive!',
-};
-
 export default function HeroSection() {
   const navigate = useNavigate();
 
@@ -33,7 +27,7 @@ export default function HeroSection() {
 
       <div className="relative max-w-7xl mx-auto px-6 py-16 md:py-24">
         <div className="flex flex-col md:flex-row items-center gap-8 md:gap-16">
-          {/* Left: Text content */}
+          {/* Left: About Us content */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -41,23 +35,27 @@ export default function HeroSection() {
             className="flex-1 text-center md:text-left"
           >
             <h1 className="text-5xl md:text-6xl lg:text-7xl font-display font-bold text-white mb-4 leading-tight">
-              Play Classic{' '}
+              Castle &{' '}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-amber-600">
-                Games
+                Cards
               </span>
             </h1>
-            <p className="text-lg md:text-xl text-white/50 mb-8 max-w-lg">
-              Premium card games, board games, and strategy games with stunning visuals.
-              No signup, no downloads - just play.
+            <p className="text-lg md:text-xl text-white/60 mb-4 max-w-xl leading-relaxed">
+              Our boys have always loved playing chess, rummy, and card games. We grew up
+              playing cards with their great-grandma — it's always been a family tradition, passed
+              down around the kitchen table.
+            </p>
+            <p className="text-base text-white/40 mb-8 max-w-xl">
+              We built Castle & Cards to share our love for classic games with anyone who
+              feels the same way about family, friends, and a good hand of cards.
             </p>
             <div className="flex flex-wrap gap-3 justify-center md:justify-start">
               <button
-                onClick={() => navigate('/lobby/towerdefense')}
+                onClick={() => navigate('/lobby/chess')}
                 className="btn-primary text-base px-6 py-3 flex items-center gap-2"
               >
-                <span className="text-lg">{'\u{1F3F0}'}</span>
-                Try Tower Defense
-                <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded ml-1">NEW</span>
+                <span className="text-lg">{'\u265A'}</span>
+                Play Chess
               </button>
               <button
                 onClick={() => {
@@ -70,7 +68,7 @@ export default function HeroSection() {
             </div>
           </motion.div>
 
-          {/* Right: Featured game visual */}
+          {/* Right: Floating game icons */}
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -78,15 +76,14 @@ export default function HeroSection() {
             className="flex-shrink-0"
           >
             <div className="relative w-64 h-64 md:w-80 md:h-80">
-              {/* Floating game icons */}
               {[
-                { icon: '\u265A', x: '10%', y: '15%', delay: 0, size: 'text-4xl' },
-                { icon: '\u2665', x: '70%', y: '5%', delay: 0.5, size: 'text-3xl' },
-                { icon: '\u2660', x: '85%', y: '60%', delay: 1, size: 'text-4xl' },
-                { icon: '\u2693', x: '5%', y: '70%', delay: 1.5, size: 'text-3xl' },
-                { icon: '\u{1F3F0}', x: '40%', y: '35%', delay: 0.3, size: 'text-6xl' },
-                { icon: '\u26C0', x: '60%', y: '75%', delay: 0.8, size: 'text-3xl' },
-                { icon: '\u2666', x: '25%', y: '85%', delay: 1.2, size: 'text-3xl' },
+                { icon: '\u265A', x: '35%', y: '25%', delay: 0, size: 'text-7xl' },
+                { icon: '\u265E', x: '65%', y: '10%', delay: 0.5, size: 'text-5xl' },
+                { icon: '\u265B', x: '10%', y: '50%', delay: 0.3, size: 'text-5xl' },
+                { icon: '\u265C', x: '75%', y: '55%', delay: 1, size: 'text-4xl' },
+                { icon: '\u2665', x: '85%', y: '85%', delay: 0.8, size: 'text-3xl' },
+                { icon: '\u2660', x: '5%', y: '80%', delay: 1.2, size: 'text-3xl' },
+                { icon: '\u26C0', x: '50%', y: '80%', delay: 1.5, size: 'text-3xl' },
               ].map((item, i) => (
                 <motion.span
                   key={i}
@@ -122,9 +119,9 @@ export default function HeroSection() {
           className="mt-12 flex items-center justify-center md:justify-start gap-8 md:gap-12"
         >
           {[
-            { value: '7', label: 'Games' },
+            { value: '6', label: 'Games' },
             { value: '3', label: 'Categories' },
-            { value: '\u221E', label: 'Replayability' },
+            { value: '\u221E', label: 'Family Fun' },
           ].map((stat) => (
             <div key={stat.label} className="text-center">
               <div className="text-2xl md:text-3xl font-bold text-white">{stat.value}</div>

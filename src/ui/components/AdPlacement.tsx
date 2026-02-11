@@ -25,7 +25,6 @@ export default function AdPlacement({ size, className = '' }: AdPlacementProps) 
     // In production with AdSense configured, push the ad
     if (IS_PRODUCTION && ADSENSE_CLIENT && ADSENSE_SLOT && adRef.current) {
       try {
-        // @ts-expect-error adsbygoogle is injected by the AdSense script
         (window.adsbygoogle = window.adsbygoogle || []).push({});
       } catch {
         // AdSense not loaded, fail silently

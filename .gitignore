@@ -9,3 +9,4 @@ Thumbs.db
 nul
 tsconfig.tsbuildinfo
 supabase/.temp/
+.vercel

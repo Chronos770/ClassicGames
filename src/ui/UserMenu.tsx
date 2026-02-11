@@ -22,15 +22,31 @@ export default function UserMenu() {
 
   if (isGuest || !user) {
     return (
-      <>
+      <div ref={menuRef} className="relative">
         <button
-          onClick={() => setAuthOpen(true)}
-          className="text-sm text-white/60 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5"
+          onClick={() => setMenuOpen(!menuOpen)}
+          className="flex items-center gap-2 text-sm text-white/60 hover:text-white transition-colors px-3 py-1.5 rounded-lg hover:bg-white/5"
         >
-          Sign In
+          <span className="text-lg">&#128100;</span>
+          <span>Guest</span>
         </button>
-        <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
-      </>
+
+        {menuOpen && (
+          <div className="absolute right-0 top-full mt-2 w-56 glass-panel py-2 z-50">
+            <button
+              onClick={() => { setAuthOpen(true); setMenuOpen(false); }}
+              className="w-full text-left px-4 py-2 text-sm text-amber-400 hover:bg-white/5 transition-colors font-medium"
+            >
+              Sign Up to Save Progress
+            </button>
+            <div className="px-4 py-2 text-xs text-white/30">
+              Data saved in this browser only
+            </div>
+          </div>
+        )}
+
+        <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} guestUpgrade />
+      </div>
     );
   }
 

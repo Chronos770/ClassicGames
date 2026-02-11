@@ -7,7 +7,7 @@ const GAME_IDS = [
   { id: 'hearts', name: 'Hearts' },
   { id: 'checkers', name: 'Checkers' },
   { id: 'rummy', name: 'Gin Rummy' },
-  { id: 'battleship', name: 'Battleship' },
+  { id: 'battleship', name: 'Sea Battle' },
 ];
 
 export default function StatsPage() {

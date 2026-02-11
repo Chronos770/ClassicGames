@@ -24,6 +24,7 @@ const SOUND_DEFINITIONS: Record<string, SoundDefinition> = {
   'card-flip': { type: 'noise', duration: 60, volume: 0.25 },
   'card-place': { type: 'tone', freq: 400, duration: 40, oscillator: 'sine', volume: 0.15 },
   'card-shuffle': { type: 'noise', duration: 200, volume: 0.3 },
+  'card-select': { type: 'tone', freq: 500, duration: 30, oscillator: 'sine', volume: 0.1 },
 
   // Board
   'piece-click': { type: 'tone', freq: 300, duration: 50, oscillator: 'sine', volume: 0.2 },
@@ -33,17 +34,6 @@ const SOUND_DEFINITIONS: Record<string, SoundDefinition> = {
   // Battleship
   'explosion': { type: 'noise', duration: 300, volume: 0.5 },
   'splash': { type: 'noise', duration: 150, volume: 0.3 },
-
-  // Tower Defense
-  'td-shoot': { type: 'tone', freq: 800, duration: 40, oscillator: 'triangle', volume: 0.2 },
-  'td-zap': { type: 'chord', freqs: [600, 1200], duration: 80, oscillator: 'sawtooth', volume: 0.25 },
-  'td-place': { type: 'tone', freq: 350, duration: 80, oscillator: 'sine', volume: 0.25 },
-  'td-upgrade': { type: 'chord', freqs: [400, 600, 800], duration: 200, oscillator: 'sine', volume: 0.3 },
-  'td-kill': { type: 'noise', duration: 60, volume: 0.2 },
-  'td-leak': { type: 'tone', freq: 200, duration: 200, oscillator: 'sawtooth', volume: 0.35 },
-  'td-wave-start': { type: 'chord', freqs: [330, 440], duration: 300, oscillator: 'sine', volume: 0.35 },
-  'td-wave-complete': { type: 'chord', freqs: [440, 554, 659], duration: 400, oscillator: 'sine', volume: 0.4 },
-  'td-sell': { type: 'tone', freq: 500, duration: 60, oscillator: 'sine', volume: 0.2 },
 
   // UI
   'ui-click': { type: 'tone', freq: 600, duration: 30, oscillator: 'sine', volume: 0.15 },

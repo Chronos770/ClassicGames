@@ -8,7 +8,7 @@ const GAME_TABS = [
   { id: 'checkers', name: 'Checkers' },
   { id: 'hearts', name: 'Hearts' },
   { id: 'rummy', name: 'Gin Rummy' },
-  { id: 'battleship', name: 'Battleship' },
+  { id: 'battleship', name: 'Sea Battle' },
 ];
 
 export default function LeaderboardPage() {
@@ -25,6 +25,8 @@ export default function LeaderboardPage() {
         setEntries(data);
         setLoading(false);
       }
+    }).catch(() => {
+      if (!cancelled) setLoading(false);
     });
     return () => { cancelled = true; };
   }, [activeGame]);

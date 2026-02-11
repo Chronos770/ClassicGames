@@ -3,13 +3,14 @@ import { Card, cardDisplayName, suitColor, Suit } from '../../engine/types';
 import { createCardGraphics, getCardDimensions } from '../../renderer/CardSprite';
 import { createFeltSurface } from '../../renderer/TableSurface';
 import { WinCelebration } from '../../renderer/effects/WinCelebration';
+import { SoundManager } from '../../engine/SoundManager';
 import { SolitaireGame } from './SolitaireGame';
 import { SolitaireState } from './rules';
 
 const CARD = getCardDimensions();
 const STACK_OFFSET_FACE_DOWN = 4;
 const STACK_OFFSET_FACE_UP = 22;
-const FOUNDATION_X = 280;
+const FOUNDATION_X = 328;  // Right-aligned: 700 - 16 - (4*80 + 3*12)
 const TABLEAU_Y = 170;
 const MARGIN = 16;
 
@@ -22,6 +23,10 @@ export class SolitaireRenderer {
   private mainContainer: Container;
   private dragContainer: Container;
   private celebration: WinCelebration | null = null;
+  private boundPointerMove: (e: any) => void;
+  private boundPointerUp: (e: any) => void;
+  private pendingRAFs: number[] = [];
+  private destroyed = false;
 
   // Dragging state
   private dragging = false;
@@ -66,9 +71,11 @@ export class SolitaireRenderer {
     // Listen to pointer events on stage for drag
     this.app.stage.eventMode = 'static';
     this.app.stage.hitArea = this.app.screen;
-    this.app.stage.on('pointermove', this.onPointerMove.bind(this));
-    this.app.stage.on('pointerup', this.onPointerUp.bind(this));
-    this.app.stage.on('pointerupoutside', this.onPointerUp.bind(this));
+    this.boundPointerMove = this.onPointerMove.bind(this);
+    this.boundPointerUp = this.onPointerUp.bind(this);
+    this.app.stage.on('pointermove', this.boundPointerMove);
+    this.app.stage.on('pointerup', this.boundPointerUp);
+    this.app.stage.on('pointerupoutside', this.boundPointerUp);
   }
 
   setOnStateChange(cb: () => void): void {
@@ -112,6 +119,7 @@ export class SolitaireRenderer {
       stock.x = x;
       stock.y = y;
       stock.on('pointertap', () => {
+        SoundManager.getInstance().play('card-flip');
         this.game.drawCard();
         this.onStateChange?.();
       });
@@ -139,6 +147,7 @@ export class SolitaireRenderer {
       recycleBtn.eventMode = 'static';
       recycleBtn.cursor = 'pointer';
       recycleBtn.on('pointertap', () => {
+        SoundManager.getInstance().play('card-shuffle');
         this.game.drawCard();
         this.onStateChange?.();
       });
@@ -471,6 +480,12 @@ export class SolitaireRenderer {
   }
 
   destroy(): void {
+    this.destroyed = true;
+    for (const id of this.pendingRAFs) cancelAnimationFrame(id);
+    this.pendingRAFs = [];
+    this.app.stage.off('pointermove', this.boundPointerMove);
+    this.app.stage.off('pointerup', this.boundPointerUp);
+    this.app.stage.off('pointerupoutside', this.boundPointerUp);
     this.celebration?.destroy();
     this.app.stage.removeChildren();
   }

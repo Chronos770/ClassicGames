@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useGameStore } from '../stores/gameStore';
+import { useGameStore, TimeControl } from '../stores/gameStore';
 import { useUserStore } from '../stores/userStore';
 import { useSettingsStore, ChessPieceStyle, ChessBoardTheme, CardTheme } from '../stores/settingsStore';
 import { CHESS_BOARD_THEMES } from '../renderer/BoardSprite';
@@ -31,8 +31,19 @@ export default function GameLandingPage() {
   const cardTheme = useSettingsStore((s) => s.cardTheme);
   const setCardTheme = useSettingsStore((s) => s.setCardTheme);
 
+  const setTimeControl = useGameStore((s) => s.setTimeControl);
+
   const [selectedAI, setSelectedAI] = useState<AIPersonality | null>(null);
-  const [selectedDifficulty, setSelectedDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
+const [selectedTimeControl, setSelectedTimeControl] = useState<TimeControl | null>(null);
+  const [timeCategory, setTimeCategory] = useState<string>('Unlimited');
+
+  const TIME_CATEGORIES: Record<string, TimeControl[]> = {
+    Bullet: [{ minutes: 1, increment: 0 }, { minutes: 1, increment: 1 }, { minutes: 2, increment: 1 }],
+    Blitz: [{ minutes: 3, increment: 0 }, { minutes: 3, increment: 2 }, { minutes: 5, increment: 0 }, { minutes: 5, increment: 3 }],
+    Rapid: [{ minutes: 10, increment: 0 }, { minutes: 10, increment: 5 }, { minutes: 15, increment: 10 }, { minutes: 30, increment: 0 }],
+    Classical: [{ minutes: 30, increment: 20 }, { minutes: 60, increment: 30 }],
+    Unlimited: [],
+  };
 
   if (!config) {
     return (
@@ -48,7 +59,6 @@ export default function GameLandingPage() {
   }
 
   const isSinglePlayer = config.playModes.length === 1 && config.playModes[0] === 'solo';
-  const isTowerDefense = gameId === 'towerdefense';
   const isChess = gameId === 'chess';
   const isCardGame = config.category === 'card';
   const getMatchHistory = useUserStore((s) => s.getMatchHistory);
@@ -59,11 +69,12 @@ export default function GameLandingPage() {
 
   const startAIGame = () => {
     reset();
-    if (isTowerDefense) {
-      setGameDifficulty(selectedDifficulty);
-    } else if (selectedAI) {
+    if (selectedAI) {
       setGameDifficulty(selectedAI.difficulty);
       setSelectedOpponent(selectedAI);
+    }
+    if (isChess) {
+      setTimeControl(selectedTimeControl);
     }
     setCurrentGame(gameId ?? null);
     navigate(`/play/${gameId}`);
@@ -71,9 +82,6 @@ export default function GameLandingPage() {
 
   const startSoloGame = () => {
     reset();
-    if (isTowerDefense) {
-      setGameDifficulty(selectedDifficulty);
-    }
     setCurrentGame(gameId ?? null);
     navigate(`/play/${gameId}`);
   };
@@ -156,28 +164,6 @@ export default function GameLandingPage() {
             {/* Solo / AI Play */}
             {isSinglePlayer ? (
               <div className="space-y-4">
-                {isTowerDefense && (
-                  <div className="glass-panel !p-4">
-                    <label className="block text-xs text-white/50 mb-2 uppercase tracking-wider">Difficulty</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {(['easy', 'medium', 'hard'] as const).map((diff) => (
-                        <button
-                          key={diff}
-                          onClick={() => setSelectedDifficulty(diff)}
-                          className={`p-3 rounded-lg text-center transition-all border capitalize ${
-                            selectedDifficulty === diff
-                              ? 'border-amber-500 bg-amber-500/10'
-                              : 'border-white/10 bg-white/5 hover:bg-white/10'
-                          }`}
-                        >
-                          <div className={`text-sm font-medium ${
-                            diff === 'easy' ? 'text-green-400' : diff === 'medium' ? 'text-yellow-400' : 'text-red-400'
-                          }`}>{diff}</div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
                 <button onClick={startSoloGame} className="btn-primary w-full text-lg py-4 font-semibold">
                   Start Game
                 </button>
@@ -255,8 +241,32 @@ export default function GameLandingPage() {
             )}
           </motion.div>
 
+          {/* Chess Training */}
+          {isChess && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.18 }}
+            >
+              <h2 className="text-sm text-white/50 uppercase tracking-wider mb-2">Learn</h2>
+              <button
+                onClick={() => navigate('/academy/chess')}
+                className="w-full text-left p-4 rounded-xl bg-gradient-to-r from-amber-500/10 to-amber-600/5 border border-amber-500/20 hover:border-amber-500/40 transition-all group"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{'\u{1F393}'}</span>
+                  <div>
+                    <div className="text-white font-medium text-sm group-hover:text-amber-400 transition-colors">Chess Academy</div>
+                    <div className="text-white/40 text-xs mt-0.5">8 courses from beginner to master — tactics, openings, endgames, and more</div>
+                  </div>
+                  <span className="ml-auto text-white/30 group-hover:text-white/60">{'\u2192'}</span>
+                </div>
+              </button>
+            </motion.div>
+          )}
+
           {/* Game-specific settings */}
-          {(isChess || isCardGame || isTowerDefense) && (
+          {(isChess || isCardGame) && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -266,6 +276,55 @@ export default function GameLandingPage() {
               <div className="glass-panel !p-4 space-y-4">
                 {isChess && (
                   <>
+                    <div>
+                      <label className="text-xs text-white/50 mb-2 block">Time Control</label>
+                      <div className="flex gap-1 mb-2 flex-wrap">
+                        {Object.keys(TIME_CATEGORIES).map((cat) => (
+                          <button
+                            key={cat}
+                            onClick={() => {
+                              setTimeCategory(cat);
+                              if (cat === 'Unlimited') {
+                                setSelectedTimeControl(null);
+                              } else {
+                                setSelectedTimeControl(TIME_CATEGORIES[cat][0]);
+                              }
+                            }}
+                            className={`px-2.5 py-1 rounded text-xs transition-all ${
+                              timeCategory === cat
+                                ? 'bg-amber-500/20 text-amber-400 border border-amber-500'
+                                : 'bg-white/5 text-white/50 border border-white/10 hover:bg-white/10'
+                            }`}
+                          >
+                            {cat}
+                          </button>
+                        ))}
+                      </div>
+                      {timeCategory !== 'Unlimited' && (
+                        <div className="flex gap-2 flex-wrap">
+                          {TIME_CATEGORIES[timeCategory].map((tc) => {
+                            const label = `${tc.minutes}+${tc.increment}`;
+                            const isSelected = selectedTimeControl?.minutes === tc.minutes && selectedTimeControl?.increment === tc.increment;
+                            return (
+                              <button
+                                key={label}
+                                onClick={() => setSelectedTimeControl(tc)}
+                                className={`px-3 py-1.5 rounded text-xs font-mono transition-all ${
+                                  isSelected
+                                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500'
+                                    : 'bg-white/5 text-white/50 border border-white/10 hover:bg-white/10'
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {timeCategory === 'Unlimited' && (
+                        <div className="text-[10px] text-white/30">No clock — play at your own pace</div>
+                      )}
+                    </div>
                     <div>
                       <label className="text-xs text-white/50 mb-2 block">Piece Style</label>
                       <div className="grid grid-cols-5 gap-2">

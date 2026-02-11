@@ -1,22 +1,12 @@
 import { motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import GameCard from './components/GameCard';
-import HeroSection from './components/HeroSection';
 import HowToPlaySection from './components/HowToPlaySection';
+import AdBanner from './components/AdBanner';
 import { GameConfig } from '../engine/types';
 import { useUserStore } from '../stores/userStore';
 
 const GAMES: GameConfig[] = [
-  {
-    id: 'towerdefense',
-    name: 'Tower Defense',
-    description: 'Build towers, defend the path! Survive 15 waves of enemies in this real-time strategy game.',
-    minPlayers: 1,
-    maxPlayers: 1,
-    hasAI: false,
-    thumbnail: '',
-    color: '#2D5A27',
-  },
   {
     id: 'chess',
     name: 'Chess',
@@ -69,7 +59,7 @@ const GAMES: GameConfig[] = [
   },
   {
     id: 'battleship',
-    name: 'Battleship',
+    name: 'Sea Battle',
     description: 'Place your fleet and hunt the enemy. Call your shots on the high seas.',
     minPlayers: 2,
     maxPlayers: 2,
@@ -93,7 +83,7 @@ function StatsTeaser() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.4 }}
-      className="max-w-4xl mx-auto mt-16 mb-8"
+      className="max-w-7xl mx-auto mt-8 mb-8 px-6"
     >
       <div className="bg-white/5 rounded-xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div>
@@ -115,37 +105,90 @@ function StatsTeaser() {
 }
 
 export default function HomePage() {
+  const navigate = useNavigate();
+
   return (
     <div>
-      {/* Hero Section */}
-      <HeroSection />
-
-      {/* Games Grid */}
-      <div id="games-grid" className="max-w-7xl mx-auto px-6">
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-8"
-        >
-          <h2 className="text-3xl md:text-4xl font-display font-bold text-white mb-2">
-            All Games
-          </h2>
-          <p className="text-white/40">
-            7 games across cards, boards, and strategy
-          </p>
-        </motion.div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {GAMES.map((game, i) => (
-            <div key={game.id} className="relative">
-              {NEW_GAMES.has(game.id) && (
-                <div className="absolute -top-2 -right-2 z-10 bg-gradient-to-r from-amber-500 to-orange-500 text-black text-xs font-bold px-2.5 py-1 rounded-full shadow-lg">
-                  NEW
-                </div>
-              )}
-              <GameCard game={game} index={i} />
+      {/* Hero + Games side by side */}
+      <div className="max-w-7xl mx-auto px-6 py-10">
+        <div className="flex flex-col lg:flex-row gap-8 items-start">
+          {/* Left: Welcome / About */}
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5 }}
+            className="lg:w-[320px] flex-shrink-0"
+          >
+            <h1 className="text-4xl lg:text-5xl font-display font-bold text-white mb-3 leading-tight">
+              Castle &{' '}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-amber-600">
+                Cards
+              </span>
+            </h1>
+            <p className="text-sm text-white/50 mb-4 leading-relaxed">
+              We grew up playing cards with great-grandma — it's always been a family tradition.
+              We built Castle & Cards to share our love for classic games with anyone who feels
+              the same way.
+            </p>
+            <div className="flex flex-wrap gap-2 mb-6">
+              <button
+                onClick={() => navigate('/lobby/chess')}
+                className="btn-primary text-sm px-4 py-2.5 flex items-center gap-2"
+              >
+                <span>{'\u265A'}</span> Play Chess
+              </button>
+              <button
+                onClick={() => navigate('/friends')}
+                className="btn-secondary text-sm px-4 py-2.5"
+              >
+                Find Friends
+              </button>
             </div>
-          ))}
+
+            {/* Quick stats */}
+            <div className="flex gap-6 text-center">
+              {[
+                { value: '6', label: 'Games' },
+                { value: '3', label: 'Categories' },
+                { value: '\u221E', label: 'Family Fun' },
+              ].map((stat) => (
+                <div key={stat.label}>
+                  <div className="text-xl font-bold text-white">{stat.value}</div>
+                  <div className="text-[10px] text-white/40 uppercase tracking-wider">{stat.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Ad slot */}
+            <div className="mt-6">
+              <AdBanner slot="SLOT_ID_1" format="horizontal" />
+            </div>
+          </motion.div>
+
+          {/* Right: Games Grid */}
+          <div className="flex-1 min-w-0">
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4"
+            >
+              <h2 className="text-xl font-display font-bold text-white">All Games</h2>
+              <p className="text-xs text-white/40">Cards, boards, and strategy</p>
+            </motion.div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {GAMES.map((game, i) => (
+                <div key={game.id} className="relative">
+                  {NEW_GAMES.has(game.id) && (
+                    <div className="absolute -top-2 -right-2 z-10 bg-gradient-to-r from-amber-500 to-orange-500 text-black text-xs font-bold px-2.5 py-1 rounded-full shadow-lg">
+                      NEW
+                    </div>
+                  )}
+                  <GameCard game={game} index={i} />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -153,8 +196,13 @@ export default function HomePage() {
       <StatsTeaser />
 
       {/* How to Play */}
-      <div className="max-w-7xl mx-auto px-6 py-16">
+      <div className="max-w-7xl mx-auto px-6 py-12">
         <HowToPlaySection />
+      </div>
+
+      {/* Ad - above footer */}
+      <div className="max-w-7xl mx-auto px-6 mt-4">
+        <AdBanner slot="SLOT_ID_2" format="horizontal" />
       </div>
 
       {/* Footer */}
@@ -162,13 +210,14 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center">
-              <span className="text-sm">{'\u2660'}</span>
+              <span className="text-sm">{'\u265E'}</span>
             </div>
-            <span className="text-sm text-white/40">Premium Games</span>
+            <span className="text-sm text-white/40">Castle & Cards</span>
           </div>
           <div className="flex items-center gap-6 text-sm text-white/30">
             <Link to="/stats" className="hover:text-white/60 transition-colors">Stats</Link>
             <Link to="/leaderboard" className="hover:text-white/60 transition-colors">Leaderboard</Link>
+            <Link to="/help" className="hover:text-white/60 transition-colors">Help</Link>
             <Link to="/profile" className="hover:text-white/60 transition-colors">Profile</Link>
           </div>
         </div>

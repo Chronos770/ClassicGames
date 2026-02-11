@@ -14,7 +14,6 @@ const GAME_ICONS: Record<string, string> = {
   chess: '\u265A',
   checkers: '\u26C0',
   battleship: '\u2693',
-  towerdefense: '\u{1F3F0}',
 };
 
 export default function GameCard({ game, index }: GameCardProps) {

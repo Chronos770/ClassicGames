@@ -1,68 +1,299 @@
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js';
-import { Card, cardDisplayName, suitColor } from '../../engine/types';
+import { Card, Suit } from '../../engine/types';
 import { createCardGraphics, getCardDimensions } from '../../renderer/CardSprite';
 import { createFeltSurface } from '../../renderer/TableSurface';
-import { HeartsState } from './rules';
+import { HeartsOpponent, HeartsComment } from './HeartsCommentary';
+import { HeartsState, cardPoints } from './rules';
 
 const CARD = getCardDimensions();
+const AVATAR_RADIUS = 20;
+
+const SUIT_SYMBOLS: Record<Suit, string> = {
+  hearts: '\u2665',
+  diamonds: '\u2666',
+  clubs: '\u2663',
+  spades: '\u2660',
+};
+
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+/** Avatar positions: index 0=You (unused avatar), 1=West, 2=North, 3=East */
+function getAvatarPositions(w: number, h: number): [number, number][] {
+  return [
+    [w / 2, h - 30],        // 0: You (bottom, no avatar drawn)
+    [10, 110],               // 1: West — top-left corner
+    [w / 2 - 110, 12],      // 2: North — top area, left of score box
+    [w - 10, 110],           // 3: East — top-right corner
+  ];
+}
 
 export class HeartsRenderer {
   private app: Application;
   private mainContainer: Container;
+  private bubbleContainer: Container;
   private onCardClick?: (card: Card) => void;
+  private opponents: HeartsOpponent[] = [];
+  private pendingRAFs: number[] = [];
+  private destroyed = false;
 
   constructor(app: Application) {
     this.app = app;
     this.mainContainer = new Container();
+    this.bubbleContainer = new Container();
 
     const felt = createFeltSurface(app.screen.width, app.screen.height);
     this.mainContainer.addChild(felt);
 
     app.stage.addChild(this.mainContainer);
+    app.stage.addChild(this.bubbleContainer);
+  }
+
+  setOpponents(opps: HeartsOpponent[]): void {
+    this.opponents = opps;
   }
 
   setOnCardClick(cb: (card: Card) => void): void {
     this.onCardClick = cb;
   }
 
+  private getNames(): string[] {
+    if (this.opponents.length === 3) {
+      return ['You', this.opponents[0].name, this.opponents[1].name, this.opponents[2].name];
+    }
+    return ['You', 'West', 'North', 'East'];
+  }
+
   render(state: HeartsState, selectedCards: Set<string> = new Set()): void {
+    // Clear everything except the felt background
     while (this.mainContainer.children.length > 1) {
       this.mainContainer.removeChildAt(1);
     }
+    // Cancel any ongoing pulse animations from previous render
+    for (const id of this.pendingRAFs) cancelAnimationFrame(id);
+    this.pendingRAFs = [];
 
     const w = this.app.screen.width;
     const h = this.app.screen.height;
 
-    // Render player's hand (bottom)
+    // Turn indicator (draw first so it's behind cards)
+    if (state.phase === 'playing') {
+      this.renderTurnIndicator(state.currentPlayer);
+    }
+
+    // Player's hand (bottom)
     this.renderHand(state.hands[0], w / 2, h - 20, true, selectedCards);
 
-    // Render AI hands (face down)
-    this.renderAIHand(state.hands[1].length, 40, h / 2, 'left');   // Left
-    this.renderAIHand(state.hands[2].length, w / 2, 30, 'top');   // Top
-    this.renderAIHand(state.hands[3].length, w - 40, h / 2, 'right'); // Right
+    // AI hands (face down) — closer to edges since avatars are now HTML outside canvas
+    this.renderAIHand(state.hands[1].length, 30, h / 2 + 20, 'left');
+    this.renderAIHand(state.hands[2].length, w / 2, 20, 'top');
+    this.renderAIHand(state.hands[3].length, w - 30, h / 2 + 20, 'right');
 
-    // Render current trick (center)
-    this.renderTrick(state.currentTrick, w / 2, h / 2 - 20);
+    // Trick in center
+    this.renderTrick(state.currentTrick, w / 2, h / 2 - 10);
 
-    // Render scores
-    this.renderScores(state, w, h);
+    // Collected point cards near each player
+    this.renderCollectedPoints(state.tricks, state.scores);
 
-    // Player labels
-    const labelStyle = new TextStyle({ fontSize: 12, fill: '#ffffff88', fontFamily: 'Inter, sans-serif' });
-    const names = ['You', 'West', 'North', 'East'];
-    const positions = [
-      [w / 2, h - CARD.height - 40],
-      [15, h / 2 + 60],
-      [w / 2, 10],
-      [w - 50, h / 2 + 60],
-    ];
-    for (let i = 0; i < 4; i++) {
-      const label = new Text({ text: names[i], style: labelStyle });
-      label.anchor.set(0.5, 0);
-      label.x = positions[i][0];
-      label.y = positions[i][1];
-      this.mainContainer.addChild(label);
+    // Round info (compact)
+    const roundStyle = new TextStyle({ fontSize: 11, fill: '#ffffff88', fontFamily: 'Inter, sans-serif' });
+    const roundText = new Text({ text: `Round ${state.roundNumber}`, style: roundStyle });
+    roundText.anchor.set(1, 0);
+    roundText.x = w - 10;
+    roundText.y = 8;
+    this.mainContainer.addChild(roundText);
+  }
+
+  private renderAvatar(cx: number, cy: number, opp: HeartsOpponent): void {
+    const r = AVATAR_RADIUS;
+
+    // Shadow
+    const shadow = new Graphics();
+    shadow.circle(cx + 1, cy + 2, r + 1).fill({ color: 0x000000, alpha: 0.3 });
+    this.mainContainer.addChild(shadow);
+
+    // Main circle
+    const circle = new Graphics();
+    circle.circle(cx, cy, r).fill(opp.color);
+    circle.circle(cx, cy, r).stroke({ width: 2, color: 0xffffff, alpha: 0.5 });
+    this.mainContainer.addChild(circle);
+
+    // Initial letter
+    const style = new TextStyle({
+      fontSize: 18,
+      fill: '#ffffff',
+      fontFamily: 'Inter, sans-serif',
+      fontWeight: 'bold',
+    });
+    const txt = new Text({ text: opp.initial, style });
+    txt.anchor.set(0.5, 0.5);
+    txt.x = cx;
+    txt.y = cy;
+    this.mainContainer.addChild(txt);
+
+    // Name below
+    const nameStyle = new TextStyle({
+      fontSize: 10,
+      fill: '#ffffffcc',
+      fontFamily: 'Inter, sans-serif',
+      fontWeight: '500',
+    });
+    const nameTxt = new Text({ text: opp.name, style: nameStyle });
+    nameTxt.anchor.set(0.5, 0);
+    nameTxt.x = cx;
+    nameTxt.y = cy + r + 3;
+    this.mainContainer.addChild(nameTxt);
+  }
+
+  showBubble(comment: HeartsComment): void {
+    this.clearBubble();
+    if (!this.opponents.length) return;
+
+    const w = this.app.screen.width;
+    const h = this.app.screen.height;
+    const positions = getAvatarPositions(w, h);
+    const [ax, ay] = positions[comment.playerIndex];
+    const opp = this.opponents[comment.playerIndex - 1];
+
+    // Determine bubble direction based on player position
+    // West (1): bubble to the right; North (2): bubble below-right; East (3): bubble to the left
+    const isLeft = comment.playerIndex === 1;
+    const isRight = comment.playerIndex === 3;
+
+    // Measure text width roughly (10px per char at fontSize 11)
+    const maxWidth = 140;
+    const textContent = comment.message;
+
+    // Create bubble
+    const bubble = new Container();
+
+    const padding = 8;
+    const textStyle = new TextStyle({
+      fontSize: 11,
+      fill: '#ffffff',
+      fontFamily: 'Inter, sans-serif',
+      wordWrap: true,
+      wordWrapWidth: maxWidth - padding * 2,
+    });
+    const msgText = new Text({ text: textContent, style: textStyle });
+
+    const bubbleW = Math.min(msgText.width + padding * 2, maxWidth);
+    const bubbleH = msgText.height + padding * 2;
+
+    // Position bubble relative to avatar
+    let bx: number;
+    const by = ay - bubbleH / 2;
+
+    if (isRight) {
+      bx = ax - AVATAR_RADIUS - bubbleW - 8;
+    } else {
+      bx = ax + AVATAR_RADIUS + 8;
     }
+
+    // Clamp to canvas
+    bx = Math.max(4, Math.min(bx, w - bubbleW - 4));
+
+    // Background
+    const bg = new Graphics();
+    bg.roundRect(bx, by, bubbleW, bubbleH, 8).fill({ color: 0x000000, alpha: 0.7 });
+
+    // Tail triangle pointing toward avatar
+    const tailY = by + bubbleH / 2;
+    if (isRight) {
+      bg.moveTo(bx + bubbleW, tailY - 5)
+        .lineTo(bx + bubbleW + 6, tailY)
+        .lineTo(bx + bubbleW, tailY + 5)
+        .fill({ color: 0x000000, alpha: 0.7 });
+    } else {
+      bg.moveTo(bx, tailY - 5)
+        .lineTo(bx - 6, tailY)
+        .lineTo(bx, tailY + 5)
+        .fill({ color: 0x000000, alpha: 0.7 });
+    }
+
+    // Colored accent line on the avatar side
+    const accentX = isRight ? bx + bubbleW - 2 : bx + 2;
+    bg.roundRect(accentX - 1, by + 4, 2, bubbleH - 8, 1).fill(opp.color);
+
+    bubble.addChild(bg);
+
+    msgText.x = bx + padding;
+    msgText.y = by + padding;
+    bubble.addChild(msgText);
+
+    this.bubbleContainer.addChild(bubble);
+  }
+
+  clearBubble(): void {
+    this.bubbleContainer.removeChildren();
+  }
+
+  showFloatingPoints(playerIndex: number, points: number): void {
+    if (points <= 0) return;
+
+    const w = this.app.screen.width;
+    const h = this.app.screen.height;
+
+    // Positions near each player's card area
+    const positions: [number, number][] = [
+      [w / 2, h - CARD.height - 55],   // You (bottom)
+      [90, h / 2],                       // West
+      [w / 2, 70],                       // North
+      [w - 90, h / 2],                   // East
+    ];
+
+    const [x, y] = positions[playerIndex];
+
+    const label = points >= 13 ? `+${points}!` : `+${points}`;
+    const color = points >= 13 ? '#ff4444' : '#ff8866';
+
+    // Shadow text for readability
+    const shadow = new Text({
+      text: label,
+      style: new TextStyle({ fontSize: 24, fill: '#000000', fontFamily: 'Inter, sans-serif', fontWeight: 'bold' }),
+    });
+    shadow.anchor.set(0.5);
+    shadow.x = x + 1;
+    shadow.y = y + 1;
+    shadow.alpha = 0.6;
+    this.bubbleContainer.addChild(shadow);
+
+    const text = new Text({
+      text: label,
+      style: new TextStyle({ fontSize: 24, fill: color, fontFamily: 'Inter, sans-serif', fontWeight: 'bold' }),
+    });
+    text.anchor.set(0.5);
+    text.x = x;
+    text.y = y;
+    this.bubbleContainer.addChild(text);
+
+    const startY = y;
+    const startTime = performance.now();
+    const duration = 1400;
+
+    const animate = () => {
+      const elapsed = performance.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+
+      const offsetY = progress * 40;
+      text.y = startY - offsetY;
+      shadow.y = startY - offsetY + 1;
+      const fade = 1 - progress * progress;
+      text.alpha = fade;
+      shadow.alpha = fade * 0.6;
+
+      if (progress < 1 && !this.destroyed) {
+        this.pendingRAFs.push(requestAnimationFrame(animate));
+      } else {
+        this.bubbleContainer.removeChild(text);
+        this.bubbleContainer.removeChild(shadow);
+        text.destroy();
+        shadow.destroy();
+      }
+    };
+
+    this.pendingRAFs.push(requestAnimationFrame(animate));
   }
 
   private renderHand(cards: Card[], cx: number, bottomY: number, interactive: boolean, selected: Set<string>): void {
@@ -110,10 +341,10 @@ export class HeartsRenderer {
 
   private renderTrick(trick: (Card | null)[], cx: number, cy: number): void {
     const positions = [
-      [cx, cy + 50],     // Player (bottom)
-      [cx - 60, cy],     // West (left)
-      [cx, cy - 50],     // North (top)
-      [cx + 60, cy],     // East (right)
+      [cx, cy + 50],
+      [cx - 60, cy],
+      [cx, cy - 50],
+      [cx + 60, cy],
     ];
 
     for (let i = 0; i < 4; i++) {
@@ -125,35 +356,337 @@ export class HeartsRenderer {
     }
   }
 
-  private renderScores(state: HeartsState, w: number, h: number): void {
-    const style = new TextStyle({
-      fontSize: 11,
-      fill: '#ffffffaa',
-      fontFamily: 'Inter, sans-serif',
-    });
+  private renderScores(state: HeartsState, w: number): void {
+    const names = this.getNames();
 
-    const names = ['You', 'West', 'North', 'East'];
-    for (let i = 0; i < 4; i++) {
-      const text = new Text({
-        text: `${names[i]}: ${state.totalScores[i]} (+${state.scores[i]})`,
-        style,
-      });
-      text.x = w - 130;
-      text.y = 10 + i * 18;
-      this.mainContainer.addChild(text);
-    }
+    // Score panel background
+    const panelX = w - 160;
+    const panelY = 6;
+    const panelW = 154;
+    const panelH = 110;
+    const panelBg = new Graphics();
+    panelBg.roundRect(panelX, panelY, panelW, panelH, 8).fill({ color: 0x000000, alpha: 0.4 });
+    this.mainContainer.addChild(panelBg);
 
-    // Round info
+    // Round header
     const roundText = new Text({
       text: `Round ${state.roundNumber}`,
-      style: new TextStyle({ fontSize: 11, fill: '#ffffff66', fontFamily: 'Inter, sans-serif' }),
+      style: new TextStyle({ fontSize: 11, fill: '#ffffff88', fontFamily: 'Inter, sans-serif', fontWeight: 'bold' }),
     });
-    roundText.x = w - 130;
-    roundText.y = 85;
+    roundText.x = panelX + 10;
+    roundText.y = panelY + 8;
     this.mainContainer.addChild(roundText);
+
+    for (let i = 0; i < 4; i++) {
+      const isOpp = i > 0 && this.opponents.length === 3;
+      const nameColor = isOpp
+        ? '#' + this.opponents[i - 1].color.toString(16).padStart(6, '0')
+        : '#ffffff';
+      const isYou = i === 0;
+
+      // Name
+      const nameStyle = new TextStyle({
+        fontSize: 12,
+        fill: nameColor,
+        fontFamily: 'Inter, sans-serif',
+        fontWeight: isYou ? 'bold' : 'normal',
+      });
+      const nameText = new Text({ text: names[i], style: nameStyle });
+      nameText.x = panelX + 10;
+      nameText.y = panelY + 26 + i * 20;
+      this.mainContainer.addChild(nameText);
+
+      // Total score (big)
+      const totalStyle = new TextStyle({
+        fontSize: 13,
+        fill: '#ffffff',
+        fontFamily: 'Inter, sans-serif',
+        fontWeight: 'bold',
+      });
+      const totalText = new Text({ text: `${state.totalScores[i]}`, style: totalStyle });
+      totalText.anchor.set(1, 0);
+      totalText.x = panelX + panelW - 40;
+      totalText.y = panelY + 25 + i * 20;
+      this.mainContainer.addChild(totalText);
+
+      // Round score (+N)
+      const roundScore = state.scores[i];
+      const rsColor = roundScore > 0 ? '#ff6666' : '#66ff66';
+      const rsStyle = new TextStyle({
+        fontSize: 10,
+        fill: roundScore > 0 ? rsColor : '#ffffff66',
+        fontFamily: 'Inter, sans-serif',
+      });
+      const rsText = new Text({ text: `+${roundScore}`, style: rsStyle });
+      rsText.anchor.set(1, 0);
+      rsText.x = panelX + panelW - 10;
+      rsText.y = panelY + 27 + i * 20;
+      this.mainContainer.addChild(rsText);
+    }
+  }
+
+  /** Animate a card sliding from a player's hand area to the trick center position */
+  animateCardToTrick(playerIndex: number, card: Card, onComplete?: () => void): void {
+    const w = this.app.screen.width;
+    const h = this.app.screen.height;
+
+    // Start positions (near each player's hand area)
+    const startPositions: [number, number][] = [
+      [w / 2, h - 60],      // 0: Bottom (You)
+      [80, h / 2 + 20],     // 1: West
+      [w / 2, 60],          // 2: North
+      [w - 80, h / 2 + 20], // 3: East
+    ];
+
+    // Trick center positions (same as renderTrick)
+    const cx = w / 2;
+    const cy = h / 2 - 10;
+    const trickPositions: [number, number][] = [
+      [cx, cy + 50],
+      [cx - 60, cy],
+      [cx, cy - 50],
+      [cx + 60, cy],
+    ];
+
+    const [sx, sy] = startPositions[playerIndex];
+    const [tx, ty] = trickPositions[playerIndex];
+
+    const sprite = createCardGraphics(card, true);
+    sprite.x = sx - CARD.width / 2;
+    sprite.y = sy - CARD.height / 2;
+    sprite.alpha = 0.9;
+    this.mainContainer.addChild(sprite);
+
+    const startX = sprite.x;
+    const startY = sprite.y;
+    const targetX = tx - CARD.width / 2;
+    const targetY = ty - CARD.height / 2;
+    const startTime = performance.now();
+    const duration = 300;
+
+    const animate = () => {
+      const elapsed = performance.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const e = easeOutCubic(progress);
+
+      sprite.x = startX + (targetX - startX) * e;
+      sprite.y = startY + (targetY - startY) * e;
+      sprite.alpha = 0.9 + 0.1 * e;
+
+      if (progress < 1 && !this.destroyed) {
+        this.pendingRAFs.push(requestAnimationFrame(animate));
+      } else {
+        onComplete?.();
+      }
+    };
+
+    this.pendingRAFs.push(requestAnimationFrame(animate));
+  }
+
+  /** Render a glow/indicator around the current player's area */
+  renderTurnIndicator(currentPlayer: number): void {
+    const w = this.app.screen.width;
+    const h = this.app.screen.height;
+
+    // Positions for the turn indicator near each player's area
+    const positions: { x: number; y: number; w: number; h: number }[] = [
+      { x: w / 2 - 160, y: h - CARD.height - 35, w: 320, h: CARD.height + 20 }, // Bottom
+      { x: 5, y: h / 2 - 50, w: 55, h: 120 },                                     // West
+      { x: w / 2 - 100, y: 5, w: 200, h: 50 },                                     // North
+      { x: w - 60, y: h / 2 - 50, w: 55, h: 120 },                                 // East
+    ];
+
+    const pos = positions[currentPlayer];
+    const indicator = new Graphics();
+
+    // Pulsing glow border
+    indicator.roundRect(pos.x, pos.y, pos.w, pos.h, 10);
+    indicator.stroke({ width: 2, color: 0xfbbf24, alpha: 0.6 });
+
+    // Subtle fill
+    indicator.roundRect(pos.x, pos.y, pos.w, pos.h, 10);
+    indicator.fill({ color: 0xfbbf24, alpha: 0.06 });
+
+    this.mainContainer.addChild(indicator);
+
+    // Animate pulse
+    let pulseUp = true;
+    let alpha = 0.6;
+    const pulse = () => {
+      if (this.destroyed) return;
+      alpha += pulseUp ? 0.015 : -0.015;
+      if (alpha >= 0.9) pulseUp = false;
+      if (alpha <= 0.3) pulseUp = true;
+      indicator.alpha = alpha;
+      this.pendingRAFs.push(requestAnimationFrame(pulse));
+    };
+    this.pendingRAFs.push(requestAnimationFrame(pulse));
+  }
+
+  /** Render small icons of collected point cards near each player */
+  renderCollectedPoints(tricks: Card[][], _scores: number[]): void {
+    const w = this.app.screen.width;
+    const h = this.app.screen.height;
+
+    // Positions for point card display near each player
+    const basePositions: [number, number, 'h' | 'v'][] = [
+      [w / 2 + 180, h - 35, 'h'],     // Bottom-right of hand
+      [12, h / 2 + 90, 'v'],           // Below West hand
+      [w / 2 + 110, 12, 'h'],          // Right of North area
+      [w - 25, h / 2 + 90, 'v'],       // Below East hand
+    ];
+
+    for (let player = 0; player < 4; player++) {
+      const pointCards = tricks[player].filter((c) => cardPoints(c) > 0);
+      if (pointCards.length === 0) continue;
+
+      const [bx, by, orient] = basePositions[player];
+
+      // Group: count hearts, check for QS
+      const heartCount = pointCards.filter((c) => c.suit === 'hearts').length;
+      const hasQueenSpades = pointCards.some((c) => c.suit === 'spades' && c.rank === 'Q');
+
+      const items: { symbol: string; color: string; label: string }[] = [];
+      if (hasQueenSpades) {
+        items.push({ symbol: SUIT_SYMBOLS.spades, color: '#4a4a6a', label: 'Q' });
+      }
+      if (heartCount > 0) {
+        items.push({ symbol: SUIT_SYMBOLS.hearts, color: '#ef4444', label: `${heartCount}` });
+      }
+
+      const container = new Container();
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const ox = orient === 'h' ? i * 38 : 0;
+        const oy = orient === 'v' ? i * 20 : 0;
+
+        // Small pill background
+        const pill = new Graphics();
+        pill.roundRect(bx + ox - 2, by + oy - 2, 34, 17, 4);
+        pill.fill({ color: 0x000000, alpha: 0.45 });
+        container.addChild(pill);
+
+        // Symbol
+        const sym = new Text({
+          text: item.symbol,
+          style: new TextStyle({ fontSize: 11, fill: item.color, fontFamily: 'Inter, sans-serif' }),
+        });
+        sym.x = bx + ox + 1;
+        sym.y = by + oy - 1;
+        container.addChild(sym);
+
+        // Count/label
+        const lbl = new Text({
+          text: item.label,
+          style: new TextStyle({ fontSize: 10, fill: '#ffffffcc', fontFamily: 'Inter, sans-serif', fontWeight: 'bold' }),
+        });
+        lbl.x = bx + ox + 14;
+        lbl.y = by + oy;
+        container.addChild(lbl);
+      }
+
+      this.mainContainer.addChild(container);
+    }
+  }
+
+  playDealAnimation(handSizes: number[], onComplete: () => void): void {
+    // Clear game elements but keep felt
+    while (this.mainContainer.children.length > 1) {
+      this.mainContainer.removeChildAt(1);
+    }
+
+    const w = this.app.screen.width;
+    const h = this.app.screen.height;
+    const dealContainer = new Container();
+    this.mainContainer.addChild(dealContainer);
+
+    const centerX = w / 2 - CARD.width / 2;
+    const centerY = h / 2 - CARD.height / 2;
+
+    // Target positions for each player's cards
+    const getTarget = (player: number, idx: number, total: number): { x: number; y: number; rot: number } => {
+      if (player === 0) {
+        const tw = Math.min(total * 30, 600);
+        const sp = tw / Math.max(total - 1, 1);
+        return { x: w / 2 - tw / 2 + idx * sp, y: h - 20 - CARD.height, rot: 0 };
+      } else if (player === 1) {
+        return { x: 30, y: h / 2 + 20 - (total * 10) / 2 + idx * 10, rot: Math.PI / 2 };
+      } else if (player === 2) {
+        return { x: w / 2 - (total * 15) / 2 + idx * 15, y: 20, rot: 0 };
+      } else {
+        return { x: w - 30, y: h / 2 + 20 - (total * 10) / 2 + idx * 10, rot: -Math.PI / 2 };
+      }
+    };
+
+    // Draw a deck stack in the center
+    for (let i = 0; i < 3; i++) {
+      const bg = createCardGraphics({ suit: 'spades', rank: 'A', faceUp: false, id: `deck-${i}` }, false);
+      bg.x = centerX - i * 2;
+      bg.y = centerY - i * 2;
+      bg.eventMode = 'none';
+      dealContainer.addChild(bg);
+    }
+
+    const totalCards = handSizes.reduce((a, b) => a + b, 0);
+    const counters = [0, 0, 0, 0];
+    let dealt = 0;
+    let completedAnims = 0;
+
+    const animateCard = (sprite: Container, tx: number, ty: number, tRot: number, duration: number) => {
+      const sx = sprite.x, sy = sprite.y, sr = sprite.rotation;
+      const start = performance.now();
+      const tick = () => {
+        const p = Math.min((performance.now() - start) / duration, 1);
+        const e = easeOutCubic(p);
+        sprite.x = sx + (tx - sx) * e;
+        sprite.y = sy + (ty - sy) * e;
+        sprite.rotation = sr + (tRot - sr) * e;
+        if (p < 1) requestAnimationFrame(tick);
+        else {
+          completedAnims++;
+          if (completedAnims >= totalCards) {
+            setTimeout(() => {
+              dealContainer.destroy({ children: true });
+              onComplete();
+            }, 150);
+          }
+        }
+      };
+      requestAnimationFrame(tick);
+    };
+
+    const dealNext = () => {
+      if (dealt >= totalCards) return;
+      const player = dealt % 4;
+      if (counters[player] >= handSizes[player]) {
+        dealt++;
+        dealNext();
+        return;
+      }
+      const idx = counters[player]++;
+      dealt++;
+
+      const sprite = createCardGraphics({ suit: 'spades', rank: 'A', faceUp: false, id: `deal-${dealt}` }, false);
+      sprite.x = centerX;
+      sprite.y = centerY;
+      sprite.eventMode = 'none';
+      dealContainer.addChild(sprite);
+
+      const target = getTarget(player, idx, handSizes[player]);
+      animateCard(sprite, target.x, target.y, target.rot, 180);
+
+      setTimeout(dealNext, 35);
+    };
+
+    // Small delay then start dealing
+    setTimeout(dealNext, 300);
   }
 
   destroy(): void {
+    this.destroyed = true;
+    for (const id of this.pendingRAFs) cancelAnimationFrame(id);
+    this.pendingRAFs = [];
     this.app.stage.removeChildren();
   }
 }
