@@ -449,6 +449,17 @@ export default function HeartsPage() {
         setMessage(`${winnerName} took the trick${points > 0 ? ` (+${points} pts)` : ''}`);
         // Message will be cleared when next game-state arrives
       }
+    } else if (data.type === 'pass-submitted') {
+      // Host tells us who has submitted pass cards so far
+      if (!isHost) {
+        const submitted: boolean[] = data.submitted;
+        const waiting = submitted
+          .map((done, i) => !done ? (seatNamesRef.current[i] || `Player ${i + 1}`) : null)
+          .filter((n): n is string => n !== null);
+        if (waiting.length > 0) {
+          setMessage(`Waiting for ${waiting.join(', ')} to pass...`);
+        }
+      }
     } else if (data.type === 'pass-execute') {
       // Host says cards were passed
       if (!isHost) {
@@ -477,8 +488,12 @@ export default function HeartsPage() {
         for (const card of cards) {
           game.selectPassCard(seat, card);
         }
-        // Check if all passes are in
+        // Broadcast who has submitted so far
         const s = game.getState();
+        const submitted = s.passingCards.map((p) => p.length >= 3);
+        broadcastEvent({ type: 'pass-submitted', submitted });
+
+        // Check if all passes are in
         if (s.passingCards.every((p) => p.length === 3)) {
           game.executePass();
           broadcastEvent({ type: 'pass-execute' });
@@ -498,6 +513,14 @@ export default function HeartsPage() {
           }
           if (newS.currentPlayer !== mySeatRef.current && aiSeatsRef.current.has(newS.currentPlayer)) {
             hostAiPlayRef.current?.(game, aiSeatsRef.current);
+          }
+        } else {
+          // Not all submitted yet — update host's own message
+          const waitingFor = s.passingCards
+            .map((p, i) => p.length < 3 ? getSeatDisplayName(i) : null)
+            .filter((n): n is string => n !== null && n !== 'You');
+          if (waitingFor.length > 0) {
+            setMessage(`Waiting for ${waitingFor.join(', ')} to pass...`);
           }
         }
       }
@@ -899,6 +922,10 @@ export default function HeartsPage() {
           setMessage('');
           return;
         }
+        // Broadcast who has submitted so far
+        const submitted = s.passingCards.map((p) => p.length >= 3);
+        broadcastEvent({ type: 'pass-submitted', submitted });
+
         // Check if all passes are in (host's pass was already added via card clicks)
         if (s.passingCards.every((p) => p.length === 3)) {
           game.executePass();
@@ -927,7 +954,15 @@ export default function HeartsPage() {
             hostAiPlayRef.current?.(game, aiSeatsRef.current);
           }
         } else {
-          setMessage('Waiting for other players to pass...');
+          // Not all submitted — show who we're waiting for
+          const waitingFor = s.passingCards
+            .map((p, i) => p.length < 3 ? getSeatDisplayName(i) : null)
+            .filter((n): n is string => n !== null && n !== 'You');
+          if (waitingFor.length > 0) {
+            setMessage(`Waiting for ${waitingFor.join(', ')} to pass...`);
+          } else {
+            setMessage('Waiting for other players to pass...');
+          }
         }
       } else {
         // Non-host: send pass cards to host (use host-synced React state, not local game)

@@ -75,7 +75,27 @@ export default function FindMatchPanel({ gameId }: FindMatchPanelProps) {
       const roomId = await multiplayerService.createRoom(gameId, userId);
       if (roomId) {
         if (maxPlayers > 2) {
-          // 4-player: navigate immediately, game page handles lobby
+          // 4-player: wait briefly then re-check for race condition
+          // (both players may have created rooms simultaneously)
+          await new Promise(r => setTimeout(r, 2000));
+          const raceCheck = await multiplayerService.getOpenRooms(gameId);
+          const otherRoom = raceCheck.find(r => r.host_id !== userId && r.id !== roomId);
+          if (otherRoom) {
+            // Another room appeared — abandon ours and join it instead
+            await multiplayerService.leaveRoom();
+            const joined = await multiplayerService.joinRoomChannel(otherRoom.id, userId);
+            if (joined) {
+              reset();
+              setPlayerColor('b');
+              setPlayerSeat(-1);
+              setMultiplayer(true, otherRoom.id);
+              setCurrentGame(gameId);
+              navigate(`/play/${gameId}`);
+              return;
+            }
+          }
+
+          // No other room found — we're the host
           reset();
           setPlayerColor('w');
           setPlayerSeat(0); // host is seat 0
