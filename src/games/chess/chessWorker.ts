@@ -1,11 +1,16 @@
 import { Chess, Move } from 'chess.js';
 
-// ─── Piece values (centipawns) ──────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// PIECE VALUES (centipawns)
+// ═══════════════════════════════════════════════════════════════════════════════
+
 const PIECE_VALUES: Record<string, number> = {
   p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000,
 };
 
-// ─── Piece-square tables (from white's perspective, row 0 = rank 8) ─────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// PIECE-SQUARE TABLES (from white's perspective, row 0 = rank 8)
+// ═══════════════════════════════════════════════════════════════════════════════
 
 const PAWN_TABLE = [
    0,  0,  0,  0,  0,  0,  0,  0,
@@ -85,14 +90,16 @@ const KING_ENDGAME_TABLE = [
 ];
 
 const PST: Record<string, number[]> = {
-  p: PAWN_TABLE,
-  n: KNIGHT_TABLE,
-  b: BISHOP_TABLE,
-  r: ROOK_TABLE,
-  q: QUEEN_TABLE,
+  p: PAWN_TABLE, n: KNIGHT_TABLE, b: BISHOP_TABLE, r: ROOK_TABLE, q: QUEEN_TABLE,
 };
 
-// ─── Evaluation ─────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// EVALUATION (returns score from White's perspective)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Passed pawn bonus by rank (index = rank, from white's perspective)
+const PASSED_PAWN_BONUS    = [0, 0, 10, 20, 40, 70, 120, 0];
+const PASSED_PAWN_ENDGAME  = [0, 0, 20, 40, 70, 120, 200, 0];
 
 function evaluateBoard(chess: Chess): number {
   if (chess.isCheckmate()) {
@@ -104,14 +111,12 @@ function evaluateBoard(chess: Chess): number {
 
   // Count material for endgame detection
   let whiteQueens = 0, blackQueens = 0, whiteMinors = 0, blackMinors = 0;
-  let whiteRooks = 0, blackRooks = 0;
 
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
       const p = board[r][c];
       if (!p) continue;
       if (p.type === 'q') { if (p.color === 'w') whiteQueens++; else blackQueens++; }
-      if (p.type === 'r') { if (p.color === 'w') whiteRooks++; else blackRooks++; }
       if (p.type === 'n' || p.type === 'b') { if (p.color === 'w') whiteMinors++; else blackMinors++; }
     }
   }
@@ -123,11 +128,11 @@ function evaluateBoard(chess: Chess): number {
 
   let score = 0;
 
-  // Track pawn files for structure analysis
-  const whitePawnFiles = new Set<number>();
-  const blackPawnFiles = new Set<number>();
+  // Pawn structure tracking
   const whitePawnCount = new Array(8).fill(0);
   const blackPawnCount = new Array(8).fill(0);
+  let whiteKingRow = 7, whiteKingCol = 4;
+  let blackKingRow = 0, blackKingCol = 4;
 
   for (let row = 0; row < 8; row++) {
     for (let col = 0; col < 8; col++) {
@@ -139,53 +144,39 @@ function evaluateBoard(chess: Chess): number {
 
       if (piece.type === 'k') {
         value += kingTable[idx];
+        if (piece.color === 'w') { whiteKingRow = row; whiteKingCol = col; }
+        else { blackKingRow = row; blackKingCol = col; }
       } else {
         const table = PST[piece.type];
         if (table) value += table[idx];
       }
 
-      // Track pawns
       if (piece.type === 'p') {
-        if (piece.color === 'w') {
-          whitePawnFiles.add(col);
-          whitePawnCount[col]++;
-        } else {
-          blackPawnFiles.add(col);
-          blackPawnCount[col]++;
-        }
+        if (piece.color === 'w') whitePawnCount[col]++;
+        else blackPawnCount[col]++;
       }
 
       score += piece.color === 'w' ? value : -value;
     }
   }
 
-  // Bishop pair bonus (+30 cp)
-  if (whiteMinors >= 2) {
-    let wb = 0;
-    for (let r = 0; r < 8; r++)
-      for (let c = 0; c < 8; c++) {
-        const p = board[r][c];
-        if (p && p.type === 'b' && p.color === 'w') wb++;
-      }
-    if (wb >= 2) score += 30;
-  }
-  if (blackMinors >= 2) {
-    let bb = 0;
-    for (let r = 0; r < 8; r++)
-      for (let c = 0; c < 8; c++) {
-        const p = board[r][c];
-        if (p && p.type === 'b' && p.color === 'b') bb++;
-      }
-    if (bb >= 2) score -= 30;
-  }
+  // Bishop pair bonus
+  let whiteBishops = 0, blackBishops = 0;
+  for (let r = 0; r < 8; r++)
+    for (let c = 0; c < 8; c++) {
+      const p = board[r][c];
+      if (p && p.type === 'b') { if (p.color === 'w') whiteBishops++; else blackBishops++; }
+    }
+  if (whiteBishops >= 2) score += 30;
+  if (blackBishops >= 2) score -= 30;
 
-  // Doubled pawns penalty (-15 cp each)
+  // Doubled pawns penalty
   for (let col = 0; col < 8; col++) {
     if (whitePawnCount[col] > 1) score -= 15 * (whitePawnCount[col] - 1);
     if (blackPawnCount[col] > 1) score += 15 * (blackPawnCount[col] - 1);
   }
 
-  // Isolated pawns penalty (-10 cp each)
+  // Isolated pawns penalty
   for (let col = 0; col < 8; col++) {
     if (whitePawnCount[col] > 0) {
       const hasNeighbor = (col > 0 && whitePawnCount[col - 1] > 0) || (col < 7 && whitePawnCount[col + 1] > 0);
@@ -197,14 +188,14 @@ function evaluateBoard(chess: Chess): number {
     }
   }
 
-  // Rook on open/semi-open file bonus
+  // Rook on open/semi-open file
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
       const p = board[r][c];
       if (!p || p.type !== 'r') continue;
       if (p.color === 'w') {
-        if (whitePawnCount[c] === 0 && blackPawnCount[c] === 0) score += 20; // open file
-        else if (whitePawnCount[c] === 0) score += 10; // semi-open
+        if (whitePawnCount[c] === 0 && blackPawnCount[c] === 0) score += 20;
+        else if (whitePawnCount[c] === 0) score += 10;
       } else {
         if (whitePawnCount[c] === 0 && blackPawnCount[c] === 0) score -= 20;
         else if (blackPawnCount[c] === 0) score -= 10;
@@ -212,124 +203,397 @@ function evaluateBoard(chess: Chess): number {
     }
   }
 
+  // Passed pawns
+  for (let col = 0; col < 8; col++) {
+    // White passed pawns (scan from rank 7 down to rank 2)
+    if (whitePawnCount[col] > 0) {
+      for (let row = 1; row <= 6; row++) {
+        const p = board[row][col];
+        if (!p || p.type !== 'p' || p.color !== 'w') continue;
+        let passed = true;
+        for (let r = row - 1; r >= 0 && passed; r--) {
+          for (let c = Math.max(0, col - 1); c <= Math.min(7, col + 1); c++) {
+            const bp = board[r][c];
+            if (bp && bp.type === 'p' && bp.color === 'b') { passed = false; break; }
+          }
+        }
+        if (passed) {
+          const rank = 8 - row;
+          score += endgame ? PASSED_PAWN_ENDGAME[rank] : PASSED_PAWN_BONUS[rank];
+        }
+        break;
+      }
+    }
+    // Black passed pawns (scan from rank 2 up to rank 7)
+    if (blackPawnCount[col] > 0) {
+      for (let row = 6; row >= 1; row--) {
+        const p = board[row][col];
+        if (!p || p.type !== 'p' || p.color !== 'b') continue;
+        let passed = true;
+        for (let r = row + 1; r <= 7 && passed; r++) {
+          for (let c = Math.max(0, col - 1); c <= Math.min(7, col + 1); c++) {
+            const wp = board[r][c];
+            if (wp && wp.type === 'p' && wp.color === 'w') { passed = false; break; }
+          }
+        }
+        if (passed) {
+          const rank = row + 1;
+          score -= endgame ? PASSED_PAWN_ENDGAME[rank] : PASSED_PAWN_BONUS[rank];
+        }
+        break;
+      }
+    }
+  }
+
+  // King pawn shield (midgame only)
+  if (!endgame) {
+    // White king shield
+    const wShieldRow = whiteKingRow - 1;
+    if (wShieldRow >= 0) {
+      for (let c = Math.max(0, whiteKingCol - 1); c <= Math.min(7, whiteKingCol + 1); c++) {
+        const p = board[wShieldRow][c];
+        if (p && p.type === 'p' && p.color === 'w') score += 10;
+      }
+    }
+    // Black king shield
+    const bShieldRow = blackKingRow + 1;
+    if (bShieldRow <= 7) {
+      for (let c = Math.max(0, blackKingCol - 1); c <= Math.min(7, blackKingCol + 1); c++) {
+        const p = board[bShieldRow][c];
+        if (p && p.type === 'p' && p.color === 'b') score -= 10;
+      }
+    }
+  }
+
+  // Tempo bonus: side to move has a small edge (breaks ties, discourages shuffling)
+  score += chess.turn() === 'w' ? 12 : -12;
+
   return score;
 }
 
-// ─── Move ordering ──────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// TRANSPOSITION TABLE
+// ═══════════════════════════════════════════════════════════════════════════════
 
-const MVV_LVA: Record<string, number> = {
-  p: 1, n: 2, b: 3, r: 4, q: 5, k: 6,
-};
+const TT_EXACT = 0;
+const TT_LOWER = 1; // Score is at least this (beta cutoff)
+const TT_UPPER = 2; // Score is at most this (failed low)
 
-function scoreMove(move: Move): number {
+interface TTEntry {
+  depth: number;
+  score: number;
+  flag: number;
+  bestMove: string | null;
+}
+
+const tt = new Map<string, TTEntry>();
+const TT_MAX = 500_000;
+
+function ttKey(chess: Chess): string {
+  return chess.fen().split(' ').slice(0, 4).join(' ');
+}
+
+function ttProbe(key: string, depth: number, alpha: number, beta: number):
+  { hit: boolean; score: number; bestMove: string | null } {
+  const entry = tt.get(key);
+  if (!entry) return { hit: false, score: 0, bestMove: null };
+
+  // Always return best move hint even if depth insufficient
+  if (entry.depth < depth) return { hit: false, score: 0, bestMove: entry.bestMove };
+
+  if (entry.flag === TT_EXACT) return { hit: true, score: entry.score, bestMove: entry.bestMove };
+  if (entry.flag === TT_LOWER && entry.score >= beta) return { hit: true, score: entry.score, bestMove: entry.bestMove };
+  if (entry.flag === TT_UPPER && entry.score <= alpha) return { hit: true, score: entry.score, bestMove: entry.bestMove };
+
+  return { hit: false, score: 0, bestMove: entry.bestMove };
+}
+
+function ttStore(key: string, depth: number, score: number, flag: number, bestMove: string | null): void {
+  const existing = tt.get(key);
+  if (!existing || existing.depth <= depth) {
+    if (!existing && tt.size >= TT_MAX) {
+      // Evict ~25% oldest entries
+      let toDelete = TT_MAX >> 2;
+      for (const k of tt.keys()) {
+        if (toDelete-- <= 0) break;
+        tt.delete(k);
+      }
+    }
+    tt.set(key, { depth, score, flag, bestMove });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SEARCH STATE (reset per search call)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const MAX_PLY = 64;
+let killers: [string | null, string | null][];
+let historyScores: Map<string, number>;
+let nodes: number;
+let searchTimeUp: boolean;
+let searchDeadline: number;
+
+function initSearch(): void {
+  killers = Array.from({ length: MAX_PLY }, () => [null, null]);
+  historyScores = new Map();
+  nodes = 0;
+  searchTimeUp = false;
+}
+
+function checkTime(): void {
+  if ((++nodes & 2047) === 0) {
+    searchTimeUp = performance.now() >= searchDeadline;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MOVE ORDERING
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const MVV_LVA: Record<string, number> = { p: 1, n: 2, b: 3, r: 4, q: 5, k: 6 };
+
+function scoreMoveForOrder(move: Move, ttBest: string | null, ply: number): number {
+  if (ttBest && move.san === ttBest) return 100_000;
+
   let s = 0;
   if (move.captured) {
-    s += 10000 + (MVV_LVA[move.captured] ?? 0) * 100 - (MVV_LVA[move.piece] ?? 0);
+    s += 10_000 + (MVV_LVA[move.captured] ?? 0) * 100 - (MVV_LVA[move.piece] ?? 0);
   }
-  if (move.promotion) {
-    s += move.promotion === 'q' ? 9000 : 5000;
+  if (move.promotion) s += move.promotion === 'q' ? 9_000 : 5_000;
+  if (move.san.includes('+')) s += 3_000;
+
+  if (ply < MAX_PLY) {
+    if (killers[ply][0] === move.san) s += 2_000;
+    else if (killers[ply][1] === move.san) s += 1_500;
   }
-  if (move.san.includes('+')) {
-    s += 3000;
-  }
+
+  const hKey = `${move.piece}${move.from}${move.to}`;
+  s += Math.min(historyScores.get(hKey) ?? 0, 900);
+
   return s;
 }
 
-function orderMoves(moves: Move[]): Move[] {
-  const scored = moves.map(m => ({ move: m, score: scoreMove(m) }));
-  scored.sort((a, b) => b.score - a.score);
-  return scored.map(s => s.move);
+function orderMoves(moves: Move[], ttBest: string | null, ply: number): Move[] {
+  return moves
+    .map(m => ({ m, s: scoreMoveForOrder(m, ttBest, ply) }))
+    .sort((a, b) => b.s - a.s)
+    .map(x => x.m);
 }
 
-// ─── Search with iterative deepening ────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// QUIESCENCE SEARCH (negamax style — captures only)
+// ═══════════════════════════════════════════════════════════════════════════════
 
-const DEPTH_MAP: Record<string, number> = {
-  easy: 2,
-  medium: 3,
-  hard: 5,
-};
+function quiesce(chess: Chess, alpha: number, beta: number, ply: number): number {
+  checkTime();
+  if (searchTimeUp) return 0;
 
-function quiesce(chess: Chess, alpha: number, beta: number, isMax: boolean): number {
-  const standPat = evaluateBoard(chess);
+  const color = chess.turn() === 'w' ? 1 : -1;
+  const standPat = color * evaluateBoard(chess);
 
-  if (isMax) {
-    if (standPat >= beta) return beta;
-    if (standPat > alpha) alpha = standPat;
-  } else {
-    if (standPat <= alpha) return alpha;
-    if (standPat < beta) beta = standPat;
-  }
+  if (ply >= MAX_PLY) return standPat;
+  if (standPat >= beta) return beta;
+  if (standPat > alpha) alpha = standPat;
 
-  // Only search captures at depth 0
   const captures = chess.moves({ verbose: true }).filter(m => m.captured);
-  const ordered = orderMoves(captures);
+  captures.sort((a, b) =>
+    ((MVV_LVA[b.captured!] ?? 0) * 10 - (MVV_LVA[b.piece] ?? 0)) -
+    ((MVV_LVA[a.captured!] ?? 0) * 10 - (MVV_LVA[a.piece] ?? 0))
+  );
 
-  for (const move of ordered) {
+  for (const move of captures) {
     chess.move(move);
-    const score = quiesce(chess, alpha, beta, !isMax);
+    const score = -quiesce(chess, -beta, -alpha, ply + 1);
     chess.undo();
 
-    if (isMax) {
-      if (score >= beta) return beta;
-      if (score > alpha) alpha = score;
-    } else {
-      if (score <= alpha) return alpha;
-      if (score < beta) beta = score;
-    }
+    if (searchTimeUp) return 0;
+    if (score >= beta) return beta;
+    if (score > alpha) alpha = score;
   }
 
-  return isMax ? alpha : beta;
+  return alpha;
 }
 
-function minimax(chess: Chess, depth: number, alpha: number, beta: number, isMax: boolean): number {
-  if (depth === 0) {
-    return quiesce(chess, alpha, beta, isMax);
-  }
+// ═══════════════════════════════════════════════════════════════════════════════
+// NEGAMAX with TT, LMR, Killer Moves, Check Extensions
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function negamax(chess: Chess, depth: number, alpha: number, beta: number, ply: number): number {
+  checkTime();
+  if (searchTimeUp) return 0;
+
+  // Check extension: search deeper when in check
+  const inCheck = chess.isCheck();
+  if (inCheck && ply < MAX_PLY) depth++;
+
+  if (depth <= 0) return quiesce(chess, alpha, beta, ply);
 
   if (chess.isGameOver()) {
-    return evaluateBoard(chess);
+    const color = chess.turn() === 'w' ? 1 : -1;
+    return color * evaluateBoard(chess);
   }
 
-  const moves = orderMoves(chess.moves({ verbose: true }));
+  // TT probe
+  const key = ttKey(chess);
+  const probe = ttProbe(key, depth, alpha, beta);
+  if (probe.hit) return probe.score;
 
-  if (isMax) {
-    let maxEval = -Infinity;
-    for (const move of moves) {
-      chess.move(move);
-      const evalScore = minimax(chess, depth - 1, alpha, beta, false);
-      chess.undo();
-      maxEval = Math.max(maxEval, evalScore);
-      alpha = Math.max(alpha, evalScore);
-      if (beta <= alpha) break;
+  const origAlpha = alpha;
+  let bestScore = -99_999;
+  let bestMoveSan: string | null = null;
+
+  const moves = orderMoves(chess.moves({ verbose: true }), probe.bestMove, ply);
+  let searched = 0;
+
+  for (const move of moves) {
+    chess.move(move);
+
+    let score: number;
+
+    // Late Move Reductions: search later quiet moves at reduced depth
+    if (searched >= 3 && depth >= 3 && !move.captured && !move.promotion && !inCheck && !chess.isCheck()) {
+      const R = searched >= 6 ? 2 : 1;
+      // Reduced scout search
+      score = -negamax(chess, depth - 1 - R, -alpha - 1, -alpha, ply + 1);
+      // Re-search at full depth if promising
+      if (!searchTimeUp && score > alpha) {
+        score = -negamax(chess, depth - 1, -beta, -alpha, ply + 1);
+      }
+    } else {
+      score = -negamax(chess, depth - 1, -beta, -alpha, ply + 1);
     }
-    return maxEval;
-  } else {
-    let minEval = Infinity;
-    for (const move of moves) {
-      chess.move(move);
-      const evalScore = minimax(chess, depth - 1, alpha, beta, true);
-      chess.undo();
-      minEval = Math.min(minEval, evalScore);
-      beta = Math.min(beta, evalScore);
-      if (beta <= alpha) break;
+
+    chess.undo();
+    searched++;
+
+    if (searchTimeUp) return 0;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMoveSan = move.san;
     }
-    return minEval;
+    if (score > alpha) alpha = score;
+    if (alpha >= beta) {
+      // Beta cutoff — store killer and history for quiet moves
+      if (!move.captured && ply < MAX_PLY) {
+        if (killers[ply][0] !== move.san) {
+          killers[ply][1] = killers[ply][0];
+          killers[ply][0] = move.san;
+        }
+        const hKey = `${move.piece}${move.from}${move.to}`;
+        historyScores.set(hKey, (historyScores.get(hKey) ?? 0) + depth * depth);
+      }
+      break;
+    }
+  }
+
+  // TT store
+  let flag: number;
+  if (bestScore <= origAlpha) flag = TT_UPPER;
+  else if (bestScore >= beta) flag = TT_LOWER;
+  else flag = TT_EXACT;
+  ttStore(key, depth, bestScore, flag, bestMoveSan);
+
+  return bestScore;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// OPENING BOOK
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const BOOK_LINES: string[][] = [
+  // === KING PAWN OPENINGS (1.e4) ===
+  ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Bc5', 'c3', 'Nf6', 'd4', 'exd4', 'cxd4', 'Bb4+'],
+  ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Nf6', 'd3', 'Bc5', 'O-O', 'O-O'],
+  ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Nf6', 'Ng5', 'd5', 'exd5', 'Na5'],
+  ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Ba4', 'Nf6', 'O-O', 'Be7', 'Re1', 'b5', 'Bb3', 'd6'],
+  ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'Nf6', 'O-O', 'Nxe4', 'd4', 'Nd6', 'Bxc6', 'dxc6', 'dxe5', 'Nf5'],
+  ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'Bc5', 'c3', 'Nf6', 'O-O', 'O-O', 'd4'],
+  ['e4', 'e5', 'Nf3', 'Nc6', 'd4', 'exd4', 'Nxd4', 'Bc5', 'Be3', 'Qf6', 'c3', 'Nge7'],
+  ['e4', 'e5', 'Nf3', 'Nc6', 'd4', 'exd4', 'Nxd4', 'Nf6', 'Nxc6', 'bxc6', 'e5', 'Qe7'],
+  ['e4', 'e5', 'Nf3', 'Nf6', 'Nxe5', 'd6', 'Nf3', 'Nxe4', 'd4', 'd5', 'Bd3', 'Nc6'],
+  ['e4', 'c5', 'Nf3', 'd6', 'd4', 'cxd4', 'Nxd4', 'Nf6', 'Nc3', 'a6', 'Be2', 'e5'],
+  ['e4', 'c5', 'Nf3', 'd6', 'd4', 'cxd4', 'Nxd4', 'Nf6', 'Nc3', 'g6', 'Be3', 'Bg7'],
+  ['e4', 'c5', 'Nf3', 'Nc6', 'd4', 'cxd4', 'Nxd4', 'Nf6', 'Nc3', 'e5', 'Ndb5', 'd6'],
+  ['e4', 'c5', 'c3', 'Nf6', 'e5', 'Nd5', 'd4', 'cxd4', 'Nf3', 'Nc6'],
+  ['e4', 'e6', 'd4', 'd5', 'Nc3', 'Bb4', 'e5', 'c5', 'a3', 'Bxc3+', 'bxc3'],
+  ['e4', 'e6', 'd4', 'd5', 'Nc3', 'Nf6', 'Bg5', 'Be7', 'e5', 'Nfd7', 'Bxe7', 'Qxe7'],
+  ['e4', 'e6', 'd4', 'd5', 'e5', 'c5', 'c3', 'Nc6', 'Nf3', 'Qb6', 'a3'],
+  ['e4', 'c6', 'd4', 'd5', 'Nc3', 'dxe4', 'Nxe4', 'Bf5', 'Ng3', 'Bg6', 'h4', 'h6', 'Nf3'],
+  ['e4', 'c6', 'd4', 'd5', 'e5', 'Bf5', 'Nf3', 'e6', 'Be2', 'c5', 'Be3'],
+  // === QUEEN PAWN OPENINGS (1.d4) ===
+  ['d4', 'd5', 'c4', 'e6', 'Nc3', 'Nf6', 'Bg5', 'Be7', 'e3', 'O-O', 'Nf3', 'Nbd7', 'Rc1'],
+  ['d4', 'd5', 'c4', 'e6', 'Nc3', 'Nf6', 'cxd5', 'exd5', 'Bg5', 'Be7', 'e3', 'O-O', 'Bd3'],
+  ['d4', 'd5', 'c4', 'dxc4', 'Nf3', 'Nf6', 'e3', 'e6', 'Bxc4', 'c5', 'O-O', 'a6'],
+  ['d4', 'd5', 'c4', 'c6', 'Nf3', 'Nf6', 'Nc3', 'dxc4', 'a4', 'Bf5', 'e3', 'e6'],
+  ['d4', 'd5', 'Nf3', 'Nf6', 'Bf4', 'c5', 'e3', 'Nc6', 'Nbd2', 'e6', 'c3', 'Bd6'],
+  ['d4', 'Nf6', 'Nf3', 'e6', 'Bf4', 'd5', 'e3', 'Bd6', 'Bg3', 'O-O', 'Bd3'],
+  ['d4', 'Nf6', 'c4', 'e6', 'g3', 'd5', 'Bg2', 'Be7', 'Nf3', 'O-O', 'O-O', 'dxc4'],
+  ['d4', 'Nf6', 'c4', 'g6', 'Nc3', 'Bg7', 'e4', 'd6', 'Nf3', 'O-O', 'Be2', 'e5', 'd5'],
+  ['d4', 'Nf6', 'c4', 'g6', 'Nc3', 'Bg7', 'e4', 'd6', 'f3', 'O-O', 'Be3', 'e5'],
+  ['d4', 'Nf6', 'c4', 'e6', 'Nc3', 'Bb4', 'e3', 'O-O', 'Bd3', 'd5', 'Nf3', 'c5'],
+  ['d4', 'Nf6', 'c4', 'e6', 'Nc3', 'Bb4', 'Qc2', 'O-O', 'a3', 'Bxc3+', 'Qxc3', 'd5'],
+  ['d4', 'Nf6', 'c4', 'e6', 'Nf3', 'b6', 'g3', 'Bb7', 'Bg2', 'Be7', 'O-O', 'O-O'],
+  ['d4', 'Nf6', 'c4', 'g6', 'Nc3', 'd5', 'cxd5', 'Nxd5', 'e4', 'Nxc3', 'bxc3', 'Bg7'],
+  // === FLANK OPENINGS ===
+  ['c4', 'e5', 'Nc3', 'Nf6', 'Nf3', 'Nc6', 'g3', 'd5', 'cxd5', 'Nxd5', 'Bg2'],
+  ['c4', 'c5', 'Nf3', 'Nc6', 'Nc3', 'Nf6', 'g3', 'd5', 'cxd5', 'Nxd5'],
+  ['Nf3', 'd5', 'g3', 'Nf6', 'Bg2', 'c6', 'O-O', 'Bg4', 'd3', 'Nbd7', 'Nbd2'],
+];
+
+const openingBook = new Map<string, string[]>();
+
+function buildOpeningBook(): void {
+  for (const line of BOOK_LINES) {
+    const chess = new Chess();
+    for (const san of line) {
+      const key = chess.fen().split(' ').slice(0, 4).join(' ');
+      if (!openingBook.has(key)) openingBook.set(key, []);
+      const moves = openingBook.get(key)!;
+      if (!moves.includes(san)) moves.push(san);
+      const result = chess.move(san);
+      if (!result) break;
+    }
   }
 }
+
+buildOpeningBook();
+
+function getBookMove(fen: string): string | null {
+  const key = fen.split(' ').slice(0, 4).join(' ');
+  const moves = openingBook.get(key);
+  if (!moves || moves.length === 0) return null;
+  return moves[Math.floor(Math.random() * moves.length)];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ITERATIVE DEEPENING SEARCH
+// ═══════════════════════════════════════════════════════════════════════════════
 
 function search(fen: string, difficulty: string, remainingTimeMs?: number): { from: string; to: string; eval: number } | null {
   const chess = new Chess(fen);
   const moves = chess.moves({ verbose: true });
   if (moves.length === 0) return null;
 
-  let depth = DEPTH_MAP[difficulty] ?? 3;
-
-  if (remainingTimeMs !== undefined) {
-    if (remainingTimeMs < 10000) depth = Math.min(depth, 2);
-    else if (remainingTimeMs < 30000) depth = Math.min(depth, 3);
+  // Only one legal move — play it instantly
+  if (moves.length === 1) {
+    return { from: moves[0].from, to: moves[0].to, eval: 0 };
   }
 
-  const isWhite = chess.turn() === 'w';
+  // Opening book for medium and hard
+  if (difficulty !== 'easy') {
+    const bookSan = getBookMove(fen);
+    if (bookSan) {
+      try {
+        const result = chess.move(bookSan);
+        if (result) {
+          chess.undo();
+          return { from: result.from, to: result.to, eval: 0 };
+        }
+      } catch { /* fall through to search */ }
+    }
+  }
 
   // Easy: 25% random move
   if (difficulty === 'easy' && Math.random() < 0.25) {
@@ -337,40 +601,81 @@ function search(fen: string, difficulty: string, remainingTimeMs?: number): { fr
     return { from: m.from, to: m.to, eval: 0 };
   }
 
-  const orderedMoves = orderMoves(moves);
+  // Time management
+  let timeLimitMs: number;
+  let maxDepth: number;
 
-  let bestMove = orderedMoves[0];
-  let bestScore = isWhite ? -Infinity : Infinity;
-
-  for (const move of orderedMoves) {
-    chess.move(move);
-    const score = minimax(chess, depth - 1, -Infinity, Infinity, !isWhite);
-    chess.undo();
-
-    if (isWhite ? score > bestScore : score < bestScore) {
-      bestScore = score;
-      bestMove = move;
-    }
+  if (difficulty === 'hard') {
+    timeLimitMs = 8000; maxDepth = 64;
+  } else if (difficulty === 'medium') {
+    timeLimitMs = 3000; maxDepth = 10;
+  } else {
+    timeLimitMs = 1500; maxDepth = 5;
   }
 
-  // Medium: small chance of near-equal alternative
-  if (difficulty === 'medium' && Math.random() < 0.1) {
-    const candidates: Move[] = [];
-    for (const move of orderedMoves) {
+  // Reduce when clock is low
+  if (remainingTimeMs !== undefined) {
+    if (remainingTimeMs < 5000) { timeLimitMs = Math.min(timeLimitMs, 500); maxDepth = Math.min(maxDepth, 3); }
+    else if (remainingTimeMs < 15000) { timeLimitMs = Math.min(timeLimitMs, 2000); maxDepth = Math.min(maxDepth, 6); }
+    else if (remainingTimeMs < 30000) { timeLimitMs = Math.min(timeLimitMs, 3000); }
+  }
+
+  initSearch();
+  searchDeadline = performance.now() + timeLimitMs;
+
+  const color = chess.turn() === 'w' ? 1 : -1;
+  let bestMove = moves[0];
+  let bestEval = 0;
+
+  // Iterative deepening: search depth 1, 2, 3, ... up to time limit
+  // Each iteration uses TT from previous to order moves better
+  for (let depth = 1; depth <= maxDepth; depth++) {
+    let depthBest: Move | null = null;
+    let depthScore = -Infinity;
+    let alpha = -Infinity;
+
+    // Get TT best move for root ordering
+    const key = ttKey(chess);
+    const ttEntry = tt.get(key);
+    const rootMoves = orderMoves(moves, ttEntry?.bestMove ?? null, 0);
+
+    for (const move of rootMoves) {
       chess.move(move);
-      const s = minimax(chess, depth - 2, -Infinity, Infinity, !isWhite);
+      const score = -negamax(chess, depth - 1, -Infinity, -alpha, 1);
       chess.undo();
-      if (Math.abs(s - bestScore) < 40) candidates.push(move);
+
+      if (searchTimeUp) break;
+
+      if (score > depthScore) {
+        depthScore = score;
+        depthBest = move;
+      }
+      alpha = Math.max(alpha, score);
     }
-    if (candidates.length > 1) {
-      bestMove = candidates[Math.floor(Math.random() * candidates.length)];
+
+    // Only use completed iteration results
+    if (searchTimeUp && depth > 1) break;
+
+    if (depthBest) {
+      bestMove = depthBest;
+      bestEval = color * depthScore;
     }
+
+    // Store root result in TT for next iteration's move ordering
+    if (depthBest) {
+      ttStore(key, depth, depthScore, TT_EXACT, depthBest.san);
+    }
+
+    // If we found a forced mate, stop searching deeper
+    if (Math.abs(depthScore) > 90000) break;
   }
 
-  return { from: bestMove.from, to: bestMove.to, eval: bestScore };
+  return { from: bestMove.from, to: bestMove.to, eval: bestEval };
 }
 
-// ─── Worker message handler ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// WORKER MESSAGE HANDLER
+// ═══════════════════════════════════════════════════════════════════════════════
 
 self.onmessage = (e: MessageEvent) => {
   const { id, fen, difficulty, remainingTimeMs } = e.data;

@@ -562,7 +562,7 @@ export default function BattleshipPage() {
     <div className="min-h-screen flex flex-col items-center py-4 px-4">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-[960px] flex items-center justify-between mb-3">
         <button onClick={() => {
-          if (isMultiplayer && !gameOver && state?.phase === 'playing') {
+          if (isMultiplayer && !gameOver) {
             if (!window.confirm('Leaving will count as a resignation. Are you sure?')) return;
             adapterRef.current?.sendMove({ type: 'resign' });
           }

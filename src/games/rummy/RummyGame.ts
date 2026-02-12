@@ -12,9 +12,14 @@ import {
 export class RummyGame {
   private state: RummyState;
   private listeners: Set<(state: RummyState) => void> = new Set();
+  private playerNames: [string, string] = ['You', 'AI'];
 
   constructor() {
     this.state = createInitialState();
+  }
+
+  setPlayerNames(names: [string, string]): void {
+    this.playerNames = names;
   }
 
   /** Full reset: new game, scores back to zero */
@@ -176,20 +181,20 @@ export class RummyGame {
       // Gin bonus: 25 + opponent's deadwood
       const bonus = 25 + opponentResult.deadwoodPoints;
       this.state.scores[knocker] += bonus;
-      this.state.lastAction = `${knocker === 0 ? 'You' : 'AI'} got Gin! +${bonus} points`;
+      this.state.lastAction = `${this.playerNames[knocker]} got Gin! +${bonus} points`;
       this.state.roundResult = this.state.lastAction;
     } else {
       // Knock: compare deadwood
       if (knockerResult.deadwoodPoints < opponentResult.deadwoodPoints) {
         const diff = opponentResult.deadwoodPoints - knockerResult.deadwoodPoints;
         this.state.scores[knocker] += diff;
-        this.state.lastAction = `${knocker === 0 ? 'You' : 'AI'} knocked and won ${diff} points`;
+        this.state.lastAction = `${this.playerNames[knocker]} knocked and won ${diff} points`;
         this.state.roundResult = this.state.lastAction;
       } else {
         // Undercut! Opponent gets bonus
         const diff = knockerResult.deadwoodPoints - opponentResult.deadwoodPoints + 25;
         this.state.scores[opponent] += diff;
-        this.state.lastAction = `Undercut! ${opponent === 0 ? 'You' : 'AI'} won ${diff} points`;
+        this.state.lastAction = `Undercut! ${this.playerNames[opponent]} won ${diff} points`;
         this.state.roundResult = this.state.lastAction;
       }
     }

@@ -17,6 +17,7 @@ import {
 export class HeartsGame {
   private state: HeartsState;
   private listeners: Set<(state: HeartsState) => void> = new Set();
+  private _lastCompletedTrick: { cards: Card[]; winner: number; points: number } | null = null;
 
   constructor() {
     this.state = createInitialState();
@@ -24,6 +25,7 @@ export class HeartsGame {
 
   initialize(): void {
     this.state = createInitialState();
+    this._lastCompletedTrick = null;
     dealHands(this.state);
     const starter = findStartPlayer(this.state.hands);
     this.state.currentPlayer = starter;
@@ -141,6 +143,7 @@ export class HeartsGame {
 
     this.state.scores[winner] += points;
     this.state.tricks[winner].push(...trick);
+    this._lastCompletedTrick = { cards: [...trick], winner, points };
     this.state.currentTrick = [null, null, null, null];
     this.state.trickLeader = winner;
     this.state.currentPlayer = winner;
@@ -169,6 +172,7 @@ export class HeartsGame {
   }
 
   startNextRound(): void {
+    this._lastCompletedTrick = null;
     const totalScores = [...this.state.totalScores];
     const roundNumber = this.state.roundNumber + 1;
     const passDirection = (this.state.passDirection + 1) % 4;
@@ -208,5 +212,13 @@ export class HeartsGame {
       }
     }
     return winner;
+  }
+
+  getLastCompletedTrick(): { cards: Card[]; winner: number; points: number } | null {
+    return this._lastCompletedTrick;
+  }
+
+  clearLastCompletedTrick(): void {
+    this._lastCompletedTrick = null;
   }
 }

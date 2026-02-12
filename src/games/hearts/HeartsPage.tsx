@@ -166,41 +166,51 @@ export default function HeartsPage() {
     const card = selectPlay(current, current.currentPlayer);
     if (card) {
       const heartsBefore = current.heartsBroken;
-      const trickBefore = current.currentTrick.filter((c) => c !== null).length;
 
       game.playCard(current.currentPlayer, card);
       SoundManager.getInstance().play('card-flip');
       const newState = game.getState();
-      setState({ ...newState });
-      rendererRef.current?.render(newState, new Set());
 
       if (!heartsBefore && newState.heartsBroken) showBubble(commentOnHeartsBroken());
       if (card.suit === 'spades' && card.rank === 'Q') {
         showBubble(commentOnQueenPlayed(current.currentPlayer, -1));
       }
 
-      if (trickBefore === 3) {
-        await new Promise((r) => setTimeout(r, 900));
-        const afterState = game.getState();
-        setState({ ...afterState });
-        rendererRef.current?.render(afterState, new Set());
-        const winner = afterState.trickLeader;
-        const pts = afterState.scores[winner] - (current.scores[winner] || 0);
+      const completedTrick = game.getLastCompletedTrick();
+      if (completedTrick) {
+        // Show trick with all 4 cards visible before clearing
+        const displayS = { ...newState, currentTrick: completedTrick.cards as (Card | null)[] };
+        setState({ ...displayS });
+        rendererRef.current?.render(displayS, new Set());
+        const winner = completedTrick.winner;
+        const pts = completedTrick.points;
+        const winnerName = winner === 0 ? 'You' : (opponentsRef.current[winner - 1]?.name || 'Opponent');
+        setMessage(`${winnerName} took the trick${pts > 0 ? ` (+${pts} pts)` : ''}`);
         if (pts > 0) rendererRef.current?.showFloatingPoints(winner, pts);
         showBubble(commentOnTrickWon(winner, pts));
+
+        await new Promise((r) => setTimeout(r, 1200));
+        game.clearLastCompletedTrick();
+        setState({ ...newState });
+        rendererRef.current?.render(newState, new Set());
+        setMessage('');
+      } else {
+        setState({ ...newState });
+        rendererRef.current?.render(newState, new Set());
       }
 
-      if (newState.phase === 'playing' && newState.currentPlayer !== 0) {
+      const latestState = game.getState();
+      if (latestState.phase === 'playing' && latestState.currentPlayer !== 0) {
         aiPlayTurn(game);
-      } else if (newState.phase === 'round-over') {
+      } else if (latestState.phase === 'round-over') {
         setMessage('Round over! Click "Next Round" to continue.');
-        showBubble(commentOnRoundOver(newState.scores));
-      } else if (newState.phase === 'game-over') {
+        showBubble(commentOnRoundOver(latestState.scores));
+      } else if (latestState.phase === 'game-over') {
         const winner = game.getWinner();
         setGameOver(true);
         SoundManager.getInstance().play(winner === 0 ? 'game-win' : 'game-lose');
-        recordGameRef.current('hearts', winner === 0);
-        showBubble(commentOnGameOver(newState.totalScores));
+        recordGameRef.current('hearts', winner === 0, 'AI');
+        showBubble(commentOnGameOver(latestState.totalScores));
       }
     }
   }, [showBubble]);
@@ -215,8 +225,6 @@ export default function HeartsPage() {
       if (s.phase !== 'playing' || !aiSeats.has(s.currentPlayer)) break;
       const card = selectPlay(s, s.currentPlayer);
       if (card) {
-        const trickCountBefore = s.currentTrick.filter((c) => c !== null).length;
-        const scoresBefore = [...s.scores];
         const playingSeat = s.currentPlayer;
         game.playCard(s.currentPlayer, card);
         SoundManager.getInstance().play('card-flip');
@@ -224,22 +232,31 @@ export default function HeartsPage() {
 
         // Broadcast card-played event for animation on non-host
         broadcastEvent({ type: 'card-played', seat: playingSeat, card });
-        broadcastState(game);
 
-        if (trickCountBefore === 3) {
-          // Trick just completed
-          const winner = s.trickLeader;
-          const trickPts = s.scores[winner] - scoresBefore[winner];
+        const completedTrick = game.getLastCompletedTrick();
+        if (completedTrick) {
+          // Show trick with cards visible before clearing
+          const displayS = { ...s, currentTrick: completedTrick.cards as (Card | null)[] };
+          setState({ ...displayS });
+          const rotated = rotateStateForSeat(displayS, mySeatRef.current);
+          rendererRef.current?.render(rotated, new Set());
+          adapterRef.current?.sendMove({ type: 'game-state', state: displayS });
+
+          const winner = completedTrick.winner;
+          const trickPts = completedTrick.points;
           const rotatedWinner = (winner - mySeatRef.current + 4) % 4;
           if (trickPts > 0) {
             rendererRef.current?.showFloatingPoints(rotatedWinner, trickPts);
           }
-          // Show trick winner message for host
           const winnerName = getSeatDisplayName(winner);
           setMessage(`${winnerName} took the trick${trickPts > 0 ? ` (+${trickPts} pts)` : ''}`);
           broadcastEvent({ type: 'trick-won', winner, points: trickPts });
           await new Promise((r) => setTimeout(r, 1500));
           setMessage('');
+          game.clearLastCompletedTrick();
+          broadcastState(game);
+        } else {
+          broadcastState(game);
         }
       } else break;
     }
@@ -311,7 +328,7 @@ export default function HeartsPage() {
       setGameOver(true);
       const winner = s.totalScores.indexOf(Math.min(...s.totalScores));
       SoundManager.getInstance().play(winner === mySeatRef.current ? 'game-win' : 'game-lose');
-      recordGameRef.current('hearts', winner === mySeatRef.current);
+      recordGameRef.current('hearts', winner === mySeatRef.current, 'Opponent');
     } else if (s.phase === 'playing') {
       // Turn message
       if (s.currentPlayer === mySeatRef.current) {
@@ -349,7 +366,7 @@ export default function HeartsPage() {
       setPlayerWon(true);
       setGameOver(true);
       SoundManager.getInstance().play('game-win');
-      recordGameRef.current('hearts', true);
+      recordGameRef.current('hearts', true, 'Opponent');
       return;
     } else if (data.type === 'room-full') {
       // Room is full, navigate back
@@ -529,20 +546,23 @@ export default function HeartsPage() {
       if (isHost && game) {
         const card: Card = data.card;
         const seat: number = data.seat;
-        const stateBefore = game.getState();
-        const trickCountBefore = stateBefore.currentTrick.filter((c) => c !== null).length;
-        const scoresBefore = [...stateBefore.scores];
 
         if (game.playCard(seat, card)) {
           SoundManager.getInstance().play('card-flip');
           broadcastEvent({ type: 'card-played', seat, card });
-          broadcastState(game);
           const s = game.getState();
 
-          if (trickCountBefore === 3) {
-            // Trick completed
-            const winner = s.trickLeader;
-            const trickPts = s.scores[winner] - scoresBefore[winner];
+          const completedTrick = game.getLastCompletedTrick();
+          if (completedTrick) {
+            // Show trick with cards visible
+            const displayS = { ...s, currentTrick: completedTrick.cards as (Card | null)[] };
+            setState({ ...displayS });
+            const rotated = rotateStateForSeat(displayS, mySeatRef.current);
+            rendererRef.current?.render(rotated, new Set());
+            adapterRef.current?.sendMove({ type: 'game-state', state: displayS });
+
+            const winner = completedTrick.winner;
+            const trickPts = completedTrick.points;
             const rotatedWinner = (winner - mySeatRef.current + 4) % 4;
             if (trickPts > 0) {
               rendererRef.current?.showFloatingPoints(rotatedWinner, trickPts);
@@ -550,21 +570,42 @@ export default function HeartsPage() {
             const winnerName = getSeatDisplayName(winner);
             setMessage(`${winnerName} took the trick${trickPts > 0 ? ` (+${trickPts} pts)` : ''}`);
             broadcastEvent({ type: 'trick-won', winner, points: trickPts });
-          }
 
-          if (s.phase === 'playing' && aiSeatsRef.current.has(s.currentPlayer)) {
-            hostAiPlayRef.current?.(game, aiSeatsRef.current);
-          } else if (s.phase === 'round-over') {
-            setMessage('Round over!');
-          } else if (s.phase === 'game-over') {
-            setGameOver(true);
-          } else if (s.phase === 'playing' && trickCountBefore !== 3) {
-            // Update turn message
-            if (s.currentPlayer === mySeatRef.current) {
-              setMessage('Your turn \u2014 play a card');
-            } else {
-              const name = getSeatDisplayName(s.currentPlayer);
-              setMessage(`Waiting for ${name}...`);
+            setTimeout(() => {
+              game.clearLastCompletedTrick();
+              broadcastState(game);
+              setMessage('');
+              const latestS = game.getState();
+              if (latestS.phase === 'playing' && aiSeatsRef.current.has(latestS.currentPlayer)) {
+                hostAiPlayRef.current?.(game, aiSeatsRef.current);
+              } else if (latestS.phase === 'round-over') {
+                setMessage('Round over!');
+              } else if (latestS.phase === 'game-over') {
+                setGameOver(true);
+              } else if (latestS.phase === 'playing') {
+                if (latestS.currentPlayer === mySeatRef.current) {
+                  setMessage('Your turn \u2014 play a card');
+                } else {
+                  const name = getSeatDisplayName(latestS.currentPlayer);
+                  setMessage(`Waiting for ${name}...`);
+                }
+              }
+            }, 1500);
+          } else {
+            broadcastState(game);
+            if (s.phase === 'playing' && aiSeatsRef.current.has(s.currentPlayer)) {
+              hostAiPlayRef.current?.(game, aiSeatsRef.current);
+            } else if (s.phase === 'round-over') {
+              setMessage('Round over!');
+            } else if (s.phase === 'game-over') {
+              setGameOver(true);
+            } else if (s.phase === 'playing') {
+              if (s.currentPlayer === mySeatRef.current) {
+                setMessage('Your turn \u2014 play a card');
+              } else {
+                const name = getSeatDisplayName(s.currentPlayer);
+                setMessage(`Waiting for ${name}...`);
+              }
             }
           }
         }
@@ -797,20 +838,23 @@ export default function HeartsPage() {
             // Our turn to play
             if (isHost) {
               // Host processes locally
-              const trickCountMP = s.currentTrick.filter((c) => c !== null).length;
-              const scoresBefore = [...s.scores];
               if (g.playCard(seat, card)) {
                 SoundManager.getInstance().play('card-place');
                 setSelectedCards(new Set());
-                // Broadcast card-played event + state
                 broadcastEvent({ type: 'card-played', seat, card });
-                broadcastState(g);
                 const newS = g.getState();
 
-                if (trickCountMP === 3) {
-                  // Trick completed
-                  const winner = newS.trickLeader;
-                  const trickPts = newS.scores[winner] - scoresBefore[winner];
+                const completedTrick = g.getLastCompletedTrick();
+                if (completedTrick) {
+                  // Show trick with cards visible
+                  const displayS = { ...newS, currentTrick: completedTrick.cards as (Card | null)[] };
+                  setState({ ...displayS });
+                  const rotated = rotateStateForSeat(displayS, mySeatRef.current);
+                  rendererRef.current?.render(rotated, new Set());
+                  adapterRef.current?.sendMove({ type: 'game-state', state: displayS });
+
+                  const winner = completedTrick.winner;
+                  const trickPts = completedTrick.points;
                   const rotatedWinner = (winner - mySeatRef.current + 4) % 4;
                   if (trickPts > 0) {
                     rendererRef.current?.showFloatingPoints(rotatedWinner, trickPts);
@@ -818,20 +862,42 @@ export default function HeartsPage() {
                   const winnerName = getSeatDisplayName(winner);
                   setMessage(`${winnerName} took the trick${trickPts > 0 ? ` (+${trickPts} pts)` : ''}`);
                   broadcastEvent({ type: 'trick-won', winner, points: trickPts });
-                }
 
-                if (newS.phase === 'playing' && aiSeatsRef.current.has(newS.currentPlayer)) {
-                  hostAiPlayRef.current?.(g, aiSeatsRef.current);
-                } else if (newS.phase === 'round-over') {
-                  setMessage('Round over!');
-                } else if (newS.phase === 'game-over') {
-                  setGameOver(true);
-                  const winner = g.getWinner();
-                  SoundManager.getInstance().play(winner === seat ? 'game-win' : 'game-lose');
-                  recordGameRef.current('hearts', winner === seat);
-                } else if (newS.phase === 'playing') {
-                  // Update turn message (if trick didn't just complete, or after delay)
-                  if (trickCountMP !== 3) {
+                  setTimeout(() => {
+                    g.clearLastCompletedTrick();
+                    broadcastState(g);
+                    setMessage('');
+                    const latestS = g.getState();
+                    if (latestS.phase === 'playing' && aiSeatsRef.current.has(latestS.currentPlayer)) {
+                      hostAiPlayRef.current?.(g, aiSeatsRef.current);
+                    } else if (latestS.phase === 'round-over') {
+                      setMessage('Round over!');
+                    } else if (latestS.phase === 'game-over') {
+                      setGameOver(true);
+                      const w = g.getWinner();
+                      SoundManager.getInstance().play(w === seat ? 'game-win' : 'game-lose');
+                      recordGameRef.current('hearts', w === seat, 'Opponent');
+                    } else if (latestS.phase === 'playing') {
+                      if (latestS.currentPlayer === mySeatRef.current) {
+                        setMessage('Your turn \u2014 play a card');
+                      } else {
+                        const name = getSeatDisplayName(latestS.currentPlayer);
+                        setMessage(`Waiting for ${name}...`);
+                      }
+                    }
+                  }, 1500);
+                } else {
+                  broadcastState(g);
+                  if (newS.phase === 'playing' && aiSeatsRef.current.has(newS.currentPlayer)) {
+                    hostAiPlayRef.current?.(g, aiSeatsRef.current);
+                  } else if (newS.phase === 'round-over') {
+                    setMessage('Round over!');
+                  } else if (newS.phase === 'game-over') {
+                    setGameOver(true);
+                    const winner = g.getWinner();
+                    SoundManager.getInstance().play(winner === seat ? 'game-win' : 'game-lose');
+                    recordGameRef.current('hearts', winner === seat, 'Opponent');
+                  } else if (newS.phase === 'playing') {
                     if (newS.currentPlayer === mySeatRef.current) {
                       setMessage('Your turn \u2014 play a card');
                     } else {
@@ -866,30 +932,58 @@ export default function HeartsPage() {
             setState({ ...g.getState() });
           } else if (s.phase === 'playing' && s.currentPlayer === 0) {
             const heartsBefore = s.heartsBroken;
-            const trickCount = s.currentTrick.filter((c) => c !== null).length;
             if (g.playCard(0, card)) {
               SoundManager.getInstance().play('card-place');
               setSelectedCards(new Set());
               const newState = g.getState();
-              setState({ ...newState });
-              renderer.render(newState, new Set());
               if (!heartsBefore && newState.heartsBroken) showBubble(commentOnHeartsBroken());
-              if (trickCount === 3) {
-                const winner = newState.trickLeader;
-                const pts = newState.scores[winner] - s.scores[winner];
+
+              const completedTrick = g.getLastCompletedTrick();
+              if (completedTrick) {
+                // Show trick with all 4 cards visible
+                const displayS = { ...newState, currentTrick: completedTrick.cards as (Card | null)[] };
+                setState({ ...displayS });
+                renderer.render(displayS, new Set());
+                const winner = completedTrick.winner;
+                const pts = completedTrick.points;
+                const winnerName = winner === 0 ? 'You' : (opponentsRef.current[winner - 1]?.name || 'Opponent');
+                setMessage(`${winnerName} took the trick${pts > 0 ? ` (+${pts} pts)` : ''}`);
                 if (pts > 0) renderer.showFloatingPoints(winner, pts);
-              }
-              if (newState.phase === 'playing' && newState.currentPlayer !== 0) {
-                aiPlayTurn(g);
-              } else if (newState.phase === 'round-over') {
-                setMessage('Round over!');
-                showBubble(commentOnRoundOver(newState.scores));
-              } else if (newState.phase === 'game-over') {
-                const winner = g.getWinner();
-                setGameOver(true);
-                SoundManager.getInstance().play(winner === 0 ? 'game-win' : 'game-lose');
-                recordGameRef.current('hearts', winner === 0);
-                showBubble(commentOnGameOver(newState.totalScores));
+                showBubble(commentOnTrickWon(winner, pts));
+
+                setTimeout(() => {
+                  g.clearLastCompletedTrick();
+                  setState({ ...newState });
+                  renderer.render(newState, new Set());
+                  setMessage('');
+                  if (newState.phase === 'playing' && newState.currentPlayer !== 0) {
+                    aiPlayTurn(g);
+                  } else if (newState.phase === 'round-over') {
+                    setMessage('Round over!');
+                    showBubble(commentOnRoundOver(newState.scores));
+                  } else if (newState.phase === 'game-over') {
+                    const w = g.getWinner();
+                    setGameOver(true);
+                    SoundManager.getInstance().play(w === 0 ? 'game-win' : 'game-lose');
+                    recordGameRef.current('hearts', w === 0, 'AI');
+                    showBubble(commentOnGameOver(newState.totalScores));
+                  }
+                }, 1200);
+              } else {
+                setState({ ...newState });
+                renderer.render(newState, new Set());
+                if (newState.phase === 'playing' && newState.currentPlayer !== 0) {
+                  aiPlayTurn(g);
+                } else if (newState.phase === 'round-over') {
+                  setMessage('Round over!');
+                  showBubble(commentOnRoundOver(newState.scores));
+                } else if (newState.phase === 'game-over') {
+                  const winner = g.getWinner();
+                  setGameOver(true);
+                  SoundManager.getInstance().play(winner === 0 ? 'game-win' : 'game-lose');
+                  recordGameRef.current('hearts', winner === 0, 'AI');
+                  showBubble(commentOnGameOver(newState.totalScores));
+                }
               }
             }
           }
@@ -1056,7 +1150,7 @@ export default function HeartsPage() {
     setPlayerWon(false);
     setGameOver(true);
     SoundManager.getInstance().play('game-lose');
-    recordGameRef.current('hearts', false);
+    recordGameRef.current('hearts', false, 'Opponent');
   };
 
   const handleNewGame = () => {
@@ -1112,10 +1206,14 @@ export default function HeartsPage() {
     const aiSeats: number[] = [];
     const finalPlayers = [...lobbyPlayerIds];
 
+    // Pick real names for AI seats
+    const emptyCount = finalPlayers.filter(p => p === null).length;
+    const aiOpps = emptyCount > 0 ? pickOpponents(emptyCount) : [];
+    let aiNameIdx = 0;
     for (let i = 0; i < 4; i++) {
       if (finalPlayers[i] === null) {
         finalPlayers[i] = 'ai';
-        finalNames[i] = `AI ${SEAT_LABELS[i]}`;
+        finalNames[i] = aiOpps[aiNameIdx++].name;
         aiSeats.push(i);
       }
     }

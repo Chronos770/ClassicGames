@@ -215,6 +215,7 @@ export default function ChessPage() {
           evalAfter,
           isPlayerMove: false,
           moveNumber: Math.ceil(newState.moveHistory.length / 2),
+          personality: useGameStore.getState().selectedOpponent ?? undefined,
         });
         if (comment) setCommentary(comment);
       }
@@ -238,6 +239,38 @@ export default function ChessPage() {
         } else if (timeControlRef.current) {
           setBlackTime((prev) => prev + incrementMsRef.current);
           startClockRef.current('w');
+        }
+      }
+    } else {
+      // Fallback: AI timed out or returned null — play a random legal move
+      const chess = game.getChess();
+      const legalMoves = chess.moves({ verbose: true });
+      if (legalMoves.length > 0) {
+        const fallback = legalMoves[Math.floor(Math.random() * legalMoves.length)];
+        const board = game.getBoard();
+        const { row, col } = { row: 8 - parseInt(fallback.from[1]), col: fallback.from.charCodeAt(0) - 97 };
+        const piece = board[row]?.[col];
+        const result = game.makeMove(fallback.from as Square, fallback.to as Square);
+        const newState = game.getState();
+        setState(newState);
+        renderer.clearSelection();
+        if (piece && result) {
+          renderer.animateMove(fallback.from as Square, fallback.to as Square, piece.type, piece.color, () => {
+            renderer.render(newState);
+            SoundManager.getInstance().play(getMoveSound(result, newState));
+            if (newState.isGameOver) handleGameOver(newState);
+            else if (timeControlRef.current) {
+              setBlackTime((prev) => prev + incrementMsRef.current);
+              startClockRef.current('w');
+            }
+          });
+        } else {
+          renderer.render(newState);
+          if (newState.isGameOver) handleGameOver(newState);
+          else if (timeControlRef.current) {
+            setBlackTime((prev) => prev + incrementMsRef.current);
+            startClockRef.current('w');
+          }
         }
       }
     }
@@ -310,6 +343,7 @@ export default function ChessPage() {
               evalAfter,
               isPlayerMove: true,
               moveNumber: Math.ceil(newState.moveHistory.length / 2),
+              personality: useGameStore.getState().selectedOpponent ?? undefined,
             });
             if (comment) setCommentary(comment);
           }

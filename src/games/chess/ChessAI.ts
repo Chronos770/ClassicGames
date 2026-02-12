@@ -58,8 +58,8 @@ export async function getBestMove(
 
     pendingRequests.set(id, settle);
 
-    // Safety timeout: if worker doesn't respond in 15s, resolve null so game doesn't freeze
-    setTimeout(() => settle(null), 15000);
+    // Safety timeout: if worker doesn't respond in 20s, resolve null so game doesn't freeze
+    setTimeout(() => settle(null), 20000);
 
     getWorker().postMessage({ id, fen, difficulty, remainingTimeMs });
   });

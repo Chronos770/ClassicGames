@@ -32,6 +32,7 @@ export default function RummyPage() {
   const playerColor = useGameStore((s) => s.playerColor);
   const multiplayerOpponentName = useGameStore((s) => s.multiplayerOpponentName);
   const setMultiplayerOpponentName = useGameStore((s) => s.setMultiplayerOpponentName);
+  const selectedOpponent = useGameStore((s) => s.selectedOpponent);
 
   // In multiplayer: host is player 0 (w), joiner is player 1 (b)
   const isHost = !isMultiplayer || playerColor === 'w';
@@ -39,6 +40,12 @@ export default function RummyPage() {
 
   const recordGameRef = useRef(recordGame);
   recordGameRef.current = recordGame;
+  const stateRef = useRef<RummyState | null>(null);
+  useEffect(() => { stateRef.current = state; }, [state]);
+
+  // Animation queuing for non-host (same pattern as Hearts)
+  const animatingRef = useRef(false);
+  const pendingStateRef = useRef<RummyState | null>(null);
 
   const aiTurnRef = useRef<(game: RummyGame, renderer: RummyRenderer) => Promise<void>>();
 
@@ -63,6 +70,7 @@ export default function RummyPage() {
       }
     }
 
+    SoundManager.getInstance().play('card-deal');
     const afterDraw = game.getState();
     setState({ ...afterDraw });
     renderer.render(afterDraw);
@@ -73,13 +81,14 @@ export default function RummyPage() {
     if (aiShouldKnock(aiHand)) {
       const knockDiscard = aiSelectKnockDiscard(aiHand);
       if (knockDiscard && game.knockWithDiscard(knockDiscard)) {
+        SoundManager.getInstance().play('card-place');
         const newState = game.getState();
         setState({ ...newState });
         renderer.render(newState);
         setMessage(newState.lastAction);
         if (newState.phase === 'finished') {
           setGameOver(true);
-          recordGameRef.current('rummy', newState.winner === 0);
+          recordGameRef.current('rummy', newState.winner === 0, useGameStore.getState().selectedOpponent?.name ?? 'AI');
         } else if (newState.phase === 'round-over') {
           setRoundOver(true);
         }
@@ -89,6 +98,7 @@ export default function RummyPage() {
 
     const discard = aiSelectDiscard(game.getState().hands[1]);
     game.discard(discard);
+    SoundManager.getInstance().play('card-flip');
 
     const newState = game.getState();
     setState({ ...newState });
@@ -97,7 +107,7 @@ export default function RummyPage() {
 
     if (newState.phase === 'finished') {
       setGameOver(true);
-      recordGameRef.current('rummy', newState.winner === 0);
+      recordGameRef.current('rummy', newState.winner === 0, useGameStore.getState().selectedOpponent?.name ?? 'AI');
     } else if (newState.phase === 'round-over') {
       setRoundOver(true);
     }
@@ -105,16 +115,231 @@ export default function RummyPage() {
 
   aiTurnRef.current = aiTurn;
 
-  // Helper: broadcast state to remote player (host only)
+  // ── Helper: broadcast state to remote player (host only) ──
+  // NOTE: caller is responsible for rendering; this only sends state to remote
   const broadcastState = useCallback((game: RummyGame) => {
     if (!isMultiplayer || !isHost) return;
     const adapter = adapterRef.current;
     if (!adapter) return;
     const s = game.getState();
-    // Send full state - joiner will render from perspective of player 1
+    setState({ ...s });
     adapter.sendMove({ type: 'game-state', state: s });
   }, [isMultiplayer, isHost]);
 
+  /** Host sends an event message to trigger animations/feedback on non-host */
+  const broadcastEvent = useCallback((event: Record<string, any>) => {
+    adapterRef.current?.sendMove(event);
+  }, []);
+
+  // ── Non-host: apply remote state with swapped perspective ──
+  const applyRemoteState = useCallback((remoteState: RummyState) => {
+    // Swap hands so local player sees their hand at bottom
+    const swapped: RummyState = {
+      ...remoteState,
+      hands: [remoteState.hands[1], remoteState.hands[0]],
+      currentPlayer: 1 - remoteState.currentPlayer,
+      scores: [remoteState.scores[1], remoteState.scores[0]],
+      winner: remoteState.winner !== null ? 1 - remoteState.winner : null,
+      knocker: remoteState.knocker !== null ? 1 - remoteState.knocker : null,
+    };
+
+    setState(swapped);
+    rendererRef.current?.render(swapped);
+
+    // Fix lastAction text: swap player references for joiner
+    // The host uses "You"/"OpponentName", so joiner needs the opposite perspective
+    let displayAction = remoteState.lastAction;
+    // Replace action text with swapped perspective for display
+    if (displayAction) {
+      setMessage(displayAction);
+    }
+
+    if (swapped.phase === 'finished') {
+      setGameOver(true);
+      const won = swapped.winner === 0;
+      SoundManager.getInstance().play(won ? 'game-win' : 'game-lose');
+      recordGameRef.current('rummy', won, useGameStore.getState().multiplayerOpponentName || 'Opponent');
+    } else if (swapped.phase === 'round-over') {
+      setRoundOver(true);
+    }
+  }, []);
+
+  // ── Multiplayer message handler ──
+  const handleRemoteMessageRef = useRef<(data: any) => void>();
+  handleRemoteMessageRef.current = (data: any) => {
+    const game = gameRef.current;
+
+    if (data.type === 'player-info') {
+      setMultiplayerOpponentName(data.name);
+      // Update renderer opponent name (don't re-render — it would kill any in-flight deal animation)
+      if (rendererRef.current) {
+        rendererRef.current.setOpponentName(data.name);
+      }
+      return;
+    }
+
+    if (data.type === 'resign') {
+      setPlayerWon(true);
+      setGameOver(true);
+      SoundManager.getInstance().play('game-win');
+      recordGameRef.current('rummy', true, useGameStore.getState().multiplayerOpponentName || 'Opponent');
+      setMessage('Opponent resigned!');
+      return;
+    }
+
+    if (isHost && game) {
+      // Host receives moves from joiner (player 1)
+      if (data.type === 'draw-pile') {
+        if (game.drawFromPile()) {
+          SoundManager.getInstance().play('card-deal');
+          broadcastEvent({ type: 'card-drawn', player: 1, source: 'pile' });
+          const ns = game.getState();
+          setState({ ...ns });
+          rendererRef.current?.render(ns);
+          broadcastState(game);
+        }
+      } else if (data.type === 'draw-discard') {
+        const s = game.getState();
+        const topDiscard = s.discardPile.length > 0 ? s.discardPile[s.discardPile.length - 1] : null;
+        if (game.drawFromDiscard()) {
+          SoundManager.getInstance().play('card-deal');
+          broadcastEvent({ type: 'card-drawn', player: 1, source: 'discard', card: topDiscard });
+          const ns = game.getState();
+          setState({ ...ns });
+          rendererRef.current?.render(ns);
+          broadcastState(game);
+        }
+      } else if (data.type === 'discard') {
+        const card = game.getState().hands[1].find((c: Card) => c.id === data.cardId);
+        if (card && game.discard(card)) {
+          SoundManager.getInstance().play('card-flip');
+          broadcastEvent({ type: 'card-discarded', player: 1, card });
+          const ns = game.getState();
+          setState({ ...ns });
+          rendererRef.current?.render(ns);
+          broadcastState(game);
+          checkEndConditions(game);
+        }
+      } else if (data.type === 'knock') {
+        if (game.enterKnockPhase()) {
+          const ns = game.getState();
+          setState({ ...ns });
+          rendererRef.current?.render(ns);
+          broadcastState(game);
+        }
+      } else if (data.type === 'cancel-knock') {
+        game.cancelKnock();
+        const ns = game.getState();
+        setState({ ...ns });
+        rendererRef.current?.render(ns);
+        broadcastState(game);
+      } else if (data.type === 'knock-discard') {
+        const card = game.getState().hands[1].find((c: Card) => c.id === data.cardId);
+        if (card && game.knockWithDiscard(card)) {
+          SoundManager.getInstance().play('card-place');
+          broadcastEvent({ type: 'card-discarded', player: 1, card, knock: true });
+          const ns = game.getState();
+          setState({ ...ns });
+          rendererRef.current?.render(ns);
+          broadcastState(game);
+          checkEndConditions(game);
+        }
+      } else if (data.type === 'new-round') {
+        game.newRound();
+        setRoundOver(false);
+        setMessage('');
+        const s = game.getState();
+        broadcastEvent({ type: 'deal-start', playerCount: s.hands[0].length, oppCount: s.hands[1].length });
+        rendererRef.current?.playDealAnimation(s.hands[0].length, s.hands[1].length, () => {
+          SoundManager.getInstance().play('card-deal');
+          rendererRef.current?.render(game.getState());
+          broadcastState(game);
+        });
+      }
+    } else if (!isHost) {
+      // Joiner receives events and state from host
+      if (data.type === 'deal-start') {
+        // Play deal animation on joiner, queue subsequent state
+        animatingRef.current = true;
+        pendingStateRef.current = null;
+        const playerCount: number = data.oppCount || 10; // Joiner's hand = host's opp
+        const oppCount: number = data.playerCount || 10; // Joiner's opp = host's player
+        rendererRef.current?.playDealAnimation(playerCount, oppCount, () => {
+          SoundManager.getInstance().play('card-deal');
+          animatingRef.current = false;
+          if (pendingStateRef.current) {
+            const s = pendingStateRef.current;
+            pendingStateRef.current = null;
+            applyRemoteState(s);
+          }
+        });
+      } else if (data.type === 'card-drawn') {
+        // Host says a card was drawn — animate on joiner
+        const hostPlayer: number = data.player;
+        const source: string = data.source;
+        // Swap player index for joiner perspective
+        const localIdx = 1 - hostPlayer;
+        SoundManager.getInstance().play('card-deal');
+        rendererRef.current?.animateCardDraw(
+          source === 'pile' ? 'pile' : 'discard',
+          localIdx,
+          data.card,
+        );
+      } else if (data.type === 'card-discarded') {
+        // Host says a card was discarded — animate on joiner
+        const hostPlayer: number = data.player;
+        const card: Card = data.card;
+        const localIdx = 1 - hostPlayer;
+        SoundManager.getInstance().play('card-flip');
+        rendererRef.current?.animateCardDiscard(localIdx, card);
+      } else if (data.type === 'game-state') {
+        const remoteState = data.state as RummyState;
+        // If animating (deal), queue state
+        if (animatingRef.current) {
+          pendingStateRef.current = remoteState;
+          return;
+        }
+        applyRemoteState(remoteState);
+      }
+    }
+  };
+
+  /** Check for end conditions after host processes a move */
+  function checkEndConditions(game: RummyGame) {
+    const s = game.getState();
+    if (s.phase === 'finished') {
+      setGameOver(true);
+      const won = s.winner === 0;
+      SoundManager.getInstance().play(won ? 'game-win' : 'game-lose');
+      recordGameRef.current('rummy', won, useGameStore.getState().multiplayerOpponentName || 'Opponent');
+    } else if (s.phase === 'round-over') {
+      setRoundOver(true);
+    }
+  }
+
+  // ── Multiplayer: setup adapter ──
+  useEffect(() => {
+    if (!isMultiplayer) return;
+
+    const adapter = new MultiplayerGameAdapter('rummy');
+    adapterRef.current = adapter;
+
+    adapter.connect((data: any) => {
+      handleRemoteMessageRef.current?.(data);
+    });
+
+    // Exchange names
+    const profile = useAuthStore.getState().profile;
+    const myName = profile?.display_name || 'Player';
+    setTimeout(() => adapter.sendMove({ type: 'player-info', name: myName }), 300);
+
+    return () => {
+      adapter.disconnect();
+      adapterRef.current = null;
+    };
+  }, [isMultiplayer]);
+
+  // ── Canvas & game init ──
   useEffect(() => {
     if (!canvasRef.current) return;
     let destroyed = false;
@@ -141,106 +366,31 @@ export default function RummyPage() {
       rendererRef.current = renderer;
 
       if (isMultiplayer) {
-        const adapter = new MultiplayerGameAdapter('rummy');
-        adapterRef.current = adapter;
-
-        adapter.connect((data: any) => {
-          if (data.type === 'player-info') {
-            setMultiplayerOpponentName(data.name);
-            return;
-          }
-          if (data.type === 'resign') {
-            setPlayerWon(true);
-            setGameOver(true);
-            SoundManager.getInstance().play('game-win');
-            recordGameRef.current('rummy', true, data.name || 'Opponent');
-            setMessage('Opponent resigned!');
-            return;
-          }
-
-          if (isHost) {
-            // Host receives moves from joiner (player 1)
-            if (data.type === 'draw-pile') {
-              game.drawFromPile();
-            } else if (data.type === 'draw-discard') {
-              game.drawFromDiscard();
-            } else if (data.type === 'discard') {
-              const card = game.getState().hands[1].find((c: Card) => c.id === data.cardId);
-              if (card) game.discard(card);
-            } else if (data.type === 'knock') {
-              game.enterKnockPhase();
-            } else if (data.type === 'cancel-knock') {
-              game.cancelKnock();
-            } else if (data.type === 'knock-discard') {
-              const card = game.getState().hands[1].find((c: Card) => c.id === data.cardId);
-              if (card) game.knockWithDiscard(card);
-            } else if (data.type === 'new-round') {
-              game.newRound();
-              setRoundOver(false);
-              setMessage('');
-            }
-
-            const newState = game.getState();
-            setState({ ...newState });
-            renderer.render(newState);
-            setMessage(newState.lastAction);
-            broadcastState(game);
-
-            if (newState.phase === 'finished') {
-              setGameOver(true);
-              const won = newState.winner === 0;
-              SoundManager.getInstance().play(won ? 'game-win' : 'game-lose');
-              recordGameRef.current('rummy', won, useGameStore.getState().multiplayerOpponentName || 'Opponent');
-            } else if (newState.phase === 'round-over') {
-              setRoundOver(true);
-            }
-          } else {
-            // Joiner receives state from host
-            if (data.type === 'game-state') {
-              const remoteState = data.state as RummyState;
-              // Swap hands so local player sees their hand at bottom
-              const swapped: RummyState = {
-                ...remoteState,
-                hands: [remoteState.hands[1], remoteState.hands[0]],
-                currentPlayer: 1 - remoteState.currentPlayer,
-                scores: [remoteState.scores[1], remoteState.scores[0]],
-                winner: remoteState.winner !== null ? 1 - remoteState.winner : null,
-                knocker: remoteState.knocker !== null ? 1 - remoteState.knocker : null,
-              };
-              setState(swapped);
-              renderer.render(swapped);
-              setMessage(remoteState.lastAction);
-
-              if (swapped.phase === 'finished') {
-                setGameOver(true);
-                const won = swapped.winner === 0;
-                SoundManager.getInstance().play(won ? 'game-win' : 'game-lose');
-                recordGameRef.current('rummy', won, useGameStore.getState().multiplayerOpponentName || 'Opponent');
-              } else if (swapped.phase === 'round-over') {
-                setRoundOver(true);
-              }
-            }
-          }
-        });
-
-        // Exchange names
-        const profile = useAuthStore.getState().profile;
-        const myName = profile?.display_name || 'Player';
-        setTimeout(() => adapter.sendMove({ type: 'player-info', name: myName }), 300);
+        renderer.setMultiplayer(true);
+        const oppName = useGameStore.getState().multiplayerOpponentName || 'Opponent';
+        renderer.setOpponentName(oppName);
 
         if (isHost) {
-          // Host initializes and broadcasts
+          // Set player names for game engine messages
+          game.setPlayerNames(['You', oppName]);
+
+          // Host initializes and deals
           game.initialize();
           const s = game.getState();
           setState({ ...s });
 
+          // Broadcast deal-start so joiner plays animation too
+          broadcastEvent({ type: 'deal-start', playerCount: s.hands[0].length, oppCount: s.hands[1].length });
           renderer.playDealAnimation(s.hands[0].length, s.hands[1].length, () => {
             SoundManager.getInstance().play('card-deal');
             renderer.render(game.getState());
             broadcastState(game);
           });
+        } else {
+          // Joiner waits for state from host
+          game.initialize(); // dummy init, will be overwritten by host state
+          setState(game.getState());
         }
-        // Joiner waits for state broadcast
       } else {
         // Single player
         game.initialize();
@@ -260,14 +410,17 @@ export default function RummyPage() {
 
         if (isMultiplayer) {
           // In multiplayer, only interact on our turn
-          if (s.currentPlayer !== localPlayer) return;
+          // For non-host, use the swapped state to check turn
+          const effectiveState = isHost ? s : stateRef.current;
+          if (!effectiveState) return;
+          const myTurn = isHost ? s.currentPlayer === 0 : effectiveState.currentPlayer === 0;
+          if (!myTurn) return;
 
           if (isHost) {
-            // Host plays directly on the game engine
             handleLocalMove(card, source, game, renderer);
           } else {
             // Joiner sends move to host
-            if (s.phase === 'draw') {
+            if (effectiveState.phase === 'draw') {
               if (source === 'draw') {
                 adapterRef.current?.sendMove({ type: 'draw-pile' });
                 SoundManager.getInstance().play('card-deal');
@@ -275,10 +428,10 @@ export default function RummyPage() {
                 adapterRef.current?.sendMove({ type: 'draw-discard' });
                 SoundManager.getInstance().play('card-deal');
               }
-            } else if (s.phase === 'knock-discard' && source === 'hand') {
+            } else if (effectiveState.phase === 'knock-discard' && source === 'hand') {
               adapterRef.current?.sendMove({ type: 'knock-discard', cardId: card.id });
               SoundManager.getInstance().play('card-place');
-            } else if (s.phase === 'discard' && source === 'hand') {
+            } else if (effectiveState.phase === 'discard' && source === 'hand') {
               adapterRef.current?.sendMove({ type: 'discard', cardId: card.id });
               SoundManager.getInstance().play('card-flip');
             }
@@ -305,12 +458,22 @@ export default function RummyPage() {
             renderer.render(newState);
             setMessage(newState.lastAction);
             if (newState.phase === 'round-over') setRoundOver(true);
-            if (isMultiplayer && isHost) broadcastState(game);
+            if (isMultiplayer && isHost) {
+              broadcastEvent({ type: 'card-drawn', player: 0, source: 'pile' });
+              broadcastState(game);
+            }
             return;
+          }
+          if (isMultiplayer && isHost) {
+            broadcastEvent({ type: 'card-drawn', player: 0, source: 'pile' });
           }
         } else if (source === 'discard') {
           SoundManager.getInstance().play('card-deal');
+          const topDiscard = s.discardPile.length > 0 ? s.discardPile[s.discardPile.length - 1] : null;
           game.drawFromDiscard();
+          if (isMultiplayer && isHost) {
+            broadcastEvent({ type: 'card-drawn', player: 0, source: 'discard', card: topDiscard });
+          }
         } else {
           return;
         }
@@ -321,6 +484,9 @@ export default function RummyPage() {
       } else if (s.phase === 'knock-discard' && source === 'hand') {
         if (game.knockWithDiscard(card)) {
           SoundManager.getInstance().play('card-place');
+          if (isMultiplayer && isHost) {
+            broadcastEvent({ type: 'card-discarded', player: 0, card, knock: true });
+          }
           const newState = game.getState();
           setState({ ...newState });
           renderer.render(newState);
@@ -330,7 +496,7 @@ export default function RummyPage() {
             setGameOver(true);
             const won = newState.winner === localPlayer;
             SoundManager.getInstance().play(won ? 'game-win' : 'game-lose');
-            recordGameRef.current('rummy', won, isMultiplayer ? (multiplayerOpponentName || 'Opponent') : undefined);
+            recordGameRef.current('rummy', won, isMultiplayer ? (multiplayerOpponentName || 'Opponent') : (selectedOpponent?.name ?? 'AI'));
           } else if (newState.phase === 'round-over') {
             setRoundOver(true);
           }
@@ -340,6 +506,9 @@ export default function RummyPage() {
       } else if (s.phase === 'discard' && source === 'hand') {
         SoundManager.getInstance().play('card-flip');
         game.discard(card);
+        if (isMultiplayer && isHost) {
+          broadcastEvent({ type: 'card-discarded', player: 0, card });
+        }
         const newState = game.getState();
         setState({ ...newState });
         renderer.render(newState);
@@ -350,7 +519,7 @@ export default function RummyPage() {
           setGameOver(true);
           const won = newState.winner === localPlayer;
           SoundManager.getInstance().play(won ? 'game-win' : 'game-lose');
-          recordGameRef.current('rummy', won, isMultiplayer ? (multiplayerOpponentName || 'Opponent') : undefined);
+          recordGameRef.current('rummy', won, isMultiplayer ? (multiplayerOpponentName || 'Opponent') : (selectedOpponent?.name ?? 'AI'));
         } else if (newState.phase === 'round-over') {
           setRoundOver(true);
         } else if (!isMultiplayer && newState.currentPlayer === 1) {
@@ -374,7 +543,6 @@ export default function RummyPage() {
     if (!game || !renderer) return;
 
     if (isMultiplayer && !isHost) {
-      // Joiner sends knock request to host
       adapterRef.current?.sendMove({ type: 'knock' });
       return;
     }
@@ -418,18 +586,31 @@ export default function RummyPage() {
 
     setRoundOver(false);
     setMessage('');
-    game.newRound();
-    const s = game.getState();
-    setState({ ...s });
-    renderer.playDealAnimation(s.hands[0].length, s.hands[1].length, () => {
-      SoundManager.getInstance().play('card-deal');
-      renderer.render(game.getState());
-      if (isMultiplayer && isHost) broadcastState(game);
-    });
+
+    if (isMultiplayer && isHost) {
+      game.newRound();
+      const s = game.getState();
+      setState({ ...s });
+      broadcastEvent({ type: 'deal-start', playerCount: s.hands[0].length, oppCount: s.hands[1].length });
+      renderer.playDealAnimation(s.hands[0].length, s.hands[1].length, () => {
+        SoundManager.getInstance().play('card-deal');
+        renderer.render(game.getState());
+        broadcastState(game);
+      });
+    } else {
+      // Single player
+      game.newRound();
+      const s = game.getState();
+      setState({ ...s });
+      renderer.playDealAnimation(s.hands[0].length, s.hands[1].length, () => {
+        SoundManager.getInstance().play('card-deal');
+        renderer.render(game.getState());
+      });
+    }
   };
 
   const handleNewGame = () => {
-    if (isMultiplayer) return; // Can't restart multiplayer games
+    if (isMultiplayer) return;
     const game = gameRef.current;
     const renderer = rendererRef.current;
     if (!game || !renderer) return;
@@ -454,8 +635,19 @@ export default function RummyPage() {
     recordGameRef.current('rummy', false, multiplayerOpponentName || 'Opponent');
   };
 
-  const opponentName = isMultiplayer ? (multiplayerOpponentName || 'Opponent') : 'AI';
+  const opponentName = isMultiplayer ? (multiplayerOpponentName || 'Opponent') : (selectedOpponent?.name ?? 'AI');
   const isLocalTurn = state ? state.currentPlayer === 0 : false;
+
+  // Determine phase/turn text for header
+  const turnText = isMultiplayer
+    ? (isLocalTurn ? 'Your turn' : `${opponentName}'s turn`)
+    : state?.phase === 'draw' && state.currentPlayer === 0
+      ? 'Draw a card'
+      : state?.phase === 'discard' && state.currentPlayer === 0
+        ? 'Discard a card'
+        : state?.phase === 'knock-discard' && state.currentPlayer === 0
+          ? 'Discard for knock'
+          : '';
 
   return (
     <div className="min-h-screen flex flex-col items-center py-4 px-4">
@@ -468,17 +660,7 @@ export default function RummyPage() {
           navigate('/lobby/rummy');
         }} className="text-sm text-white/50 hover:text-white/80 transition-colors bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg">{'\u2190'} Back</button>
         <h2 className="text-lg font-display font-bold text-white">Gin Rummy</h2>
-        <span className="text-sm text-white/60">
-          {isMultiplayer
-            ? (isLocalTurn ? 'Your turn' : `${opponentName}'s turn`)
-            : state?.phase === 'draw' && state.currentPlayer === 0
-              ? 'Draw a card'
-              : state?.phase === 'discard' && state.currentPlayer === 0
-                ? 'Discard a card'
-                : state?.phase === 'knock-discard' && state.currentPlayer === 0
-                  ? 'Discard for knock'
-                  : ''}
-        </span>
+        <span className="text-sm text-white/60">{turnText}</span>
       </motion.div>
 
       {/* Player info bar */}
