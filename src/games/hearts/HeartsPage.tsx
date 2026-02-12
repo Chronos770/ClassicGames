@@ -822,10 +822,8 @@ export default function HeartsPage() {
             const newSelected = new Set(currentSelected);
             if (newSelected.has(card.id)) {
               newSelected.delete(card.id);
-              if (isHost) g.deselectPassCard(seat, card);
             } else if (newSelected.size < 3) {
               newSelected.add(card.id);
-              if (isHost) g.selectPassCard(seat, card);
             }
             SoundManager.getInstance().play('card-select');
             selectedCardsRef.current = newSelected;
@@ -1016,12 +1014,21 @@ export default function HeartsPage() {
           setMessage('');
           return;
         }
+        // Register host's pass cards NOW (not during card clicks, to prevent
+        // premature execution when non-host submits first)
+        const mySeatNow = mySeatRef.current;
+        const myHand = s.hands[mySeatNow];
+        const hostPassCards = myHand.filter((c) => selectedCards.has(c.id));
+        for (const c of hostPassCards) {
+          game.selectPassCard(mySeatNow, c);
+        }
         // Broadcast who has submitted so far
-        const submitted = s.passingCards.map((p) => p.length >= 3);
+        const updated = game.getState();
+        const submitted = updated.passingCards.map((p) => p.length >= 3);
         broadcastEvent({ type: 'pass-submitted', submitted });
 
-        // Check if all passes are in (host's pass was already added via card clicks)
-        if (s.passingCards.every((p) => p.length === 3)) {
+        // Check if all passes are in
+        if (updated.passingCards.every((p) => p.length === 3)) {
           game.executePass();
           selectedCardsRef.current = new Set();
           setSelectedCards(new Set());
@@ -1049,7 +1056,7 @@ export default function HeartsPage() {
           }
         } else {
           // Not all submitted — show who we're waiting for
-          const waitingFor = s.passingCards
+          const waitingFor = updated.passingCards
             .map((p, i) => p.length < 3 ? getSeatDisplayName(i) : null)
             .filter((n): n is string => n !== null && n !== 'You');
           if (waitingFor.length > 0) {
