@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import SettingsPanel from './SettingsPanel';
 import UserMenu from './UserMenu';
 import AuthModal from './AuthModal';
+import CastleLogo from './components/CastleLogo';
 import { useSocialStore } from '../stores/socialStore';
 import { useAuthStore } from '../stores/authStore';
 import { useUserStore } from '../stores/userStore';
@@ -45,9 +46,7 @@ export default function Layout() {
         <header className="relative z-20 border-b border-white/10">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
             <Link to="/" className="flex items-center gap-2 sm:gap-3 group">
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-lg">
-                <span className="text-lg sm:text-xl">{'\u265E'}</span>
-              </div>
+              <CastleLogo size={34} />
               <div>
                 <h1 className="text-lg sm:text-xl font-display font-bold text-white tracking-wide group-hover:text-amber-400 transition-colors">
                   Castle & Cards

@@ -77,11 +77,6 @@ export class HeartsRenderer {
     const w = this.app.screen.width;
     const h = this.app.screen.height;
 
-    // Turn indicator (draw first so it's behind cards)
-    if (state.phase === 'playing') {
-      this.renderTurnIndicator(state.currentPlayer);
-    }
-
     // Player's hand (bottom)
     this.renderHand(state.hands[0], w / 2, h - 20, true, selectedCards);
 

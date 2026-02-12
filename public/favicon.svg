@@ -1,4 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="12" fill="#d4af37"/>
-  <text x="32" y="46" text-anchor="middle" font-size="36" font-family="Georgia, serif" fill="#1a1a1a">&#9824;</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 74">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="64" y2="74" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#fcd34d"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+  </defs>
+  <path d="M5 19 L5 13 L11 13 L11 3 L21 3 L21 13 L27 13 L27 3 L37 3 L37 13 L43 13 L43 3 L53 3 L53 13 L59 13 L59 19 L59 67 Q59 73 53 73 L11 73 Q5 73 5 67 Z" fill="url(#g)"/>
+  <path d="M5 19 L5 13 L11 13 L11 3 L21 3 L21 13 L27 13 L27 3 L37 3 L37 13 L43 13 L43 3 L53 3 L53 13 L59 13 L59 19 L59 67 Q59 73 53 73 L11 73 Q5 73 5 67 Z" stroke="#92400e" stroke-width="1" fill="none" opacity="0.4"/>
+  <path d="M32 24 C32 24 18 35 18 43 C18 48 22 51 27 48 C25 52.5 23 57 21.5 59 L42.5 59 C41 57 39 52.5 37 48 C42 51 46 48 46 43 C46 35 32 24 32 24 Z" fill="#1c1917" opacity="0.85"/>
 </svg>

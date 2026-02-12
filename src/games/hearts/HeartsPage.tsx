@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Application } from 'pixi.js';
 import { motion } from 'framer-motion';
+import CharacterAvatar from '../../ui/components/CharacterAvatar';
 import { Card } from '../../engine/types';
 import { HeartsGame } from './HeartsGame';
 import { HeartsRenderer } from './HeartsRenderer';
@@ -39,12 +40,7 @@ function PlayerCard({ opp, score, roundScore, cards, horizontal }: {
 }) {
   return (
     <div className={`flex ${horizontal ? 'flex-row' : 'flex-col'} items-center gap-1.5 bg-white/5 rounded-lg px-3 py-2`}>
-      <div
-        className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm border-2"
-        style={{ backgroundColor: hexToCSS(opp.color), borderColor: 'rgba(255,255,255,0.3)' }}
-      >
-        {opp.initial}
-      </div>
+      <CharacterAvatar name={opp.name} size={32} bgColor={hexToCSS(opp.color)} />
       <div className={`${horizontal ? 'text-left' : 'text-center'}`}>
         <div className="text-xs text-white/70 font-medium">{opp.name}</div>
         <div className="flex items-center gap-1">
@@ -1291,11 +1287,11 @@ export default function HeartsPage() {
                     : 'bg-white/5 border-white/10 border-dashed'
                 }`}
               >
-                <div
-                  className="w-12 h-12 rounded-full mx-auto mb-2 flex items-center justify-center text-white font-bold text-lg"
-                  style={{ backgroundColor: filled ? hexToCSS(SEAT_COLORS[i]) : 'rgba(255,255,255,0.1)' }}
-                >
-                  {filled ? seatNames[i].charAt(0) : '?'}
+                <div className="mx-auto mb-2">
+                  {filled
+                    ? <CharacterAvatar name={seatNames[i]} size={48} bgColor={hexToCSS(SEAT_COLORS[i])} />
+                    : <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>?</div>
+                  }
                 </div>
                 <div className="text-sm text-white font-medium">
                   {filled ? seatNames[i] : 'Empty'}

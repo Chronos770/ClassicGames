@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import GameCard from './components/GameCard';
 import HowToPlaySection from './components/HowToPlaySection';
 import AdBanner from './components/AdBanner';
+import CastleLogo from './components/CastleLogo';
 import { GameConfig } from '../engine/types';
 import { useUserStore } from '../stores/userStore';
 
@@ -209,9 +210,7 @@ export default function HomePage() {
       <footer className="border-t border-white/10 mt-8">
         <div className="max-w-7xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center">
-              <span className="text-sm">{'\u265E'}</span>
-            </div>
+            <CastleLogo size={28} />
             <span className="text-sm text-white/40">Castle & Cards</span>
           </div>
           <div className="flex items-center gap-6 text-sm text-white/30">
