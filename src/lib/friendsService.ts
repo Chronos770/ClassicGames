@@ -213,7 +213,6 @@ export async function searchUsers(query: string, currentUserId: string): Promise
   if (!error) return (data ?? []) as FriendProfile[];
 
   // Fallback: query without online_at if column doesn't exist yet
-  console.warn('searchUsers: online_at query failed, using fallback:', error.message);
   const { data: fallbackData, error: fallbackError } = await supabase
     .from('profiles')
     .select('id, display_name, avatar_emoji, avatar_url')
@@ -222,7 +221,6 @@ export async function searchUsers(query: string, currentUserId: string): Promise
     .limit(20);
 
   if (fallbackError) {
-    console.error('searchUsers error:', fallbackError);
     return [];
   }
 

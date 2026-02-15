@@ -10,3 +10,4 @@ nul
 tsconfig.tsbuildinfo
 supabase/.temp/
 .vercel
+public/models/*.glb

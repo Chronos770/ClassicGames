@@ -97,6 +97,7 @@ export default function AddFriendModal({ isOpen, onClose }: AddFriendModalProps)
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search by display name..."
               className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-amber-500/50 mb-4"
+              maxLength={50}
               autoFocus
             />
 

@@ -187,7 +187,7 @@ export default function SolitairePage() {
 
         <h2 className="text-lg font-display font-bold text-white">Solitaire</h2>
 
-        <div className="flex items-center gap-4 text-sm text-white/60">
+        <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm text-white/60">
           <span>Moves: <strong className="text-white">{moveCount}</strong></span>
           <span>Score: <strong className="text-amber-400">{score}</strong></span>
           <span>{formatTime(elapsed)}</span>
@@ -209,7 +209,7 @@ export default function SolitairePage() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="w-full max-w-[900px] flex items-center justify-center gap-3 mt-3"
+        className="w-full max-w-[900px] flex items-center justify-center gap-3 mt-3 flex-wrap"
       >
         <button onClick={handleUndo} className="btn-secondary text-sm py-2 px-4">
           Undo

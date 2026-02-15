@@ -91,6 +91,11 @@ export class HeartsRenderer {
     // Collected point cards near each player
     this.renderCollectedPoints(state.tricks, state.scores);
 
+    // Turn indicator glow during playing phase
+    if (state.phase === 'playing') {
+      this.renderTurnIndicator(state.currentPlayer);
+    }
+
     // Round info (compact)
     const roundStyle = new TextStyle({ fontSize: 11, fill: '#ffffff88', fontFamily: 'Inter, sans-serif' });
     const roundText = new Text({ text: `Round ${state.roundNumber}`, style: roundStyle });
@@ -518,70 +523,155 @@ export class HeartsRenderer {
     this.pendingRAFs.push(requestAnimationFrame(pulse));
   }
 
-  /** Render small icons of collected point cards near each player */
-  renderCollectedPoints(tricks: Card[][], _scores: number[]): void {
+  /** Render actual card sprites of collected point cards near each player */
+  private renderCollectedPoints(tricks: Card[][], _scores: number[]): void {
     const w = this.app.screen.width;
     const h = this.app.screen.height;
 
-    // Positions for point card display near each player
-    const basePositions: [number, number, 'h' | 'v'][] = [
-      [w / 2 + 180, h - 35, 'h'],     // Bottom-right of hand
-      [12, h / 2 + 90, 'v'],           // Below West hand
-      [w / 2 + 110, 12, 'h'],          // Right of North area
-      [w - 25, h / 2 + 90, 'v'],       // Below East hand
+    const SCALE = 0.35;
+    const DISPLAY_GAP = 12; // px between card left edges at display size
+
+    // Anchor positions for each player's point card pile
+    const layouts: { x: number; y: number; fromRight?: boolean }[] = [
+      { x: w / 2 + 185, y: h - 58 },                    // Bottom: right of hand
+      { x: 8, y: h / 2 + 115 },                          // West: below hand
+      { x: w / 2 + 125, y: 8 },                          // North: right of top cards
+      { x: w - 8, y: h / 2 + 115, fromRight: true },     // East: below hand (right-aligned)
     ];
 
     for (let player = 0; player < 4; player++) {
       const pointCards = tricks[player].filter((c) => cardPoints(c) > 0);
       if (pointCards.length === 0) continue;
 
-      const [bx, by, orient] = basePositions[player];
+      // Sort: Q♠ first, then hearts
+      pointCards.sort((a, b) => {
+        if (a.suit === 'spades' && a.rank === 'Q') return -1;
+        if (b.suit === 'spades' && b.rank === 'Q') return 1;
+        return 0;
+      });
 
-      // Group: count hearts, check for QS
-      const heartCount = pointCards.filter((c) => c.suit === 'hearts').length;
-      const hasQueenSpades = pointCards.some((c) => c.suit === 'spades' && c.rank === 'Q');
+      const layout = layouts[player];
+      const pile = new Container();
 
-      const items: { symbol: string; color: string; label: string }[] = [];
-      if (hasQueenSpades) {
-        items.push({ symbol: SUIT_SYMBOLS.spades, color: '#4a4a6a', label: 'Q' });
-      }
-      if (heartCount > 0) {
-        items.push({ symbol: SUIT_SYMBOLS.hearts, color: '#ef4444', label: `${heartCount}` });
-      }
-
-      const container = new Container();
-
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        const ox = orient === 'h' ? i * 38 : 0;
-        const oy = orient === 'v' ? i * 20 : 0;
-
-        // Small pill background
-        const pill = new Graphics();
-        pill.roundRect(bx + ox - 2, by + oy - 2, 34, 17, 4);
-        pill.fill({ color: 0x000000, alpha: 0.45 });
-        container.addChild(pill);
-
-        // Symbol
-        const sym = new Text({
-          text: item.symbol,
-          style: new TextStyle({ fontSize: 11, fill: item.color, fontFamily: 'Inter, sans-serif' }),
-        });
-        sym.x = bx + ox + 1;
-        sym.y = by + oy - 1;
-        container.addChild(sym);
-
-        // Count/label
-        const lbl = new Text({
-          text: item.label,
-          style: new TextStyle({ fontSize: 10, fill: '#ffffffcc', fontFamily: 'Inter, sans-serif', fontWeight: 'bold' }),
-        });
-        lbl.x = bx + ox + 14;
-        lbl.y = by + oy;
-        container.addChild(lbl);
+      for (let i = 0; i < pointCards.length; i++) {
+        const sprite = createCardGraphics(pointCards[i], true);
+        sprite.scale.set(SCALE);
+        sprite.x = i * DISPLAY_GAP;
+        sprite.y = 0;
+        pile.addChild(sprite);
       }
 
-      this.mainContainer.addChild(container);
+      // Position the pile
+      if (layout.fromRight) {
+        const totalW = (pointCards.length - 1) * DISPLAY_GAP + CARD.width * SCALE;
+        pile.x = layout.x - totalW;
+      } else {
+        pile.x = layout.x;
+      }
+      pile.y = layout.y;
+      this.mainContainer.addChild(pile);
+
+      // Points label below the pile
+      const totalPts = pointCards.reduce((sum, c) => sum + cardPoints(c), 0);
+      const label = new Text({
+        text: `${totalPts} pts`,
+        style: new TextStyle({ fontSize: 9, fill: '#ffffff88', fontFamily: 'Inter, sans-serif' }),
+      });
+      if (layout.fromRight) {
+        label.anchor.set(1, 0);
+        label.x = layout.x;
+      } else {
+        label.x = layout.x;
+      }
+      label.y = pile.y + CARD.height * SCALE + 2;
+      this.mainContainer.addChild(label);
+    }
+  }
+
+  /** Show a large announcement overlay (e.g. trick winner, round over) */
+  showAnnouncement(text: string, duration: number = 2000): void {
+    this.clearAnnouncement();
+
+    const w = this.app.screen.width;
+    const cy = 150;
+
+    const container = new Container();
+    container.label = 'announcement';
+
+    const textStyle = new TextStyle({
+      fontSize: 22,
+      fill: '#ffffff',
+      fontFamily: 'Inter, sans-serif',
+      fontWeight: 'bold',
+    });
+    const msg = new Text({ text, style: textStyle });
+    msg.anchor.set(0.5);
+    msg.x = w / 2;
+    msg.y = cy;
+
+    const padX = 24;
+    const padY = 12;
+    const bg = new Graphics();
+    bg.roundRect(
+      w / 2 - msg.width / 2 - padX,
+      cy - msg.height / 2 - padY,
+      msg.width + padX * 2,
+      msg.height + padY * 2,
+      10,
+    ).fill({ color: 0x000000, alpha: 0.75 });
+    bg.roundRect(
+      w / 2 - msg.width / 2 - padX,
+      cy - msg.height / 2 - padY,
+      msg.width + padX * 2,
+      msg.height + padY * 2,
+      10,
+    ).stroke({ width: 2, color: 0xfbbf24, alpha: 0.5 });
+
+    container.addChild(bg);
+    container.addChild(msg);
+    container.alpha = 0;
+
+    this.bubbleContainer.addChild(container);
+
+    // Fade in
+    const fadeInStart = performance.now();
+    const fadeIn = () => {
+      if (this.destroyed) return;
+      const p = Math.min((performance.now() - fadeInStart) / 200, 1);
+      container.alpha = easeOutCubic(p);
+      if (p < 1) this.pendingRAFs.push(requestAnimationFrame(fadeIn));
+    };
+    this.pendingRAFs.push(requestAnimationFrame(fadeIn));
+
+    // Fade out before end
+    setTimeout(() => {
+      if (this.destroyed) return;
+      const fadeOutStart = performance.now();
+      const fadeOut = () => {
+        if (this.destroyed) return;
+        const p = Math.min((performance.now() - fadeOutStart) / 300, 1);
+        container.alpha = 1 - p;
+        if (p < 1) {
+          this.pendingRAFs.push(requestAnimationFrame(fadeOut));
+        } else {
+          this.bubbleContainer.removeChild(container);
+          container.destroy({ children: true });
+        }
+      };
+      this.pendingRAFs.push(requestAnimationFrame(fadeOut));
+    }, Math.max(duration - 300, 200));
+  }
+
+  clearAnnouncement(): void {
+    const toRemove: Container[] = [];
+    for (const child of this.bubbleContainer.children) {
+      if ((child as Container).label === 'announcement') {
+        toRemove.push(child as Container);
+      }
+    }
+    for (const c of toRemove) {
+      this.bubbleContainer.removeChild(c);
+      c.destroy({ children: true });
     }
   }
 

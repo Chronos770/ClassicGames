@@ -68,9 +68,30 @@ const GAMES: GameConfig[] = [
     thumbnail: '',
     color: '#0f4c5c',
   },
+  {
+    id: 'backgammon',
+    name: 'Backgammon',
+    description: 'Roll the dice and race your checkers home. The oldest board game in the world.',
+    minPlayers: 2,
+    maxPlayers: 2,
+    hasAI: true,
+    thumbnail: '',
+    color: '#5c3a1a',
+  },
+  {
+    id: 'bonks',
+    name: 'BooBonks, BoJangles & Chonk',
+    description: 'Pick your hero and save Fizzlewood! A pixel-art platformer adventure.',
+    minPlayers: 1,
+    maxPlayers: 1,
+    hasAI: false,
+    thumbnail: '',
+    color: '#cc3399',
+  },
 ];
 
-const NEW_GAMES = new Set<string>();
+const NEW_GAMES = new Set<string>(['backgammon']);
+const DEV_GAMES = new Set<string>(['bonks']);
 
 function StatsTeaser() {
   const stats = useUserStore((s) => s.stats);
@@ -120,7 +141,7 @@ export default function HomePage() {
             transition={{ duration: 0.5 }}
             className="lg:w-[320px] flex-shrink-0"
           >
-            <h1 className="text-4xl lg:text-5xl font-display font-bold text-white mb-3 leading-tight">
+            <h1 className="text-2xl sm:text-4xl lg:text-5xl font-display font-bold text-white mb-3 leading-tight">
               Castle &{' '}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-amber-600">
                 Cards
@@ -147,9 +168,9 @@ export default function HomePage() {
             </div>
 
             {/* Quick stats */}
-            <div className="flex gap-6 text-center">
+            <div className="flex gap-4 sm:gap-6 text-center">
               {[
-                { value: '6', label: 'Games' },
+                { value: '9', label: 'Games' },
                 { value: '3', label: 'Categories' },
                 { value: '\u221E', label: 'Family Fun' },
               ].map((stat) => (
@@ -183,6 +204,11 @@ export default function HomePage() {
                   {NEW_GAMES.has(game.id) && (
                     <div className="absolute -top-2 -right-2 z-10 bg-gradient-to-r from-amber-500 to-orange-500 text-black text-xs font-bold px-2.5 py-1 rounded-full shadow-lg">
                       NEW
+                    </div>
+                  )}
+                  {DEV_GAMES.has(game.id) && (
+                    <div className="absolute -top-2 -right-2 z-10 bg-gradient-to-r from-violet-500 to-purple-600 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg">
+                      IN DEV
                     </div>
                   )}
                   <GameCard game={game} index={i} />

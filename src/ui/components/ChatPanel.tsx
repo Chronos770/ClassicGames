@@ -55,12 +55,14 @@ export default function ChatPanel({ roomId }: ChatPanelProps) {
   }, [messages]);
 
   const sendMessage = async () => {
-    if (!input.trim() || !supabase || !user) return;
+    // Sanitize: strip control characters, zero-width, RTL overrides
+    const sanitized = input.replace(/[\x00-\x1F\x7F\u200B-\u200F\u202A-\u202E\uFEFF]/g, '').trim();
+    if (!sanitized || !supabase || !user) return;
 
     const msg: ChatMessage = {
       id: crypto.randomUUID(),
       user_id: user.id,
-      message: input.trim(),
+      message: sanitized,
       display_name: profile?.display_name ?? 'Player',
       created_at: new Date().toISOString(),
     };

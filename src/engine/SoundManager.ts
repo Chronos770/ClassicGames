@@ -30,10 +30,34 @@ const SOUND_DEFINITIONS: Record<string, SoundDefinition> = {
   'piece-click': { type: 'tone', freq: 300, duration: 50, oscillator: 'sine', volume: 0.2 },
   'piece-capture': { type: 'noise', duration: 100, volume: 0.35 },
   'board-move': { type: 'tone', freq: 250, duration: 60, oscillator: 'sine', volume: 0.2 },
+  'dice-roll': { type: 'noise', duration: 180, volume: 0.3 },
 
   // Battleship
   'explosion': { type: 'noise', duration: 300, volume: 0.5 },
   'splash': { type: 'noise', duration: 150, volume: 0.3 },
+
+  // Platformer (BooBonks, BoJangles & Chonk)
+  'bonks-jump': { type: 'tone', freq: 500, duration: 100, oscillator: 'square', volume: 0.2 },
+  'bonks-stomp': { type: 'tone', freq: 200, duration: 80, oscillator: 'square', volume: 0.25 },
+  'bonks-coin': { type: 'chord', freqs: [988, 1319], duration: 100, oscillator: 'square', volume: 0.2 },
+  'bonks-block': { type: 'tone', freq: 300, duration: 60, oscillator: 'square', volume: 0.2 },
+  'bonks-die': { type: 'tone', freq: 200, duration: 400, oscillator: 'sawtooth', volume: 0.3 },
+  'bonks-brick': { type: 'noise', duration: 80, volume: 0.25 },
+  'bonks-powerup': { type: 'chord', freqs: [523, 659, 784], duration: 200, oscillator: 'square', volume: 0.25 },
+  'bonks-grow': { type: 'chord', freqs: [262, 330, 392, 523], duration: 300, oscillator: 'square', volume: 0.2 },
+  'bonks-shrink': { type: 'chord', freqs: [523, 392, 330, 262], duration: 250, oscillator: 'square', volume: 0.2 },
+  'bonks-fireball': { type: 'tone', freq: 800, duration: 60, oscillator: 'sawtooth', volume: 0.15 },
+  'bonks-shell-kick': { type: 'tone', freq: 350, duration: 70, oscillator: 'square', volume: 0.2 },
+  'bonks-1up': { type: 'chord', freqs: [523, 659, 784, 1047], duration: 350, oscillator: 'square', volume: 0.25 },
+  'bonks-pipe': { type: 'tone', freq: 120, duration: 200, oscillator: 'sine', volume: 0.2 },
+  'bonks-checkpoint': { type: 'chord', freqs: [440, 554, 659], duration: 250, oscillator: 'square', volume: 0.2 },
+  'bonks-star': { type: 'chord', freqs: [784, 988, 1175, 1568], duration: 400, oscillator: 'square', volume: 0.2 },
+  'bonks-flag': { type: 'chord', freqs: [392, 494, 587, 784], duration: 500, oscillator: 'square', volume: 0.25 },
+  'bonks-warning': { type: 'tone', freq: 880, duration: 100, oscillator: 'square', volume: 0.2 },
+  'bonks-tongue': { type: 'tone', freq: 250, duration: 80, oscillator: 'sine', volume: 0.15 },
+  'bonks-flutter': { type: 'tone', freq: 600, duration: 50, oscillator: 'triangle', volume: 0.1 },
+  'bonks-wallkick': { type: 'tone', freq: 450, duration: 70, oscillator: 'square', volume: 0.2 },
+  'bonks-spit': { type: 'tone', freq: 700, duration: 60, oscillator: 'sawtooth', volume: 0.15 },
 
   // UI
   'ui-click': { type: 'tone', freq: 600, duration: 30, oscillator: 'sine', volume: 0.15 },

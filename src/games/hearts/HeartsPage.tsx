@@ -70,6 +70,22 @@ function rotateStateForSeat(state: HeartsState, mySeat: number): HeartsState {
   };
 }
 
+/** Create a broadcast-safe copy of state: replaces all hand cards with face-down dummies.
+ *  Each non-host receives their real hand via a separate 'your-hand' message. */
+function sanitizeStateForBroadcast(state: HeartsState): HeartsState {
+  const dummyCard = (i: number): Card => ({ suit: 'spades', rank: 'A', faceUp: false, id: `hidden-${i}` });
+  return {
+    ...state,
+    hands: state.hands.map((hand) =>
+      hand.map((_, i) => dummyCard(i))
+    ),
+    // Also hide passing cards (they contain real card info)
+    passingCards: state.passingCards.map((cards) =>
+      cards.map((_, i) => dummyCard(i))
+    ),
+  };
+}
+
 // Seat colors for multiplayer avatars
 const SEAT_COLORS: number[] = [0xf59e0b, 0x3b82f6, 0xef4444, 0x22c55e];
 const SEAT_LABELS = ['South', 'West', 'North', 'East'];
@@ -117,6 +133,7 @@ export default function HeartsPage() {
   const seatNamesRef = useRef<string[]>(seatNames);
   const pendingStateRef = useRef<HeartsState | null>(null);
   const animatingRef = useRef(false);
+  const myHandRef = useRef<Card[]>([]); // Non-host: stores real hand from 'your-hand' messages
 
   // Stable refs
   const selectedCardsRef = useRef<Set<string>>(selectedCards);
@@ -181,11 +198,13 @@ export default function HeartsPage() {
         const winner = completedTrick.winner;
         const pts = completedTrick.points;
         const winnerName = winner === 0 ? 'You' : (opponentsRef.current[winner - 1]?.name || 'Opponent');
-        setMessage(`${winnerName} took the trick${pts > 0 ? ` (+${pts} pts)` : ''}`);
+        const trickMsg = `${winnerName} took the trick${pts > 0 ? ` (+${pts} pts)` : ''}`;
+        setMessage(trickMsg);
+        rendererRef.current?.showAnnouncement(trickMsg, 1800);
         if (pts > 0) rendererRef.current?.showFloatingPoints(winner, pts);
         showBubble(commentOnTrickWon(winner, pts));
 
-        await new Promise((r) => setTimeout(r, 1200));
+        await new Promise((r) => setTimeout(r, 2000));
         game.clearLastCompletedTrick();
         setState({ ...newState });
         rendererRef.current?.render(newState, new Set());
@@ -200,6 +219,7 @@ export default function HeartsPage() {
         aiPlayTurn(game);
       } else if (latestState.phase === 'round-over') {
         setMessage('Round over! Click "Next Round" to continue.');
+        rendererRef.current?.showAnnouncement('Round Over!', 2500);
         showBubble(commentOnRoundOver(latestState.scores));
       } else if (latestState.phase === 'game-over') {
         const winner = game.getWinner();
@@ -236,7 +256,7 @@ export default function HeartsPage() {
           setState({ ...displayS });
           const rotated = rotateStateForSeat(displayS, mySeatRef.current);
           rendererRef.current?.render(rotated, new Set());
-          adapterRef.current?.sendMove({ type: 'game-state', state: displayS });
+          adapterRef.current?.sendMove({ type: 'game-state', state: sanitizeStateForBroadcast(displayS) });
 
           const winner = completedTrick.winner;
           const trickPts = completedTrick.points;
@@ -245,9 +265,11 @@ export default function HeartsPage() {
             rendererRef.current?.showFloatingPoints(rotatedWinner, trickPts);
           }
           const winnerName = getSeatDisplayName(winner);
-          setMessage(`${winnerName} took the trick${trickPts > 0 ? ` (+${trickPts} pts)` : ''}`);
+          const trickMsg = `${winnerName} took the trick${trickPts > 0 ? ` (+${trickPts} pts)` : ''}`;
+          setMessage(trickMsg);
+          rendererRef.current?.showAnnouncement(trickMsg, 2200);
           broadcastEvent({ type: 'trick-won', winner, points: trickPts });
-          await new Promise((r) => setTimeout(r, 1500));
+          await new Promise((r) => setTimeout(r, 2500));
           setMessage('');
           game.clearLastCompletedTrick();
           broadcastState(game);
@@ -260,6 +282,7 @@ export default function HeartsPage() {
     s = game.getState();
     if (s.phase === 'round-over') {
       setMessage('Round over!');
+      rendererRef.current?.showAnnouncement('Round Over!', 2500);
       broadcastState(game);
     } else if (s.phase === 'game-over') {
       setGameOver(true);
@@ -282,7 +305,13 @@ export default function HeartsPage() {
     const seat = mySeatRef.current;
     const rotated = rotateStateForSeat(s, seat);
     rendererRef.current?.render(rotated, new Set());
-    adapterRef.current?.sendMove({ type: 'game-state', state: s });
+    // Broadcast sanitized state (hands hidden) + send each player their real hand
+    adapterRef.current?.sendMove({ type: 'game-state', state: sanitizeStateForBroadcast(s) });
+    for (let i = 0; i < 4; i++) {
+      if (i !== seat && !aiSeatsRef.current.has(i)) {
+        adapterRef.current?.sendMove({ type: 'your-hand', seat: i, hand: s.hands[i] });
+      }
+    }
   }, []);
 
   /** Host sends an event message to trigger animations/feedback on non-host */
@@ -320,6 +349,7 @@ export default function HeartsPage() {
 
     if (s.phase === 'round-over') {
       setMessage('Round over!');
+      rendererRef.current?.showAnnouncement('Round Over!', 2500);
     } else if (s.phase === 'game-over') {
       setGameOver(true);
       const winner = s.totalScores.indexOf(Math.min(...s.totalScores));
@@ -459,7 +489,9 @@ export default function HeartsPage() {
           rendererRef.current?.showFloatingPoints(rotatedWinner, points);
         }
         const winnerName = winner === mySeatRef.current ? 'You' : (seatNamesRef.current[winner] || `Player ${winner + 1}`);
-        setMessage(`${winnerName} took the trick${points > 0 ? ` (+${points} pts)` : ''}`);
+        const trickMsg = `${winnerName} took the trick${points > 0 ? ` (+${points} pts)` : ''}`;
+        setMessage(trickMsg);
+        rendererRef.current?.showAnnouncement(trickMsg, 2200);
         // Message will be cleared when next game-state arrives
       }
     } else if (data.type === 'pass-submitted') {
@@ -479,11 +511,25 @@ export default function HeartsPage() {
         setMessage('Cards passed!');
         setTimeout(() => setMessage(''), 1500);
       }
+    } else if (data.type === 'your-hand') {
+      // Host sends us our real hand (broadcast state has hands hidden)
+      if (!isHost && data.seat === mySeatRef.current) {
+        myHandRef.current = data.hand;
+      }
     } else if (data.type === 'game-state') {
-      // Host broadcasts full state
+      // Host broadcasts state with hidden hands — merge in our real hand
       if (!isHost && game) {
         if (mySeatRef.current < 0) return; // Not yet seated
-        const s: HeartsState = data.state;
+        const raw: HeartsState = data.state;
+        // Replace our hidden hand with our real hand (from your-hand message)
+        const s: HeartsState = {
+          ...raw,
+          hands: raw.hands.map((hand, i) =>
+            i === mySeatRef.current && myHandRef.current.length > 0
+              ? myHandRef.current.slice(0, hand.length) // Use real hand, trim to correct count
+              : hand
+          ),
+        };
 
         // If we're animating (deal), queue this state for later
         if (animatingRef.current) {
@@ -555,7 +601,7 @@ export default function HeartsPage() {
             setState({ ...displayS });
             const rotated = rotateStateForSeat(displayS, mySeatRef.current);
             rendererRef.current?.render(rotated, new Set());
-            adapterRef.current?.sendMove({ type: 'game-state', state: displayS });
+            adapterRef.current?.sendMove({ type: 'game-state', state: sanitizeStateForBroadcast(displayS) });
 
             const winner = completedTrick.winner;
             const trickPts = completedTrick.points;
@@ -564,7 +610,9 @@ export default function HeartsPage() {
               rendererRef.current?.showFloatingPoints(rotatedWinner, trickPts);
             }
             const winnerName = getSeatDisplayName(winner);
-            setMessage(`${winnerName} took the trick${trickPts > 0 ? ` (+${trickPts} pts)` : ''}`);
+            const trickMsg = `${winnerName} took the trick${trickPts > 0 ? ` (+${trickPts} pts)` : ''}`;
+            setMessage(trickMsg);
+            rendererRef.current?.showAnnouncement(trickMsg, 2200);
             broadcastEvent({ type: 'trick-won', winner, points: trickPts });
 
             setTimeout(() => {
@@ -576,6 +624,7 @@ export default function HeartsPage() {
                 hostAiPlayRef.current?.(game, aiSeatsRef.current);
               } else if (latestS.phase === 'round-over') {
                 setMessage('Round over!');
+                rendererRef.current?.showAnnouncement('Round Over!', 2500);
               } else if (latestS.phase === 'game-over') {
                 setGameOver(true);
               } else if (latestS.phase === 'playing') {
@@ -586,13 +635,14 @@ export default function HeartsPage() {
                   setMessage(`Waiting for ${name}...`);
                 }
               }
-            }, 1500);
+            }, 2500);
           } else {
             broadcastState(game);
             if (s.phase === 'playing' && aiSeatsRef.current.has(s.currentPlayer)) {
               hostAiPlayRef.current?.(game, aiSeatsRef.current);
             } else if (s.phase === 'round-over') {
               setMessage('Round over!');
+              rendererRef.current?.showAnnouncement('Round Over!', 2500);
             } else if (s.phase === 'game-over') {
               setGameOver(true);
             } else if (s.phase === 'playing') {
@@ -845,7 +895,7 @@ export default function HeartsPage() {
                   setState({ ...displayS });
                   const rotated = rotateStateForSeat(displayS, mySeatRef.current);
                   rendererRef.current?.render(rotated, new Set());
-                  adapterRef.current?.sendMove({ type: 'game-state', state: displayS });
+                  adapterRef.current?.sendMove({ type: 'game-state', state: sanitizeStateForBroadcast(displayS) });
 
                   const winner = completedTrick.winner;
                   const trickPts = completedTrick.points;
@@ -854,7 +904,9 @@ export default function HeartsPage() {
                     rendererRef.current?.showFloatingPoints(rotatedWinner, trickPts);
                   }
                   const winnerName = getSeatDisplayName(winner);
-                  setMessage(`${winnerName} took the trick${trickPts > 0 ? ` (+${trickPts} pts)` : ''}`);
+                  const trickMsg = `${winnerName} took the trick${trickPts > 0 ? ` (+${trickPts} pts)` : ''}`;
+                  setMessage(trickMsg);
+                  rendererRef.current?.showAnnouncement(trickMsg, 2200);
                   broadcastEvent({ type: 'trick-won', winner, points: trickPts });
 
                   setTimeout(() => {
@@ -866,6 +918,7 @@ export default function HeartsPage() {
                       hostAiPlayRef.current?.(g, aiSeatsRef.current);
                     } else if (latestS.phase === 'round-over') {
                       setMessage('Round over!');
+                      rendererRef.current?.showAnnouncement('Round Over!', 2500);
                     } else if (latestS.phase === 'game-over') {
                       setGameOver(true);
                       const w = g.getWinner();
@@ -879,13 +932,14 @@ export default function HeartsPage() {
                         setMessage(`Waiting for ${name}...`);
                       }
                     }
-                  }, 1500);
+                  }, 2500);
                 } else {
                   broadcastState(g);
                   if (newS.phase === 'playing' && aiSeatsRef.current.has(newS.currentPlayer)) {
                     hostAiPlayRef.current?.(g, aiSeatsRef.current);
                   } else if (newS.phase === 'round-over') {
                     setMessage('Round over!');
+                    rendererRef.current?.showAnnouncement('Round Over!', 2500);
                   } else if (newS.phase === 'game-over') {
                     setGameOver(true);
                     const winner = g.getWinner();
@@ -941,7 +995,9 @@ export default function HeartsPage() {
                 const winner = completedTrick.winner;
                 const pts = completedTrick.points;
                 const winnerName = winner === 0 ? 'You' : (opponentsRef.current[winner - 1]?.name || 'Opponent');
-                setMessage(`${winnerName} took the trick${pts > 0 ? ` (+${pts} pts)` : ''}`);
+                const trickMsg = `${winnerName} took the trick${pts > 0 ? ` (+${pts} pts)` : ''}`;
+                setMessage(trickMsg);
+                renderer.showAnnouncement(trickMsg, 1800);
                 if (pts > 0) renderer.showFloatingPoints(winner, pts);
                 showBubble(commentOnTrickWon(winner, pts));
 
@@ -954,6 +1010,7 @@ export default function HeartsPage() {
                     aiPlayTurn(g);
                   } else if (newState.phase === 'round-over') {
                     setMessage('Round over!');
+                    renderer.showAnnouncement('Round Over!', 2500);
                     showBubble(commentOnRoundOver(newState.scores));
                   } else if (newState.phase === 'game-over') {
                     const w = g.getWinner();
@@ -962,7 +1019,7 @@ export default function HeartsPage() {
                     recordGameRef.current('hearts', w === 0, 'AI');
                     showBubble(commentOnGameOver(newState.totalScores));
                   }
-                }, 1200);
+                }, 2000);
               } else {
                 setState({ ...newState });
                 renderer.render(newState, new Set());
@@ -970,6 +1027,7 @@ export default function HeartsPage() {
                   aiPlayTurn(g);
                 } else if (newState.phase === 'round-over') {
                   setMessage('Round over!');
+                  renderer.showAnnouncement('Round Over!', 2500);
                   showBubble(commentOnRoundOver(newState.scores));
                 } else if (newState.phase === 'game-over') {
                   const winner = g.getWinner();
@@ -1362,7 +1420,11 @@ export default function HeartsPage() {
       </motion.div>
 
       {message && (
-        <div className="w-full max-w-[1100px] text-center text-sm text-amber-400 mb-2">{message}</div>
+        <div className={`w-full max-w-[1100px] text-center mb-2 ${
+          message.includes('took the trick') || message === 'Round over!' || message.includes('Round over!')
+            ? 'text-base font-semibold text-amber-300'
+            : 'text-sm text-amber-400'
+        }`}>{message}</div>
       )}
 
       {/* Game area with HTML opponent cards around the canvas */}

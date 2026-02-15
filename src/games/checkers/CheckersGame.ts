@@ -70,24 +70,13 @@ export class CheckersGame {
   // FIX BUG 4/6: Undo an entire turn (potentially multiple moves for multi-jumps)
   undoTurn(): boolean {
     const boundary = this.turnBoundaries.pop();
-    if (boundary === undefined || this.undoStack.length === 0) return false;
+    if (boundary === undefined) return false;
+    if (boundary >= this.undoStack.length) return false;
 
-    // Restore to the state at the start of this turn
-    while (this.undoStack.length > boundary) {
-      this.undoStack.pop();
-    }
-    const prev = this.undoStack.length > 0
-      ? JSON.parse(JSON.stringify(this.undoStack[this.undoStack.length - 1]))
-      : null;
-
-    if (!prev) {
-      // Nothing left to undo to -- reset to initial
-      this.state = this.createInitialState();
-      this.undoStack = [];
-      this.turnBoundaries = [];
-    } else {
-      this.state = prev;
-    }
+    // undoStack[boundary] is the state saved before the first move of this turn
+    const target = JSON.parse(JSON.stringify(this.undoStack[boundary]));
+    this.undoStack.length = boundary;
+    this.state = target;
 
     this.notify();
     return true;

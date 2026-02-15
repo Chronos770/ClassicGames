@@ -606,10 +606,10 @@ export default function BattleshipPage() {
           className="flex flex-col items-center gap-6 py-12"
         >
           <h3 className="text-xl font-display font-bold text-white">Choose Mode</h3>
-          <div className="flex gap-4">
+          <div className="flex flex-col sm:flex-row gap-4">
             <button
               onClick={() => handleModeSelect('classic')}
-              className="w-56 p-6 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-cyan-400/50 transition-all text-left group"
+              className="w-full sm:w-56 p-6 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-cyan-400/50 transition-all text-left group"
             >
               <div className="text-3xl mb-2">{'\u2693'}</div>
               <div className="text-white font-bold text-lg">Classic</div>
@@ -618,7 +618,7 @@ export default function BattleshipPage() {
             </button>
             <button
               onClick={() => handleModeSelect('advanced')}
-              className="w-56 p-6 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-amber-400/50 transition-all text-left group"
+              className="w-full sm:w-56 p-6 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-amber-400/50 transition-all text-left group"
             >
               <div className="text-3xl mb-2">{'\u{1F680}'}</div>
               <div className="text-white font-bold text-lg">Advanced</div>

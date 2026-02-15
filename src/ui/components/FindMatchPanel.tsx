@@ -106,6 +106,8 @@ export default function FindMatchPanel({ gameId }: FindMatchPanelProps) {
           // 2-player: wait for opponent to join
           multiplayerService.updateHandlers({
             onPlayerJoined: () => {
+              // Host marks room as 'playing' (host has UPDATE permission via RLS)
+              multiplayerService.updateRoomStatus(roomId, 'playing');
               reset();
               setPlayerColor('w');
               setMultiplayer(true, roomId);

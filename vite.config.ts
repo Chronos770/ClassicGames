@@ -9,6 +9,19 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'pixi': ['pixi.js'],
+          'three': ['three'],
+          'react-vendor': ['react', 'react-dom', 'react-router-dom', 'framer-motion'],
+          'supabase': ['@supabase/supabase-js'],
+        },
+      },
+    },
+  },
   server: {
     port: 8001,
   },

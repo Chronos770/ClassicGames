@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { supabase } from '../lib/supabase';
+import type { SaveData } from '../games/bonks/rules';
 
 interface GameStats {
   played: number;
@@ -31,6 +32,7 @@ interface UserState {
   stats: Record<string, GameStats>;
   matchHistory: MatchRecord[];
   academyProgress: AcademyProgress;
+  bonksSave: SaveData | null;
   setDisplayName: (name: string) => void;
   dismissGuestBanner: () => void;
   recordGame: (gameId: string, won: boolean, opponent?: string, details?: string) => void;
@@ -39,6 +41,8 @@ interface UserState {
   completeLesson: (courseId: string, lessonId: string, totalLessons: number) => void;
   isLessonComplete: (courseId: string, lessonId: string) => boolean;
   getCourseProgress: (courseId: string, totalLessons: number) => { completed: number; total: number; percent: number };
+  saveBonks: (data: SaveData) => void;
+  clearBonksSave: () => void;
 }
 
 const defaultStats: GameStats = { played: 0, won: 0, streak: 0, bestStreak: 0 };
@@ -97,6 +101,7 @@ export const useUserStore = create<UserState>()(
       stats: {},
       matchHistory: [],
       academyProgress: { completedLessons: [], completedCourses: [], certificates: [] },
+      bonksSave: null,
       setDisplayName: (name) => set({ displayName: name }),
       dismissGuestBanner: () => set({ guestBannerDismissed: true }),
       recordGame: (gameId, won, opponent, details) =>
@@ -156,6 +161,8 @@ export const useUserStore = create<UserState>()(
         const completed = get().academyProgress.completedLessons.filter((l) => l.startsWith(`${courseId}/`)).length;
         return { completed, total: totalLessons, percent: totalLessons > 0 ? Math.round((completed / totalLessons) * 100) : 0 };
       },
+      saveBonks: (data) => set({ bonksSave: data }),
+      clearBonksSave: () => set({ bonksSave: null }),
     }),
     { name: 'user-data' }
   )

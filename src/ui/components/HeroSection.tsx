@@ -40,14 +40,8 @@ export default function HeroSection() {
                 Cards
               </span>
             </h1>
-            <p className="text-lg md:text-xl text-white/60 mb-4 max-w-xl leading-relaxed">
-              Our boys have always loved playing chess, rummy, and card games. We grew up
-              playing cards with their great-grandma — it's always been a family tradition, passed
-              down around the kitchen table.
-            </p>
-            <p className="text-base text-white/40 mb-8 max-w-xl">
-              We built Castle & Cards to share our love for classic games with anyone who
-              feels the same way about family, friends, and a good hand of cards.
+            <p className="text-lg md:text-xl text-white/60 mb-8 max-w-xl leading-relaxed">
+              Classic board games, card games, and more — all in one place. Play against AI or challenge friends online.
             </p>
             <div className="flex flex-wrap gap-3 justify-center md:justify-start">
               <button

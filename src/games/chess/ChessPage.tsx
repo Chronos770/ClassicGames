@@ -825,7 +825,7 @@ export default function ChessPage() {
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-[800px] flex items-center justify-center gap-3 mt-3"
+        className="w-full max-w-[800px] flex items-center justify-center gap-3 mt-3 flex-wrap"
       >
         {!isMultiplayer && (
           <button onClick={handleUndo} className="btn-secondary text-sm py-2 px-4" disabled={thinking || gameOver}>

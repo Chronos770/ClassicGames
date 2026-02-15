@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useGameStore, TimeControl } from '../stores/gameStore';
@@ -13,6 +13,100 @@ import GameRulesSection from './components/GameRulesSection';
 import FindMatchPanel from './components/FindMatchPanel';
 import PrivateRoomPanel from './components/PrivateRoomPanel';
 import MatchHistory from './components/MatchHistory';
+
+// Pixel art scene: 3 characters in action (running/jumping) with ground and sparkstones
+function BonksScene() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const cv = canvasRef.current;
+    if (!cv) return;
+    const ctx = cv.getContext('2d')!;
+    const px = 3;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+
+    // Characters in action poses
+    const chars: { pixels: string[]; colors: Record<string, string>; ox: number }[] = [
+      { // BooBonks running
+        pixels: [
+          '..bbbb..',
+          '.bbbbbbb',
+          '.bssssbb',
+          '.skwskwb',
+          '..ssns..',
+          'ss.oooo.',
+          '..oooooo',
+          '.ooooooo',
+          '..ss..ss',
+          '.rr....r',
+        ],
+        colors: { b: '#FFAA33', s: '#FFCC99', k: '#222', w: '#FFF', n: '#C44', o: '#FFAACC', r: '#D22' },
+        ox: 2,
+      },
+      { // BoJangles jumping (arms up)
+        pixels: [
+          '..bbbb..',
+          '.bbbbbb.',
+          '.bssssb.',
+          '.skwskw.',
+          '..ssns..',
+          's..oooo.',
+          's.oooooo',
+          '..oooooo',
+          '..ss..ss',
+          '..rr..rr',
+        ],
+        colors: { b: '#554422', s: '#FFCC99', k: '#222', w: '#FFF', n: '#C44', o: '#2244CC', r: '#852' },
+        ox: 12,
+      },
+      { // Chonk running with tongue out
+        pixels: [
+          '.ee..ee.',
+          'efffffef',
+          'fwpffwpf',
+          '.ffkkff.',
+          '.fftttf.',
+          '.cccccc.',
+          '.ffffff.',
+          'ffffffff',
+          '.ff..ff.',
+          '.ff...ff',
+        ],
+        colors: { f: '#FFF', e: '#FBCE', k: '#333', w: '#FFF', p: '#222', t: '#F69', c: '#D33' },
+        ox: 22,
+      },
+    ];
+
+    // Draw ground
+    ctx.fillStyle = '#55BB33';
+    ctx.fillRect(0, 31 * px, cv.width, 3 * px);
+    ctx.fillStyle = '#8B6534';
+    ctx.fillRect(0, 34 * px, cv.width, 6 * px);
+
+    // Draw sparkstones (little yellow diamonds in the sky)
+    const sparkPositions = [[4, 2], [15, 1], [26, 3], [10, 4], [20, 2]];
+    sparkPositions.forEach(([sx, sy]) => {
+      ctx.fillStyle = '#FFD700';
+      ctx.fillRect(sx * px + px, sy * px, px, px);
+      ctx.fillRect(sx * px, sy * px + px, px * 3, px);
+      ctx.fillRect(sx * px + px, sy * px + px * 2, px, px);
+    });
+
+    // Draw characters
+    chars.forEach((char) => {
+      char.pixels.forEach((row, ry) => {
+        for (let cx = 0; cx < row.length; cx++) {
+          const ch = row[cx];
+          if (ch === '.') continue;
+          const color = char.colors[ch];
+          if (!color) continue;
+          ctx.fillStyle = color;
+          ctx.fillRect((char.ox + cx) * px, (ry + 21) * px, px, px);
+        }
+      });
+    });
+  }, []);
+  return <canvas ref={canvasRef} width={96} height={120} className="drop-shadow-lg" style={{ imageRendering: 'pixelated' }} />;
+}
 
 export default function GameLandingPage() {
   const { gameId } = useParams<{ gameId: string }>();
@@ -102,7 +196,7 @@ const [selectedTimeControl, setSelectedTimeControl] = useState<TimeControl | nul
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="rounded-2xl p-8 mb-8 relative overflow-hidden"
+        className="rounded-2xl p-4 sm:p-8 mb-8 relative overflow-hidden"
         style={{
           background: `linear-gradient(135deg, ${config.color}dd, ${config.color}66)`,
         }}
@@ -111,9 +205,15 @@ const [selectedTimeControl, setSelectedTimeControl] = useState<TimeControl | nul
           style={{ backgroundImage: 'radial-gradient(circle at 80% 20%, rgba(255,255,255,0.4) 0%, transparent 50%)' }}
         />
         <div className="relative z-10 flex items-center gap-6">
-          <span className="text-7xl drop-shadow-lg">{config.icon}</span>
+          {gameId === 'bonks' ? (
+            <div className="flex-shrink-0" style={{ transform: 'scale(1.5)', transformOrigin: 'left center' }}>
+              <BonksScene />
+            </div>
+          ) : (
+            <span className="text-5xl sm:text-7xl drop-shadow-lg">{config.icon}</span>
+          )}
           <div>
-            <h1 className="text-4xl font-display font-bold text-white mb-1">{config.name}</h1>
+            <h1 className="text-2xl sm:text-4xl font-display font-bold text-white mb-1">{config.name}</h1>
             <p className="text-white/70">{config.description}</p>
             <div className="flex gap-2 mt-3">
               <span className="text-xs bg-white/10 text-white/60 px-2 py-0.5 rounded capitalize">{config.category}</span>
@@ -136,7 +236,7 @@ const [selectedTimeControl, setSelectedTimeControl] = useState<TimeControl | nul
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="grid grid-cols-4 gap-3"
+              className="grid grid-cols-2 sm:grid-cols-4 gap-3"
             >
               {[
                 { label: 'Played', value: gameStats.played },
@@ -327,7 +427,7 @@ const [selectedTimeControl, setSelectedTimeControl] = useState<TimeControl | nul
                     </div>
                     <div>
                       <label className="text-xs text-white/50 mb-2 block">Piece Style</label>
-                      <div className="grid grid-cols-5 gap-2">
+                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                         {([
                           { id: 'classic' as ChessPieceStyle, label: 'Classic' },
                           { id: 'filled' as ChessPieceStyle, label: 'Filled' },
@@ -395,7 +495,7 @@ const [selectedTimeControl, setSelectedTimeControl] = useState<TimeControl | nul
                 {isCardGame && (
                   <div>
                     <label className="text-xs text-white/50 mb-2 block">Card Theme</label>
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {([
                         { id: 'classic-blue' as CardTheme, label: 'Blue', color: '#1e3a5f' },
                         { id: 'royal-red' as CardTheme, label: 'Red', color: '#7a1a1a' },

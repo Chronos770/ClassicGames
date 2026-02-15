@@ -172,6 +172,10 @@ export class MultiplayerService {
       supabase?.removeChannel(this.channel);
       this.channel = null;
     }
+    // Mark room as finished so it doesn't pollute future matchmaking queries
+    if (this.roomId && supabase) {
+      await supabase.from('rooms').update({ status: 'finished' }).eq('id', this.roomId);
+    }
     this.roomId = null;
     this.handlers = {};
   }

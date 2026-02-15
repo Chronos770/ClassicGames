@@ -30,8 +30,8 @@ export default function AuthModal({ isOpen, onClose, guestUpgrade }: AuthModalPr
       return 'Please enter a valid email address';
     }
     if (tab !== 'forgot') {
-      if (password.length < 8) {
-        return 'Password must be at least 8 characters';
+      if (password.length < 12) {
+        return 'Password must be at least 12 characters';
       }
     }
     if (tab === 'signup' && !name.trim()) {
@@ -230,7 +230,7 @@ export default function AuthModal({ isOpen, onClose, guestUpgrade }: AuthModalPr
                       onChange={(e) => setPassword(e.target.value)}
                       className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-amber-500/50"
                       required
-                      minLength={8}
+                      minLength={12}
                     />
                   )}
 

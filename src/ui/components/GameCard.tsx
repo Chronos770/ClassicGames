@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
 import { GameConfig } from '../../engine/types';
 
 interface GameCardProps {
@@ -14,7 +15,82 @@ const GAME_ICONS: Record<string, string> = {
   chess: '\u265A',
   checkers: '\u26C0',
   battleship: '\u2693',
+  backgammon: '\u2680',
 };
+
+// Tiny pixel art for the 3 bonks characters (8x10 each, side by side)
+const BONKS_CHARS: { pixels: string[]; colors: Record<string, string> }[] = [
+  { // BooBonks (girl, golden hair, pink dress)
+    pixels: [
+      '..bbbb..',
+      '.bbbbbbb',
+      '.bssssbb',
+      '.skwskwb',
+      '..ssns..',
+      '.oooooo.',
+      'oooooooo',
+      'oooooooo',
+      '..ss.ss.',
+      '..rr.rr.',
+    ],
+    colors: { b: '#FFAA33', s: '#FFCC99', k: '#222', w: '#FFF', n: '#C44', o: '#FFAACC', r: '#D22' },
+  },
+  { // BoJangles (boy, brown hair, blue overalls)
+    pixels: [
+      '..bbbb..',
+      '.bbbbbb.',
+      '.bssssb.',
+      '.skwskw.',
+      '..ssns..',
+      '..oooo..',
+      '.oooooo.',
+      '.oooooo.',
+      '..oo.oo.',
+      '..rr.rr.',
+    ],
+    colors: { b: '#554422', s: '#FFCC99', k: '#222', w: '#FFF', n: '#C44', o: '#2244CC', r: '#852' },
+  },
+  { // Chonk (white dog, red collar)
+    pixels: [
+      '.ee..ee.',
+      'efffffef',
+      'fwpffwpf',
+      '.ffkkff.',
+      '.ffttff.',
+      '.cccccc.',
+      '.ffffff.',
+      '.ffffff.',
+      '..ff.ff.',
+      '..ff.ff.',
+    ],
+    colors: { f: '#FFF', F: '#DDD', e: '#FBCE', k: '#333', w: '#FFF', p: '#222', t: '#F69', c: '#D33' },
+  },
+];
+
+function BonksIcon() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const cv = canvasRef.current;
+    if (!cv) return;
+    const ctx = cv.getContext('2d')!;
+    const px = 3;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    BONKS_CHARS.forEach((char, ci) => {
+      const ox = ci * 9 * px + (ci === 1 ? px : 0);
+      char.pixels.forEach((row, ry) => {
+        for (let cx = 0; cx < row.length; cx++) {
+          const ch = row[cx];
+          if (ch === '.') continue;
+          const color = char.colors[ch];
+          if (!color) continue;
+          ctx.fillStyle = color;
+          ctx.fillRect(ox + cx * px, ry * px, px, px);
+        }
+      });
+    });
+  }, []);
+  return <canvas ref={canvasRef} width={84} height={30} className="drop-shadow-lg" style={{ imageRendering: 'pixelated' }} />;
+}
 
 export default function GameCard({ game, index }: GameCardProps) {
   const navigate = useNavigate();
@@ -43,9 +119,15 @@ export default function GameCard({ game, index }: GameCardProps) {
           />
 
           {/* Game icon */}
-          <span className="text-6xl mb-3 drop-shadow-lg relative z-10 group-hover:scale-110 transition-transform duration-300">
-            {GAME_ICONS[game.id] ?? '\u2660'}
-          </span>
+          {game.id === 'bonks' ? (
+            <div className="mb-3 relative z-10 group-hover:scale-110 transition-transform duration-300" style={{ transform: 'scale(2)' }}>
+              <BonksIcon />
+            </div>
+          ) : (
+            <span className="text-6xl mb-3 drop-shadow-lg relative z-10 group-hover:scale-110 transition-transform duration-300">
+              {GAME_ICONS[game.id] ?? '\u2660'}
+            </span>
+          )}
 
           {/* Game name */}
           <h3 className="text-xl font-display font-bold text-white relative z-10 drop-shadow-md">

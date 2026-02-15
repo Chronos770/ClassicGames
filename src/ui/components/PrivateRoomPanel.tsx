@@ -55,6 +55,8 @@ export default function PrivateRoomPanel({ gameId }: PrivateRoomPanelProps) {
         setWaiting(true);
         multiplayerService.updateHandlers({
           onPlayerJoined: (joinedUserId: string) => {
+            // Host marks room as 'playing' (host has UPDATE permission via RLS)
+            multiplayerService.updateRoomStatus(result.roomId, 'playing');
             reset();
             setPlayerColor('w');
             setMultiplayerOpponentName(joinedUserId);
@@ -176,12 +178,12 @@ export default function PrivateRoomPanel({ gameId }: PrivateRoomPanelProps) {
         <div className="flex gap-2">
           <input
             type="text"
-            inputMode="numeric"
             value={inviteCode}
             onChange={(e) => setInviteCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
             placeholder="1234"
-            className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:border-amber-500 focus:outline-none font-mono tracking-[0.3em] text-center text-lg"
+            className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:border-amber-500 focus:outline-none font-mono tracking-[0.2em] text-center text-lg"
             maxLength={4}
+            inputMode="numeric"
             onKeyDown={(e) => { if (e.key === 'Enter') handleJoin(); }}
           />
           <button onClick={handleJoin} className="btn-secondary text-sm px-4">
