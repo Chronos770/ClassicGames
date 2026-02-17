@@ -8,6 +8,7 @@ import CastleLogo from './components/CastleLogo';
 import { useSocialStore } from '../stores/socialStore';
 import { useAuthStore } from '../stores/authStore';
 import { useUserStore } from '../stores/userStore';
+import InstallBanner from './components/InstallBanner';
 import { getActiveAnnouncements, type Announcement } from '../lib/adminService';
 
 export default function Layout() {
@@ -168,6 +169,8 @@ export default function Layout() {
           </div>
         </div>
       )}
+
+      {!isInGame && <InstallBanner />}
 
       {/* Announcements banner */}
       {!isInGame && announcements.filter((a) => !dismissedAnnouncements.has(a.id)).length > 0 && (

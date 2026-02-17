@@ -11,3 +11,4 @@ tsconfig.tsbuildinfo
 supabase/.temp/
 .vercel
 public/models/*.glb
+public/games/*.jsdos

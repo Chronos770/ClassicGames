@@ -108,6 +108,32 @@ function BonksScene() {
   return <canvas ref={canvasRef} width={96} height={120} className="drop-shadow-lg" style={{ imageRendering: 'pixelated' }} />;
 }
 
+function BonksHighScore() {
+  const highScore = useUserStore((s) => s.bonksHighScore);
+  const bonksSave = useUserStore((s) => s.bonksSave);
+
+  if (highScore <= 0 && !bonksSave) return null;
+
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <div className="bg-white/5 rounded-lg p-3 text-center">
+        <div className="text-lg font-mono font-bold text-amber-400">
+          {highScore.toLocaleString()}
+        </div>
+        <div className="text-[10px] text-white/40 uppercase">High Score</div>
+      </div>
+      {bonksSave && (
+        <div className="bg-white/5 rounded-lg p-3 text-center">
+          <div className="text-lg font-mono font-bold text-white">
+            {bonksSave.score.toLocaleString()}
+          </div>
+          <div className="text-[10px] text-white/40 uppercase">Current Run</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function GameLandingPage() {
   const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
@@ -264,6 +290,7 @@ const [selectedTimeControl, setSelectedTimeControl] = useState<TimeControl | nul
             {/* Solo / AI Play */}
             {isSinglePlayer ? (
               <div className="space-y-4">
+                {gameId === 'bonks' && <BonksHighScore />}
                 <button onClick={startSoloGame} className="btn-primary w-full text-lg py-4 font-semibold">
                   Start Game
                 </button>

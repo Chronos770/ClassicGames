@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase';
 import AvatarPicker from './AvatarPicker';
 
 export default function ProfilePage() {
-  const { user, isGuest, profile, fetchProfile, updatePassword, updateEmail, signOut } = useAuthStore();
+  const { user, isGuest, profile, fetchProfile, updatePassword, updateEmail, resetPassword, signOut } = useAuthStore();
   const stats = useUserStore((s) => s.stats);
 
   const [displayName, setDisplayName] = useState(profile?.display_name ?? 'Player');
@@ -24,6 +24,9 @@ export default function ProfilePage() {
   const [newEmail, setNewEmail] = useState('');
   const [emailMsg, setEmailMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [emailSaving, setEmailSaving] = useState(false);
+
+  const [resetMsg, setResetMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [resetSending, setResetSending] = useState(false);
 
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -204,6 +207,32 @@ export default function ProfilePage() {
                   >
                     {passwordSaving ? 'Updating...' : 'Update Password'}
                   </button>
+                  <div className="border-t border-white/10 pt-3 mt-3">
+                    <p className="text-xs text-white/40 mb-2">Forgot your password? We'll send a reset link to your email.</p>
+                    {resetMsg && (
+                      <p className={`text-sm mb-2 ${resetMsg.type === 'error' ? 'text-red-400' : 'text-green-400'}`}>
+                        {resetMsg.text}
+                      </p>
+                    )}
+                    <button
+                      onClick={async () => {
+                        if (!user?.email) return;
+                        setResetSending(true);
+                        setResetMsg(null);
+                        const result = await resetPassword(user.email);
+                        setResetSending(false);
+                        if (result.error) {
+                          setResetMsg({ type: 'error', text: result.error });
+                        } else {
+                          setResetMsg({ type: 'success', text: 'Reset link sent — check your inbox' });
+                        }
+                      }}
+                      disabled={resetSending}
+                      className="text-sm text-amber-400 hover:text-amber-300 transition-colors"
+                    >
+                      {resetSending ? 'Sending...' : 'Send Reset Email'}
+                    </button>
+                  </div>
                 </div>
               </div>
 

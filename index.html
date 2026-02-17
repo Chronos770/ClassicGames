@@ -11,13 +11,16 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Castle & Cards" />
     <meta name="description" content="Classic card and board games — chess, solitaire, hearts, rummy, and more. Play free against AI or with friends." />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://pagead2.googlesyndication.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-src https://pagead2.googlesyndication.com;" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://pagead2.googlesyndication.com https://www.googletagmanager.com https://v8.js-dos.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://v8.js-dos.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://v8.js-dos.com; worker-src 'self' blob:; frame-src https://pagead2.googlesyndication.com; object-src 'none'; base-uri 'self';" />
     <title>Castle & Cards - Classic Card & Board Games</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
     <!-- Google AdSense: Replace ca-pub-XXXXXXXXXXXXXXXX with your publisher ID -->
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
+    <!-- js-dos v8: DOSBox in the browser via WebAssembly -->
+    <link rel="stylesheet" href="https://v8.js-dos.com/latest/js-dos.css">
+    <script src="https://v8.js-dos.com/latest/js-dos.js"></script>
   </head>
   <body class="bg-navy-950 text-white antialiased">
     <div id="root"></div>

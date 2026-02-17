@@ -86,7 +86,8 @@ export async function getUsers(search?: string, limit = 50, offset = 0): Promise
     .select('id, display_name, avatar_emoji, role, created_at, online_at', { count: 'exact' });
 
   if (search) {
-    query = query.ilike('display_name', `%${search}%`);
+    const escaped = search.replace(/[%_\\]/g, '\\$&');
+    query = query.ilike('display_name', `%${escaped}%`);
   }
 
   const { data, count } = await query

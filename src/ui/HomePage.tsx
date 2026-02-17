@@ -6,6 +6,7 @@ import AdBanner from './components/AdBanner';
 import CastleLogo from './components/CastleLogo';
 import { GameConfig } from '../engine/types';
 import { useUserStore } from '../stores/userStore';
+import { useAuthStore } from '../stores/authStore';
 
 const GAMES: GameConfig[] = [
   {
@@ -88,10 +89,21 @@ const GAMES: GameConfig[] = [
     thumbnail: '',
     color: '#cc3399',
   },
+  {
+    id: 'gp2',
+    name: 'Grand Prix II',
+    description: 'MicroProse\'s legendary 1995 F1 racing sim via DOSBox emulation.',
+    minPlayers: 1,
+    maxPlayers: 1,
+    hasAI: false,
+    thumbnail: '',
+    color: '#c41e3a',
+  },
 ];
 
 const NEW_GAMES = new Set<string>(['backgammon']);
 const DEV_GAMES = new Set<string>(['bonks']);
+const ADMIN_GAMES = new Set<string>(['gp2']);
 
 function StatsTeaser() {
   const stats = useUserStore((s) => s.stats);
@@ -128,6 +140,8 @@ function StatsTeaser() {
 
 export default function HomePage() {
   const navigate = useNavigate();
+  const isAdmin = useAuthStore((s) => s.profile?.role === 'admin');
+  const visibleGames = GAMES.filter((g) => !ADMIN_GAMES.has(g.id) || isAdmin);
 
   return (
     <div>
@@ -199,7 +213,7 @@ export default function HomePage() {
             </motion.div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {GAMES.map((game, i) => (
+              {visibleGames.map((game, i) => (
                 <div key={game.id} className="relative">
                   {NEW_GAMES.has(game.id) && (
                     <div className="absolute -top-2 -right-2 z-10 bg-gradient-to-r from-amber-500 to-orange-500 text-black text-xs font-bold px-2.5 py-1 rounded-full shadow-lg">
@@ -209,6 +223,11 @@ export default function HomePage() {
                   {DEV_GAMES.has(game.id) && (
                     <div className="absolute -top-2 -right-2 z-10 bg-gradient-to-r from-violet-500 to-purple-600 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg">
                       IN DEV
+                    </div>
+                  )}
+                  {ADMIN_GAMES.has(game.id) && (
+                    <div className="absolute -top-2 -right-2 z-10 bg-gradient-to-r from-red-600 to-red-700 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg">
+                      ADMIN
                     </div>
                   )}
                   <GameCard game={game} index={i} />

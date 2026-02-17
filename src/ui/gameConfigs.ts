@@ -182,6 +182,25 @@ export const GAME_CONFIGS: Record<string, ExtendedGameConfig> = {
       'A tech demo showcasing real-time 3D rendering with Three.js',
     ],
   },
+  gp2: {
+    id: 'gp2',
+    name: 'Grand Prix II',
+    description: 'MicroProse\'s legendary 1995 F1 racing sim. Runs in-browser via DOSBox emulation.',
+    minPlayers: 1,
+    maxPlayers: 1,
+    hasAI: false,
+    thumbnail: '',
+    color: '#c41e3a',
+    icon: '\u{1F3CE}\u{FE0F}',
+    category: 'strategy',
+    playModes: ['solo'],
+    rules: [
+      'Classic DOS F1 racing simulation from MicroProse (1995)',
+      'Arrow keys to steer, accelerate, and brake',
+      'Full race weekends: practice, qualifying, and race day',
+      'Admin-only retro gaming experience running via DOSBox WebAssembly',
+    ],
+  },
 };
 
 export function getGameConfig(gameId: string): ExtendedGameConfig | undefined {

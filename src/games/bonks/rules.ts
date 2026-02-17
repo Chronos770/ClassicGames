@@ -26,24 +26,24 @@ export interface CharacterDef {
 export const CHARACTERS: Record<CharacterId, CharacterDef> = {
   boobonks: {
     id: 'boobonks', name: 'BooBonks',
-    speed: 2.8, runSpeed: 4.5, jump: -11, accel: 0.35, decel: 0.25, airAccel: 0.2,
-    special: 'Wall Kick',
-    description: 'Balanced all-rounder. Kick off walls in mid-air!',
-    statSpeed: 3, statJump: 3, statSpecial: 'Wall Kick',
+    speed: 2.8, runSpeed: 4.5, jump: -13, accel: 0.35, decel: 0.25, airAccel: 0.2,
+    special: 'Umbrella Float',
+    description: 'Balanced all-rounder. Hold jump for a cute umbrella float!',
+    statSpeed: 3, statJump: 3, statSpecial: 'Umbrella Float',
   },
   bojangles: {
     id: 'bojangles', name: 'BoJangles',
-    speed: 2.5, runSpeed: 4.0, jump: -12.5, accel: 0.3, decel: 0.2, airAccel: 0.18,
+    speed: 2.5, runSpeed: 4.0, jump: -14.5, accel: 0.3, decel: 0.2, airAccel: 0.18,
     special: 'Float Jump',
     description: 'Higher jumps, slower on the ground. Hold jump to float!',
     statSpeed: 2, statJump: 5, statSpecial: 'Float Jump',
   },
   chonk: {
     id: 'chonk', name: 'Chonk',
-    speed: 2.5, runSpeed: 3.8, jump: -10, accel: 0.3, decel: 0.3, airAccel: 0.15,
-    special: 'Flutter + Tongue',
-    description: 'Big fluffy dog! Flutter-jump and eat enemies with your tongue!',
-    statSpeed: 2, statJump: 3, statSpecial: 'Tongue & Flutter',
+    speed: 2.5, runSpeed: 3.8, jump: -12, accel: 0.3, decel: 0.3, airAccel: 0.15,
+    special: 'Tongue + Dive Slam',
+    description: 'Big fluffy dog! Tongue attack + dive slam from the air!',
+    statSpeed: 2, statJump: 3, statSpecial: 'Tongue & Slam',
   },
 };
 
@@ -66,8 +66,13 @@ export const WALL_KICK_VY = -10;
 export const SHELL_REVERT_FRAMES = 300;
 export const GROW_FREEZE_FRAMES = 30;
 export const ENEMY_SPEED = 1.2;
-export const CHONK_FLUTTER_FRAMES = 40;
+export const CHONK_SLAM_FRAMES = 15;      // slam shockwave visual duration
+export const CHONK_DIVE_SPEED = 14;       // dive slam downward speed
 export const CHONK_RETURN_FRAMES = 120;
+export const CHONK_TONGUE_FRAMES = 18;   // tongue attack animation length
+export const CHONK_TONGUE_RANGE = 80;    // tongue reach in pixels (~2.5 tiles)
+export const PLANT_CYCLE = 120;           // total frames per cycle (60 hidden + 60 up)
+export const PLANT_UP_HEIGHT = TILE * 1.4; // how tall when popped up
 
 // ── Tile types ────────────────────────────────────────────────
 export type TileChar =
@@ -81,19 +86,24 @@ export type TileChar =
   | 'E' // goomba spawn
   | 'S' // player start
   | 'F' // flag (level end)
-  | 'G' // gap (death pit marker)
+  | 'G' // King Grumble boss spawn
   | 'R' // ? block → mushroom
   | 'X' // ? block → fire flower
   | 'k' // koopa spawn
   | 'I'  // one-way platform
-  | 'D'; // Chonk companion spawn
+  | 'D'  // Chonk companion spawn
+  | 'H'  // dig spot (Chonk digs into sub-level pipe)
+  | 'W'  // warp exit (returns from sub-level)
+  | 'V'  // poison ivy plant enemy spawn
+  | 'L'  // ladybug flying enemy spawn
+  | 'M'; // moving cloud platform spawn
 
 // ── State interfaces ──────────────────────────────────────────
 
 export type PowerUp = 'none' | 'big' | 'fire';
 export type AnimState = 'idle' | 'walk' | 'run' | 'jump' | 'fall' | 'skid' | 'death' |
   'grow' | 'shrink' | 'wallkick' | 'victory';
-export type EnemyType = 'goomba' | 'koopa';
+export type EnemyType = 'goomba' | 'koopa' | 'plant' | 'boss' | 'ladybug';
 export type EnemyAIState = 'walk' | 'shell' | 'shell-slide' | 'dead';
 
 export interface PlayerState {
@@ -114,6 +124,7 @@ export interface PlayerState {
   wallSliding: boolean;
   growTimer: number;
   floatTimer: number;
+  floating: boolean;        // true when umbrella float is active (for rendering)
 }
 
 export interface EnemyState {
@@ -129,6 +140,13 @@ export interface EnemyState {
   shellTimer: number;
   startX: number;
   startY: number;
+  // Boss fields (optional, only for type === 'boss')
+  hp?: number;
+  bossPhase?: number;
+  bossTimer?: number;
+  stunTimer?: number;
+  // Ladybug fields (optional, only for type === 'ladybug')
+  flyBaseY?: number; // sine wave center Y
 }
 
 export interface CoinState {
@@ -172,7 +190,7 @@ export interface PowerUpItem {
 }
 
 // ── Companion (Chonk) ────────────────────────────────────────
-export type CompanionAnim = 'idle' | 'walk' | 'jump' | 'fall' | 'flutter' | 'tongue';
+export type CompanionAnim = 'idle' | 'walk' | 'jump' | 'fall' | 'tongue' | 'dive' | 'slam';
 
 export interface CompanionState {
   x: number; y: number;
@@ -184,7 +202,9 @@ export interface CompanionState {
   mounted: boolean;       // player is riding
   anim: CompanionAnim;
   frame: number;
-  flutterTimer: number;   // flutter charges
+  diving: boolean;        // dive slam in progress
+  slamTimer: number;      // slam shockwave visual frames remaining
+  tongueTimer: number;     // tongue attack animation frames remaining
   spawnX: number;          // original spawn position
   spawnY: number;
   returnTimer: number;     // countdown to return after dismount-by-hit
@@ -229,6 +249,33 @@ export const CINEMATIC_SCENES: CinematicScene[] = [
   },
 ];
 
+export const WORLD2_CINEMATIC_SCENES: CinematicScene[] = [
+  {
+    spriteKey: 'scene-heroes',
+    lines: [
+      'WITH THE GREEN HILLS SAVED',
+      'OUR HEROES LOOK TO THE SKY',
+      'WHERE MORE SPARKSTONES AWAIT!',
+    ],
+  },
+  {
+    spriteKey: 'scene-village',
+    lines: [
+      'ABOVE THE CLOUDS LIES A HIDDEN',
+      'KINGDOM IN THE SKY GUARDED BY',
+      "KING GRUMBLE'S FLYING ARMY!",
+    ],
+  },
+  {
+    spriteKey: 'scene-villain',
+    lines: [
+      'ONWARD AND UPWARD!',
+      'THE CLOUD KINGDOM CALLS',
+      'BUT BEWARE THE LADYBUGS!',
+    ],
+  },
+];
+
 // ── World Map ─────────────────────────────────────────────────
 
 export interface WorldNode {
@@ -243,13 +290,13 @@ export interface WorldNode {
 
 export const WORLD_MAP: WorldNode[] = [
   { id: 0, x: 120, y: 380, name: '1-1', label: 'GREEN HILLS', connections: [1], available: true },
-  { id: 1, x: 280, y: 300, name: '1-2', label: 'MUSHROOM CAVERNS', connections: [0, 2], available: true },
-  { id: -1, x: 440, y: 360, name: '1-3', label: 'THORNWOOD FOREST', connections: [1, 3], available: false },
-  { id: -1, x: 560, y: 280, name: '1-4', label: 'SPARKSTONE MINES', connections: [2, 4], available: false },
-  { id: -1, x: 440, y: 180, name: '2-1', label: 'FROSTPEAK SUMMIT', connections: [3, 5], available: false },
-  { id: -1, x: 560, y: 100, name: '2-2', label: 'CLOUD KINGDOM', connections: [4, 6], available: false },
-  { id: -1, x: 700, y: 180, name: '2-3', label: 'LAVA DEPTHS', connections: [5, 7], available: false },
-  { id: -1, x: 780, y: 100, name: 'BOSS', label: "GRUMBLE'S CASTLE", connections: [6], available: false },
+  { id: 1, x: 280, y: 300, name: '1-2', label: 'CHONK MEADOWS', connections: [0, 2], available: true },
+  { id: 2, x: 440, y: 360, name: '1-3', label: 'THORNWOOD FOREST', connections: [1, 3], available: true },
+  { id: 3, x: 560, y: 280, name: '1-4', label: 'SPARKSTONE MINES', connections: [2, 4], available: true },
+  { id: 4, x: 700, y: 200, name: '1-5', label: 'SUMMIT TRAIL', connections: [3, 5], available: true },
+  { id: 5, x: 780, y: 100, name: '2-1', label: 'CLOUD KINGDOM', connections: [4, 6], available: true },
+  { id: -1, x: 700, y: 380, name: '2-2', label: 'LAVA DEPTHS', connections: [5, 7], available: false },
+  { id: -1, x: 820, y: 320, name: 'BOSS', label: "GRUMBLE'S CASTLE", connections: [6], available: false },
 ];
 
 // ── Save Data ─────────────────────────────────────────────────
@@ -262,6 +309,8 @@ export interface SaveData {
   coins: number;
   completedLevels: number[];
   timestamp: number;
+  powerUp?: PowerUp;        // carry power-up across levels
+  hasChonk?: boolean;       // whether Chonk companion was with the player
 }
 
 // ── Game State ────────────────────────────────────────────────
@@ -280,6 +329,7 @@ export interface BonksState {
   level: number;
   phase: GamePhase;
   cameraX: number;
+  cameraY: number;
   timeLeft: number;
   levelWidth: number;
   levelHeight: number;
@@ -297,6 +347,30 @@ export interface BonksState {
   // World map
   worldMapIndex: number;
   completedLevels: number[];
+  // Dig spots / sub-levels
+  digSpots: DigSpot[];
+  warpExits: WarpExit[];
+  inSubLevel: boolean;
+  hintText: string;     // tutorial hint shown above player
+  hintTimer: number;     // frames remaining for hint
+  // Warp transition animation
+  warpAnim: WarpAnim | null;
+  // Moving platforms (Cloud Kingdom)
+  movingPlatforms: MovingPlatform[];
+  // Cinematic target (for world 2+ intros)
+  cinematicTarget?: 'select' | 'level';
+  pendingLevel?: number;
+}
+
+export interface WarpAnim {
+  type: 'dig-down' | 'warp-up';  // direction of travel
+  phase: 'dig' | 'sink' | 'blackout' | 'arrive'; // animation phase
+  timer: number;       // frames remaining in current phase
+  startX: number;      // world X where animation started
+  startY: number;      // world Y where animation started
+  targetX: number;     // destination world X
+  targetY: number;     // destination world Y
+  startCam: number;    // camera X at start
 }
 
 // ── Story ─────────────────────────────────────────────────────
@@ -349,24 +423,139 @@ export const LEVELS: LevelData[] = [
   {
     name: '1-2',
     world: 1,
-    worldName: 'Mushroom Caverns',
-    subtitle: 'Grumble\'s minions guard the underground passage...',
-    bgColor: 0x222244,
-    timeLimit: 280,
+    worldName: 'Chonk Meadows',
+    subtitle: 'A loyal companion joins your quest!',
+    bgColor: 0x6699FF,
+    timeLimit: 300,
     tiles: [
-      // 170 chars per row — cave level with ceiling
-      '##########################################################################################################################################################################',
-      '##......................................................................................................................................................................##',
-      '##......................................................................................................................................................................##',
-      '##......................................................................................................................................................................##',
-      '##......................................................................................................................................................................##',
-      '##..........?...?...?...............R.............................X..................................C.C.C.C.C..........................................................##',
-      '##.....................................................C.C.C.......C.C..........?B?B?............BBB?BBB......................................C.C.......................##',
-      '##............C.C.C......C.C...................................................................................IIIII.....IIIII..........................................##',
-      '##.................................................IIIII...........IIIII........................................................IIIII...................................##',
-      '##.....S...........E.......E..k.......E.E......k........E.k..........E.E.E..k........E...k....E.E..........k.E...k....E....PPF..........................................##',
-      '##########...###############...##############...###############...################...###############...###############...##############..##pp#############################',
-      '##########...###############...##############...###############...################...###############...###############...##############..##pp#############################',
+      // 160 cols — outdoor meadow with Chonk intro + 2 dig spots → underground sub-levels
+      // Main level rows 0-12, spacer 13-14, sub-level-1 rows 15-20, sub-level-2 rows 21-26
+      // All rows MUST be exactly 160 characters
+      '................................................................................................................................................................', // 0
+      '................................................................................................................................................................', // 1
+      '................................................................................................................................................................', // 2
+      '................................................................................................................................................................', // 3
+      '................................................................................................................................................................', // 4
+      '................................................................................................................................................................', // 5
+      '............................................................?..?...........................?R?..................................................................', // 6
+      '..........C.C.C.........?..........C.C........R.....C.C.C..............BBB?BBB...C.C.C...........C.C.C.........X.......C.C.C....................................', // 7
+      '..........................................................................I.I.I.I.I.I.........................I.I.I.I.I.I.......................................', // 8
+      '.............................................................................................................................I.I.I.I.I.I........................', // 9
+      '...........................................................................................E.........k..................................................PPF.....', // 10
+      '.....S........D......E..........E.....k.......H............E........k..E........E..........k.....H.............E...k....E...............................##pp....', // 11
+      '######################################################################################################################....########..####..######################', // 12
+      '................................................................................................................................................................', // 13
+      '................................................................................................................................................................', // 14
+      '######################################################################################..........................................................................', // 15
+      '##..........................................................................................##..................................................................', // 16
+      '##..C.C.C.....C.C.C.....C.C.C.C.C.C.C.C......C.C.C.C..C.C.C.C.....?..?..?...C.C.C..W....##......................................................................', // 17
+      '##..........E..........k.........E.........k........E..........k...........................##...................................................................', // 18
+      '##..S.........##...####...########...########...#####...#####...#########...###############.....................................................................', // 19
+      '######################################################################################..........................................................................', // 20
+      '######################################################################################..........................................................................', // 21
+      '##..........................................................................................##..................................................................', // 22
+      '##..C.C.C.C.C.....C.C.C.C.C.....?.?...R.....C.C.C.C.C.C..C.C.C.C.C.C.......C.C.C.C..W...##......................................................................', // 23
+      '##............E.........E.......k........E.........k.......E..........k.......E.............##..................................................................', // 24
+      '##..S.........####...######...#####...########...########...#######...####...###############....................................................................', // 25
+      '######################################################################################..........................................................................', // 26
+    ],
+  },
+  {
+    name: '1-3',
+    world: 1,
+    worldName: 'Thornwood Forest',
+    subtitle: 'Dark woods full of tricks and traps!',
+    bgColor: 0x448866,
+    timeLimit: 350,
+    tiles: [
+      // 150 cols — forest with climbing sections, plant enemies, fewer gaps
+      '.......................................................................................................................',
+      '.......................................................................................................................',
+      '.......................................................................................................................',
+      '.......................................................................................................................',
+      '...............................................................IIIII..............................................IIIII....',
+      '.................................IIIII.............IIIII..................?R?...........IIIII..........X.?..IIIII...........',
+      '..................R..?..IIIII..............C.C.C.C..........BBB?BBB.............IIIII.........C.C.C.........IIIII..........',
+      '............C.C.C...........C.C.C.......C.C.C.............C.C.C..........C.C.C..........C.C.C.......C.C.C................',
+      '.......................................................................................................................',
+      '.......................................................................................................................',
+      '.....S..........E.....V.........k..........E....V........k.........V..E.........k......V........E..k.....V.E.k..PPF.....',
+      '################..############################..#############################..############################..######pp####',
+      '################..############################..#############################..############################..######pp####',
+    ],
+  },
+  {
+    name: '1-4',
+    world: 1,
+    worldName: 'Sparkstone Mines',
+    subtitle: 'Deep underground, the Sparkstones glow faintly...',
+    bgColor: 0x221133,
+    timeLimit: 350,
+    tiles: [
+      // 150 cols — underground mine with hilly terrain and jump obstacles
+      '.......................................................................................................................',
+      '.......................................................................................................................',
+      '.......................................................................................................................',
+      '.......................................................................................................................',
+      '.......................................................................................................................',
+      '.......................................................?R?....................................X.?...........................',
+      '.....C.C.C.........?.?..............C.C.C.........BBB?BBB........C.C.C..........?R?........C.C.C...BBB?BBB...............',
+      '.............................................##...............................................##.........####...............',
+      '...............................##########............V..........####.......V.......####........##.###........V........PPF..',
+      '.....................#####...##..........##......####....####......####.....####........####.#########............####.pp..',
+      '.....S........E..####.....k...E..........k.E.k.............E.k..........k..E........k.............E....k..E......k..pp..',
+      '########..####.####..........##..########..####..........####..##..........####..........####..........####..####..#######',
+      '########..####.####..........##..########..####..........####..##..........####..........####..........####..####..#######',
+    ],
+  },
+  {
+    name: '1-5',
+    world: 1,
+    worldName: 'Summit Trail',
+    subtitle: 'King Grumble awaits at the peak!',
+    bgColor: 0x5588BB,
+    timeLimit: 400,
+    tiles: [
+      // 120 cols x 13 rows — horizontal mountain climb, terrain rises L→R, boss arena at summit
+      // Sections: 1(cols 0-23, ground row11) 2(24-48, row10) 3(49-73, row9) 4(74-93, row8) Boss(95-119, row7)
+      // Left cliff col95 rows0-4, right wall col119 rows0-6, arena floor row7 cols95-119
+      '........................................................................................................................', // 0
+      '........................................................................................................................', // 1
+      '...............................................................................................#.......................#', // 2
+      '...............................................................................................#.......................#', // 3
+      '...............................................................................................#...........G...........#', // 4
+      '............IIII....................IIII..................IIII................IIII.....................................#', // 5
+      '.......C.C.C........?R?..........C.C.C.........BBB?BBB...........C.C.C.......?X?............C...C...C...C...C...C...C..#', // 6
+      '..............................................................................E.......k........#########################', // 7
+      '...................................................E.........V.....k.........##############...##########################', // 8
+      '.........................E.........k.......E.......################...##################################################', // 9
+      '.....S.......E......E...################...############################################################################.', // 10
+      '###############...######################################################################################################', // 11
+      '########################################################################################################################', // 12
+    ],
+  },
+  {
+    name: '2-1',
+    world: 2,
+    worldName: 'Cloud Kingdom',
+    subtitle: 'Above the clouds, danger flies on tiny wings!',
+    bgColor: 0xAADDFF,
+    timeLimit: 350,
+    tiles: [
+      // 150 cols — Cloud Kingdom with moving platforms, ladybugs, bottomless pits
+      '......................................................................................................................................................', // 0
+      '......................................................................................................................................................', // 1
+      '......................................................................................................................................................', // 2
+      '......................................................................................................................................................', // 3
+      '........................IIIII.................................IIIII...................................IIIII...........................................', // 4
+      '..........C.C.C......C.C.C.C............C.C.C.C..?R?.......C.C.C.........BBB?BBB.........C.C.C........X.?......C.C.C..................................', // 5
+      '......................................................................................................................................................', // 6
+      '......................................................................................................................................................', // 7
+      '...........................L....................................L.......................................L...........................L.................', // 8
+      '......................................................................................................................................................', // 9
+      '.....S..........E...................E.......k.................................E.........k...........................E.....k.................PPF.......', // 10
+      '####################......M.......######################....M......M.....#######################.....M......M.....##########################pp########', // 11
+      '####################..............######################.................#######################..................##########################pp########', // 12
     ],
   },
 ];
@@ -388,7 +577,7 @@ export function getTile(tiles: string[], col: number, row: number): string {
 
 export function isSolid(tile: string): boolean {
   return tile === '#' || tile === 'B' || tile === '?' || tile === 'P' || tile === 'p'
-    || tile === 'R' || tile === 'X';
+    || tile === 'R' || tile === 'X' || tile === 'H';
 }
 
 export function isQuestionLike(tile: string): boolean {
@@ -407,6 +596,27 @@ export function contentForTile(tile: string): QuestionBlock['content'] {
   }
 }
 
+export interface DigSpot {
+  col: number; row: number;
+  x: number; y: number;
+  targetX: number; targetY: number; // warp destination (sub-level entry)
+}
+
+export interface WarpExit {
+  col: number; row: number;
+  x: number; y: number;
+  returnX: number; returnY: number; // where to come back to in main level
+}
+
+export interface MovingPlatform {
+  x: number; y: number;
+  width: number;
+  startX: number;
+  range: number;   // oscillation range in pixels from startX
+  speed: number;
+  dir: number;     // 1 or -1
+}
+
 export function parseLevelEntities(tiles: string[]): {
   playerStart: { x: number; y: number };
   enemies: { x: number; y: number; type: EnemyType }[];
@@ -414,26 +624,70 @@ export function parseLevelEntities(tiles: string[]): {
   questionBlocks: { col: number; row: number; content: QuestionBlock['content'] }[];
   flagPos: { x: number; y: number } | null;
   chonkSpawn: { x: number; y: number } | null;
+  digSpots: DigSpot[];
+  warpExits: WarpExit[];
+  movingPlatformSpawns: { x: number; y: number }[];
 } {
   const enemies: { x: number; y: number; type: EnemyType }[] = [];
   const coins: { x: number; y: number }[] = [];
   const questionBlocks: { col: number; row: number; content: QuestionBlock['content'] }[] = [];
-  let playerStart = { x: 2 * TILE, y: 8 * TILE };
+  let playerStart: { x: number; y: number } | null = null;
   let flagPos: { x: number; y: number } | null = null;
   let chonkSpawn: { x: number; y: number } | null = null;
+  const digSpotPositions: { col: number; row: number }[] = [];
+  const warpExitPositions: { col: number; row: number }[] = [];
+  const allStarts: { col: number; row: number }[] = []; // all S tiles
+  const movingPlatformSpawns: { x: number; y: number }[] = [];
 
   for (let row = 0; row < tiles.length; row++) {
     for (let col = 0; col < tiles[row].length; col++) {
       const t = tiles[row][col];
-      if (t === 'S') playerStart = { x: col * TILE, y: row * TILE };
+      if (t === 'S') {
+        allStarts.push({ col, row });
+        if (!playerStart) playerStart = { x: col * TILE, y: row * TILE };
+      }
       if (t === 'E') enemies.push({ x: col * TILE, y: row * TILE, type: 'goomba' });
       if (t === 'k') enemies.push({ x: col * TILE, y: row * TILE, type: 'koopa' });
+      if (t === 'V') enemies.push({ x: col * TILE, y: row * TILE, type: 'plant' });
+      if (t === 'G') enemies.push({ x: col * TILE, y: row * TILE, type: 'boss' });
+      if (t === 'L') enemies.push({ x: col * TILE, y: row * TILE, type: 'ladybug' });
+      if (t === 'M') movingPlatformSpawns.push({ x: col * TILE, y: row * TILE });
       if (t === 'C') coins.push({ x: col * TILE + TILE / 4, y: row * TILE + TILE / 4 });
       if (isQuestionLike(t)) questionBlocks.push({ col, row, content: contentForTile(t) });
       if (t === 'F' && !flagPos) flagPos = { x: col * TILE, y: row * TILE };
       if (t === 'D' && !chonkSpawn) chonkSpawn = { x: col * TILE, y: row * TILE };
+      if (t === 'H') digSpotPositions.push({ col, row });
+      if (t === 'W') warpExitPositions.push({ col, row });
     }
   }
 
-  return { playerStart, enemies, coins, questionBlocks, flagPos, chonkSpawn };
+  // Sub-level starts: all S tiles after the first (main level start)
+  const subLevelStarts = allStarts.slice(1);
+
+  // Pair dig spots with sub-level starts (entry points), fallback to warp exits
+  const digSpots: DigSpot[] = digSpotPositions.map((d, i) => {
+    const subStart = subLevelStarts[i];
+    const exit = warpExitPositions[i];
+    // Target the sub-level's S tile (entry), not the W tile (exit)
+    const target = subStart ?? exit;
+    return {
+      col: d.col, row: d.row,
+      x: d.col * TILE, y: d.row * TILE,
+      targetX: target ? target.col * TILE : d.col * TILE,
+      targetY: target ? (target.row - 1) * TILE : d.row * TILE,
+    };
+  });
+
+  // Pair warp exits back to their dig spots (for return)
+  const warpExits: WarpExit[] = warpExitPositions.map((w, i) => {
+    const dig = digSpotPositions[i];
+    return {
+      col: w.col, row: w.row,
+      x: w.col * TILE, y: w.row * TILE,
+      returnX: dig ? dig.col * TILE : w.col * TILE,
+      returnY: dig ? (dig.row - 1) * TILE : w.row * TILE,
+    };
+  });
+
+  return { playerStart: playerStart ?? { x: 2 * TILE, y: 8 * TILE }, enemies, coins, questionBlocks, flagPos, chonkSpawn, digSpots, warpExits, movingPlatformSpawns };
 }

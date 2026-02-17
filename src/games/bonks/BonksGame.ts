@@ -9,13 +9,14 @@ import {
   KOOPA_SHELL_SPEED, FIREBALL_SPEED, FIREBALL_GRAVITY,
   INVINCIBLE_FRAMES,
   FLOAT_FRAMES, FLOAT_GRAVITY_MULT,
-  WALL_KICK_VX, WALL_KICK_VY,
   SHELL_REVERT_FRAMES, GROW_FREEZE_FRAMES,
-  CHONK_FLUTTER_FRAMES, CHONK_RETURN_FRAMES,
-  CHARACTERS, SELECTABLE_CHARACTERS, CINEMATIC_SCENES,
+  CHONK_SLAM_FRAMES, CHONK_DIVE_SPEED, CHONK_RETURN_FRAMES, CHONK_TONGUE_FRAMES, CHONK_TONGUE_RANGE,
+  PLANT_CYCLE, PLANT_UP_HEIGHT,
+  CHARACTERS, SELECTABLE_CHARACTERS, CINEMATIC_SCENES, WORLD2_CINEMATIC_SCENES,
   BonksState, PlayerState, EnemyState, CoinState, QuestionBlock,
-  Particle, PowerUpItem, SaveData, CompanionState,
+  Particle, PowerUpItem, SaveData, CompanionState, MovingPlatform,
   CharacterId, EnemyType, PowerUp, GamePhase,
+  DigSpot, WarpExit, WarpAnim,
   LEVELS, WORLD_MAP,
   getTile, isSolid, isQuestionLike, isOneWay,
   contentForTile, parseLevelEntities,
@@ -31,6 +32,7 @@ export class BonksGame {
   private prevKeys: Set<string> = new Set();
   private flagX = 0;
   private flagY = 0;
+  private hasFlag = false;
   private onSound: SoundCallback = () => {};
   private hasSave = false;
 
@@ -74,7 +76,7 @@ export class BonksGame {
       powerUp: 'none', animState: 'walk',
       coyoteTime: 0, jumpBuffer: 0,
       fireballs: [], wallSliding: false,
-      growTimer: 0, floatTimer: 0,
+      growTimer: 0, floatTimer: 0, floating: false,
     };
 
     const enemies: EnemyState[] = parsed.enemies.map(e => ({
@@ -103,9 +105,10 @@ export class BonksGame {
       questionBlocks,
       particles: [],
       powerUpItems: [],
-      score: 0, coinsCollected: 0, lives: 3, level: 0,
+      score: 0, coinsCollected: 0, lives: 10, level: 0,
       phase: 'title',
       cameraX: 0,
+      cameraY: 0,
       timeLeft: level.timeLimit,
       levelWidth: (tiles[0]?.length ?? 0) * TILE,
       levelHeight: tiles.length * TILE,
@@ -120,6 +123,13 @@ export class BonksGame {
       cinematicTimer: 0,
       worldMapIndex: 0,
       completedLevels: [],
+      digSpots: [],
+      warpExits: [],
+      inSubLevel: false,
+      hintText: '',
+      hintTimer: 0,
+      warpAnim: null,
+      movingPlatforms: [],
     };
   }
 
@@ -127,37 +137,66 @@ export class BonksGame {
   // LEVEL LOADING
   // ═══════════════════════════════════════
 
-  loadLevel(levelIndex: number): void {
+  loadLevel(levelIndex: number, carryOver = false): void {
     const level = LEVELS[levelIndex] ?? LEVELS[0];
     const tiles = [...level.tiles];
     const parsed = parseLevelEntities(tiles);
 
     this.flagX = parsed.flagPos?.x ?? 0;
     this.flagY = parsed.flagPos?.y ?? 0;
+    this.hasFlag = parsed.flagPos !== null;
 
     const charId = this.state.selectedCharacter;
 
+    // Carry power-up from previous level if advancing (not retrying after death)
+    const prevPowerUp = carryOver ? this.state.player.powerUp : 'none';
+    const prevHadChonk = carryOver && this.state.companion?.mounted;
+    const isBig = prevPowerUp !== 'none';
+    const playerH = isBig ? TILE * 1.5 : TILE - 2;
+
     const player: PlayerState = {
       x: parsed.playerStart.x,
-      y: parsed.playerStart.y,
+      y: parsed.playerStart.y - (isBig ? TILE * 0.5 : 0),
       vx: 0, vy: 0,
-      width: TILE - 10, height: TILE - 2,
+      width: TILE - 10, height: playerH,
       onGround: false, facing: 'right', alive: true,
       invincible: 0, frame: 0, character: charId,
-      powerUp: 'none', animState: 'idle',
+      powerUp: prevPowerUp, animState: 'idle',
       coyoteTime: 0, jumpBuffer: 0,
       fireballs: [], wallSliding: false,
-      growTimer: 0, floatTimer: FLOAT_FRAMES,
+      growTimer: 0, floatTimer: FLOAT_FRAMES, floating: false,
     };
 
-    const enemies: EnemyState[] = parsed.enemies.map(e => ({
-      x: e.x, y: e.y,
-      vx: -ENEMY_SPEED,
-      vy: 0,
-      width: TILE - 8, height: e.type === 'koopa' ? TILE + 4 : TILE - 2,
-      type: e.type, state: 'walk' as const,
-      alive: true, squished: 0, onGround: false, frame: 0,
-      shellTimer: 0, startX: e.x, startY: e.y,
+    const enemies: EnemyState[] = parsed.enemies.map(e => {
+      const isPlant = e.type === 'plant';
+      const isBoss = e.type === 'boss';
+      const isLadybug = e.type === 'ladybug';
+      const h = isBoss ? TILE * 3 : e.type === 'koopa' ? TILE + 4 : isPlant ? 8 : TILE - 2;
+      const w = isBoss ? TILE * 3 : isPlant ? TILE - 4 : TILE - 8;
+      return {
+        x: e.x, y: isPlant ? e.y + TILE - 8 : isBoss ? e.y - TILE * 2 : e.y,
+        vx: isPlant || isBoss ? 0 : isLadybug ? -ENEMY_SPEED * 0.8 : -ENEMY_SPEED,
+        vy: 0,
+        width: w,
+        height: h,
+        type: e.type, state: 'walk' as const,
+        alive: true, squished: 0, onGround: isPlant, frame: Math.floor(Math.random() * PLANT_CYCLE),
+        shellTimer: 0, startX: e.x, startY: isPlant ? e.y + TILE - 8 : e.y,
+        // Boss fields
+        ...(isBoss ? { hp: 3, bossPhase: 0, bossTimer: 60, stunTimer: 0 } : {}),
+        // Ladybug fields
+        ...(isLadybug ? { flyBaseY: e.y } : {}),
+      };
+    });
+
+    // Create moving platforms from M tile markers
+    const movingPlatforms: MovingPlatform[] = parsed.movingPlatformSpawns.map(mp => ({
+      x: mp.x, y: mp.y,
+      width: TILE * 3,
+      startX: mp.x,
+      range: TILE * 2,
+      speed: 1.2,
+      dir: 1,
     }));
 
     const coins: CoinState[] = parsed.coins.map(c => ({
@@ -168,17 +207,32 @@ export class BonksGame {
       col: q.col, row: q.row, hit: false, popTimer: 0, content: q.content,
     }));
 
-    // Spawn Chonk companion if level has a 'D' tile
-    const companion: CompanionState | null = parsed.chonkSpawn ? {
-      x: parsed.chonkSpawn.x, y: parsed.chonkSpawn.y,
-      vx: ENEMY_SPEED * 0.6, vy: 0,
-      width: TILE - 4, height: TILE - 2,
-      onGround: false, facing: 'right', alive: true,
-      mounted: false, anim: 'idle', frame: 0,
-      flutterTimer: CHONK_FLUTTER_FRAMES,
-      spawnX: parsed.chonkSpawn.x, spawnY: parsed.chonkSpawn.y,
-      returnTimer: 0, runningAway: false,
-    } : null;
+    // Spawn Chonk companion if level has a 'D' tile, or carry over from previous level
+    let companion: CompanionState | null = null;
+    if (parsed.chonkSpawn) {
+      companion = {
+        x: parsed.chonkSpawn.x, y: parsed.chonkSpawn.y,
+        vx: ENEMY_SPEED * 0.6, vy: 0,
+        width: TILE + 4, height: TILE + 6,
+        onGround: false, facing: 'right', alive: true,
+        mounted: false, anim: 'idle', frame: 0,
+        diving: false, slamTimer: 0, tongueTimer: 0,
+        spawnX: parsed.chonkSpawn.x, spawnY: parsed.chonkSpawn.y,
+        returnTimer: 0, runningAway: false,
+      };
+    } else if (prevHadChonk) {
+      // Carry Chonk from previous level — spawn mounted on player
+      companion = {
+        x: player.x - 2, y: player.y + player.height - (TILE + 6),
+        vx: 0, vy: 0,
+        width: TILE + 4, height: TILE + 6,
+        onGround: false, facing: 'right', alive: true,
+        mounted: true, anim: 'idle', frame: 0,
+        diving: false, slamTimer: 0, tongueTimer: 0,
+        spawnX: player.x, spawnY: player.y,
+        returnTimer: 0, runningAway: false,
+      };
+    }
 
     this.state = {
       ...this.state,
@@ -192,6 +246,7 @@ export class BonksGame {
       level: levelIndex,
       phase: 'playing',
       cameraX: 0,
+      cameraY: 0,
       timeLeft: level.timeLimit,
       levelWidth: (tiles[0]?.length ?? 0) * TILE,
       levelHeight: tiles.length * TILE,
@@ -199,6 +254,13 @@ export class BonksGame {
       flagReached: false,
       transitionTimer: 0,
       timerFrames: 0,
+      digSpots: parsed.digSpots,
+      warpExits: parsed.warpExits,
+      inSubLevel: false,
+      hintText: '',
+      hintTimer: 0,
+      warpAnim: null,
+      movingPlatforms,
     };
   }
 
@@ -228,6 +290,8 @@ export class BonksGame {
       coins: this.state.coinsCollected,
       completedLevels: [...this.state.completedLevels],
       timestamp: Date.now(),
+      powerUp: this.state.player.powerUp,
+      hasChonk: this.state.companion?.mounted ?? false,
     };
   }
 
@@ -237,6 +301,8 @@ export class BonksGame {
     this.state.coinsCollected = save.coins;
     this.state.lives = save.lives;
     this.state.completedLevels = save.completedLevels ?? [];
+    // Restore power-up and Chonk for next level load
+    if (save.powerUp) this.state.player.powerUp = save.powerUp;
     // Find the world map node for the saved level
     const nodeIdx = WORLD_MAP.findIndex(n => n.id === save.level);
     this.state.worldMapIndex = nodeIdx >= 0 ? nodeIdx : 0;
@@ -250,7 +316,7 @@ export class BonksGame {
   startGame(): void {
     this.state.score = 0;
     this.state.coinsCollected = 0;
-    this.state.lives = 3;
+    this.state.lives = 10;
     this.state.completedLevels = [];
     this.state.worldMapIndex = 0;
     this.state.phase = 'world';
@@ -295,12 +361,20 @@ export class BonksGame {
         this.updateWorld(emit);
         break;
       case 'playing':
+        // Warp animation takes over — skip normal gameplay
+        if (this.state.warpAnim) {
+          this.updateWarpAnim(emit);
+          this.updateParticles();
+          this.updateHints();
+          return;
+        }
         if (this.state.player.growTimer > 0) {
           this.state.player.growTimer--;
           this.state.player.frame++;
           return;
         }
         this.updatePlayer(emit);
+        this.updateMovingPlatforms();
         this.updateCompanion(emit);
         this.updateEnemies(emit);
         this.updateCoins(emit);
@@ -309,6 +383,9 @@ export class BonksGame {
         this.updateParticles();
         this.updateCamera();
         this.updateTimer(emit);
+        this.checkDigSpots(emit);
+        this.checkWarpExits(emit);
+        this.updateHints();
         this.checkFlagReached(emit);
         break;
       case 'dying':
@@ -321,6 +398,16 @@ export class BonksGame {
           if (!this.state.completedLevels.includes(this.state.level)) {
             this.state.completedLevels.push(this.state.level);
           }
+          // Auto-advance cursor to next available level
+          const curNode = WORLD_MAP[this.state.worldMapIndex];
+          if (curNode) {
+            for (const connIdx of curNode.connections) {
+              if (connIdx > this.state.worldMapIndex && WORLD_MAP[connIdx]?.available) {
+                this.state.worldMapIndex = connIdx;
+                break;
+              }
+            }
+          }
           this.state.phase = 'world';
         }
         break;
@@ -328,7 +415,7 @@ export class BonksGame {
         this.state.transitionTimer++;
         if (this.state.transitionTimer > 30 && (this.justPressed('Enter') || this.justPressed(' '))) {
           // Back to world map with reset lives instead of title
-          this.state.lives = 3;
+          this.state.lives = 10;
           this.state.phase = 'world';
         }
         break;
@@ -455,15 +542,28 @@ export class BonksGame {
 
   private updateCinematic(emit: (s: string) => void): void {
     this.state.cinematicTimer++;
+    const scenes = this.state.cinematicTarget === 'level' ? WORLD2_CINEMATIC_SCENES : CINEMATIC_SCENES;
+
+    const finishCinematic = () => {
+      if (this.state.cinematicTarget === 'level' && this.state.pendingLevel !== undefined) {
+        // World 2+ cinematic → load the pending level
+        this.loadLevel(this.state.pendingLevel, true);
+        this.state.cinematicTarget = undefined;
+        this.state.pendingLevel = undefined;
+      } else {
+        // World 1 cinematic → character select
+        this.state.phase = 'select';
+        this.state.selectIndex = 0;
+      }
+    };
 
     // Enter/Space/Right arrow → advance to next scene
     if (this.justPressed('Enter') || this.justPressed(' ') || this.justPressed('ArrowRight') || this.justPressed('d') || this.justPressed('D')) {
       this.state.cinematicScene++;
       this.state.cinematicTimer = 0;
       emit('ui-click');
-      if (this.state.cinematicScene >= CINEMATIC_SCENES.length) {
-        this.state.phase = 'select';
-        this.state.selectIndex = 0;
+      if (this.state.cinematicScene >= scenes.length) {
+        finishCinematic();
       }
       return;
     }
@@ -482,9 +582,8 @@ export class BonksGame {
     if (this.state.cinematicTimer >= CINEMATIC_SCENE_FRAMES) {
       this.state.cinematicScene++;
       this.state.cinematicTimer = 0;
-      if (this.state.cinematicScene >= CINEMATIC_SCENES.length) {
-        this.state.phase = 'select';
-        this.state.selectIndex = 0;
+      if (this.state.cinematicScene >= scenes.length) {
+        finishCinematic();
       }
     }
   }
@@ -560,8 +659,19 @@ export class BonksGame {
     if (this.justPressed('Enter') || this.justPressed(' ')) {
       const node = WORLD_MAP[this.state.worldMapIndex];
       if (node.available && node.id >= 0 && this.isNodeUnlocked(this.state.worldMapIndex)) {
-        this.loadLevel(node.id);
-        emit('bonks-coin');
+        const level = LEVELS[node.id];
+        // Check if entering world 2+ for the first time — show cinematic
+        if (level && level.world === 2 && !this.state.completedLevels.some(id => LEVELS[id]?.world === 2)) {
+          this.state.phase = 'cinematic';
+          this.state.cinematicScene = 0;
+          this.state.cinematicTimer = 0;
+          this.state.cinematicTarget = 'level';
+          this.state.pendingLevel = node.id;
+          emit('bonks-coin');
+        } else {
+          this.loadLevel(node.id, true);
+          emit('bonks-coin');
+        }
       } else {
         // Coming soon or locked
         emit('bonks-die');
@@ -660,46 +770,24 @@ export class BonksGame {
       p.vy *= 0.6;
     }
 
-    // ── BoJangles float ──
-    if (p.character === 'bojangles' && !p.onGround && jumpHeld && p.vy > -1 && p.floatTimer > 0) {
+    // ── Umbrella / float (BooBonks + BoJangles) ──
+    const canFloat = p.character === 'boobonks' || p.character === 'bojangles';
+    const isFloating = canFloat && !p.onGround && jumpHeld && p.vy > -1 && p.floatTimer > 0;
+    p.floating = isFloating && p.character === 'boobonks' && p.vy > 0; // umbrella visual only when descending
+    if (isFloating) {
       p.floatTimer--;
     }
 
     // ── Gravity ──
     let grav = GRAVITY;
-    if (p.character === 'bojangles' && !p.onGround && jumpHeld && p.vy > -1 && p.floatTimer > 0) {
+    if (isFloating) {
       grav *= FLOAT_GRAVITY_MULT;
     }
     p.vy += grav;
     if (p.vy > PLAYER_MAX_FALL) p.vy = PLAYER_MAX_FALL;
 
-    // ── Wall kick (BooBonks) — only if we didn't just do a regular jump ──
-    if (p.character === 'boobonks' && !p.onGround && jumpPress && !didJump) {
-      const dir = p.facing === 'right' ? 1 : -1;
-      const checkCol = dir > 0
-        ? Math.floor((p.x + p.width + 2) / TILE)
-        : Math.floor((p.x - 2) / TILE);
-      const tRow = Math.floor(p.y / TILE);
-      const bRow = Math.floor((p.y + p.height - 1) / TILE);
-      let touchingWall = false;
-      for (let r = tRow; r <= bRow; r++) {
-        if (isSolid(getTile(this.state.tiles, checkCol, r))) {
-          touchingWall = true;
-          break;
-        }
-      }
-      if (touchingWall) {
-        p.vx = -dir * WALL_KICK_VX;
-        p.vy = WALL_KICK_VY;
-        p.facing = dir > 0 ? 'left' : 'right';
-        p.animState = 'wallkick';
-        p.floatTimer = 0;
-        emit('bonks-jump');
-      }
-    }
-
-    // ── Fireball (fire power) ──
-    if (p.powerUp === 'fire') {
+    // ── Fireball (fire power) — skip if mounted on Chonk (tongue takes priority) ──
+    if (p.powerUp === 'fire' && !this.state.companion?.mounted) {
       if (this.justPressed('z') || this.justPressed('Z')) {
         if (p.fireballs.length < 2) {
           const dir = p.facing === 'right' ? 1 : -1;
@@ -733,6 +821,22 @@ export class BonksGame {
             p.onGround = true;
             break;
           }
+        }
+      }
+    }
+
+    // ── Moving platforms ──
+    if (p.vy >= 0 && !p.onGround) {
+      for (const mp of this.state.movingPlatforms) {
+        const platH = 12;
+        if (p.x + p.width > mp.x && p.x < mp.x + mp.width &&
+            p.y + p.height >= mp.y && p.y + p.height <= mp.y + platH + 6) {
+          p.y = mp.y - p.height;
+          p.vy = 0;
+          p.onGround = true;
+          // Move player with platform
+          p.x += mp.speed * mp.dir;
+          break;
         }
       }
     }
@@ -854,7 +958,15 @@ export class BonksGame {
     for (const e of this.state.enemies) {
       if (e.squished > 0) {
         e.squished--;
-        if (e.squished <= 0) e.alive = false;
+        if (e.squished <= 0) {
+          e.alive = false;
+          // Boss defeat → level complete
+          if (e.type === 'boss') {
+            this.state.phase = 'complete';
+            this.state.score += this.state.timeLeft * 5;
+            this.state.transitionTimer = 0;
+          }
+        }
         continue;
       }
       if (!e.alive) continue;
@@ -866,10 +978,66 @@ export class BonksGame {
         this.updateGoomba(e);
       } else if (e.type === 'koopa') {
         this.updateKoopa(e);
+      } else if (e.type === 'plant') {
+        this.updatePlant(e);
+      } else if (e.type === 'boss') {
+        this.updateBoss(e, emit);
+      } else if (e.type === 'ladybug') {
+        this.updateLadybug(e);
       }
 
       // Player collision
       if (!p.alive || p.invincible > 0) continue;
+
+      // Plants: only dangerous when popped up (frame in rising/up phase)
+      if (e.type === 'plant') {
+        const phase = e.frame % PLANT_CYCLE;
+        if (phase < PLANT_CYCLE / 2) continue; // hidden — no collision
+        // Check overlap with the visible portion
+        const plantTop = e.startY + TILE - 8 - PLANT_UP_HEIGHT * Math.min(1, (phase - PLANT_CYCLE / 2) / 15);
+        const plantRect = { x: e.x + 4, y: plantTop, width: e.width - 8, height: e.startY + TILE - 8 - plantTop };
+        if (!this.overlaps(p, plantRect)) continue;
+        // Can't stomp plants — always hurts
+        this.hurtPlayer(emit);
+        continue;
+      }
+
+      // Boss collision — special stomp (HP-based)
+      if (e.type === 'boss') {
+        if (!this.overlaps(p, e)) continue;
+        if (e.stunTimer && e.stunTimer > 0) continue; // invulnerable during stun
+
+        // Stomp check — player feet in top 40% of boss
+        if (p.vy >= -1 && p.y + p.height < e.y + e.height * 0.4) {
+          e.hp = (e.hp ?? 3) - 1;
+          e.stunTimer = 90;
+          e.vx = 0;
+          p.vy = CHARACTERS[p.character].jump * 0.8;
+          this.state.score += 500;
+          this.spawnScorePopup(e.x + e.width / 2, e.y, '+500');
+          this.spawnParticles(e.x + e.width / 2, e.y, 0xFFDD00, 10);
+          emit('bonks-boss-hit');
+
+          if (e.hp <= 0) {
+            // Boss defeated!
+            e.squished = 60;
+            e.vx = 0;
+            e.vy = 0;
+            this.state.score += 5000;
+            this.spawnScorePopup(e.x + e.width / 2, e.y - TILE, '+5000');
+            this.spawnParticles(e.x + e.width / 2, e.y + e.height / 2, 0xFF4444, 20);
+            emit('bonks-boss-defeat');
+          } else {
+            // Phase escalation
+            e.bossPhase = 3 - e.hp;
+          }
+        } else {
+          // Side/bottom collision hurts player
+          this.hurtPlayer(emit);
+        }
+        continue;
+      }
+
       if (!this.overlaps(p, e)) continue;
 
       // Shell state
@@ -887,8 +1055,8 @@ export class BonksGame {
         continue;
       }
 
-      // Stomp check — generous: player feet in top 60% of enemy
-      if (p.vy > 0 && p.y + p.height - 6 < e.y + e.height * 0.6) {
+      // Stomp check — very generous: player feet in top 75% of enemy, allow small upward vy
+      if (p.vy >= -1 && p.y + p.height < e.y + e.height * 0.75) {
         if (e.type === 'koopa') {
           if (e.state === 'walk') {
             e.state = 'shell';
@@ -946,6 +1114,138 @@ export class BonksGame {
     e.vy += GRAVITY;
     if (e.vy > PLAYER_MAX_FALL) e.vy = PLAYER_MAX_FALL;
     this.moveEnemy(e);
+  }
+
+  private updatePlant(e: EnemyState): void {
+    // Plants don't move — they just cycle their frame counter
+    e.frame++;
+    // Plant stays at its spawn position
+    e.x = e.startX;
+    e.y = e.startY;
+  }
+
+  private updateLadybug(e: EnemyState): void {
+    // Ladybugs fly in sine wave pattern (no gravity)
+    const baseY = e.flyBaseY ?? e.startY;
+    e.y = baseY + Math.sin(e.frame * 0.04) * TILE * 1.5;
+
+    // Horizontal movement — bounce off screen edges / level bounds
+    e.x += e.vx;
+    if (e.x < 0) { e.x = 0; e.vx = Math.abs(e.vx); }
+    if (e.x + e.width > this.state.levelWidth) {
+      e.x = this.state.levelWidth - e.width;
+      e.vx = -Math.abs(e.vx);
+    }
+
+    // Bounce off solid tiles
+    const col = e.vx < 0 ? Math.floor(e.x / TILE) : Math.floor((e.x + e.width) / TILE);
+    const row = Math.floor((e.y + e.height / 2) / TILE);
+    if (isSolid(getTile(this.state.tiles, col, row))) {
+      e.vx = -e.vx;
+    }
+  }
+
+  private updateBoss(e: EnemyState, emit: (s: string) => void): void {
+    const p = this.state.player;
+
+    // Stun timer — boss is invulnerable and flashing
+    if (e.stunTimer && e.stunTimer > 0) {
+      e.stunTimer--;
+      e.vy += GRAVITY;
+      if (e.vy > PLAYER_MAX_FALL) e.vy = PLAYER_MAX_FALL;
+      this.moveBoss(e);
+      return;
+    }
+
+    // Boss AI cycle: walk toward player, then jump, then land (vulnerable)
+    const phase = e.bossPhase ?? 0;
+    const walkSpeed = [0.8, 1.2, 1.6][phase] ?? 0.8;
+    const jumpInterval = [180, 140, 100][phase] ?? 180;
+    const jumpPower = phase === 2 ? -14 : -12;
+
+    e.bossTimer = (e.bossTimer ?? 0) + 1;
+
+    if (e.onGround) {
+      // Walk toward player
+      if (p.x + p.width / 2 < e.x + e.width / 2) {
+        e.vx = -walkSpeed;
+      } else {
+        e.vx = walkSpeed;
+      }
+
+      // Jump when timer reaches interval
+      if (e.bossTimer >= jumpInterval) {
+        e.vy = jumpPower;
+        e.onGround = false;
+        e.bossTimer = 0;
+      }
+    } else {
+      // In air — maintain horizontal velocity toward player
+      if (p.x + p.width / 2 < e.x + e.width / 2) {
+        e.vx = -walkSpeed * 0.5;
+      } else {
+        e.vx = walkSpeed * 0.5;
+      }
+    }
+
+    // Apply gravity
+    const wasInAir = !e.onGround;
+    e.vy += GRAVITY;
+    if (e.vy > PLAYER_MAX_FALL) e.vy = PLAYER_MAX_FALL;
+
+    this.moveBoss(e);
+
+    // Sound + screen shake when boss lands
+    if (wasInAir && e.onGround) {
+      emit('bonks-boss-land');
+    }
+  }
+
+  private moveBoss(e: EnemyState): void {
+    const tiles = this.state.tiles;
+
+    // Horizontal movement
+    e.x += e.vx;
+    if (e.vx < 0) {
+      const leftCol = Math.floor(e.x / TILE);
+      const topRow = Math.floor(e.y / TILE);
+      const botRow = Math.floor((e.y + e.height - 1) / TILE);
+      for (let r = topRow; r <= botRow; r++) {
+        if (isSolid(getTile(tiles, leftCol, r))) {
+          e.x = (leftCol + 1) * TILE;
+          e.vx = 0;
+          break;
+        }
+      }
+    } else if (e.vx > 0) {
+      const rightCol = Math.floor((e.x + e.width) / TILE);
+      const topRow = Math.floor(e.y / TILE);
+      const botRow = Math.floor((e.y + e.height - 1) / TILE);
+      for (let r = topRow; r <= botRow; r++) {
+        if (isSolid(getTile(tiles, rightCol, r))) {
+          e.x = rightCol * TILE - e.width;
+          e.vx = 0;
+          break;
+        }
+      }
+    }
+
+    // Vertical movement
+    e.y += e.vy;
+    e.onGround = false;
+    if (e.vy >= 0) {
+      const botRow = Math.floor((e.y + e.height) / TILE);
+      const leftCol = Math.floor((e.x + 2) / TILE);
+      const rightCol = Math.floor((e.x + e.width - 2) / TILE);
+      for (let c = leftCol; c <= rightCol; c++) {
+        if (isSolid(getTile(tiles, c, botRow))) {
+          e.y = botRow * TILE - e.height;
+          e.vy = 0;
+          e.onGround = true;
+          break;
+        }
+      }
+    }
   }
 
   private moveEnemy(e: EnemyState): void {
@@ -1086,6 +1386,7 @@ export class BonksGame {
 
       for (const e of this.state.enemies) {
         if (!e.alive) continue;
+        if (e.type === 'boss') continue; // fireballs don't affect boss
         if (this.overlaps({ x: fb.x, y: fb.y, width: 8, height: 8 }, e)) {
           e.alive = false;
           this.state.score += 200;
@@ -1356,7 +1657,8 @@ export class BonksGame {
         ch.vx = ENEMY_SPEED * 0.6;
         ch.vy = 0;
         ch.facing = 'right';
-        ch.flutterTimer = CHONK_FLUTTER_FRAMES;
+        ch.diving = false; ch.slamTimer = 0;
+        ch.tongueTimer = 0;
       }
       return;
     }
@@ -1368,27 +1670,123 @@ export class BonksGame {
       ch.facing = p.facing;
       ch.onGround = p.onGround;
 
-      // Flutter ability while mounted: hold jump in air to slow descent
-      const jumpHeld = this.keys.has('ArrowUp') || this.keys.has('w') || this.keys.has('W') || this.keys.has(' ');
-      if (!p.onGround && jumpHeld && p.vy > 0 && ch.flutterTimer > 0) {
-        ch.flutterTimer--;
-        ch.anim = 'flutter';
-        // Reduce player's fall speed significantly
-        p.vy = Math.min(p.vy, 1.5);
-      } else {
+      // Tongue attack cooldown
+      if (ch.tongueTimer > 0) {
+        ch.tongueTimer--;
+        ch.anim = 'tongue';
+      }
+
+      // Slam cooldown
+      if (ch.slamTimer > 0) {
+        ch.slamTimer--;
+        ch.anim = 'slam';
+      }
+
+      // Dive slam: Chonk dives straight down at high speed
+      if (ch.diving) {
+        p.vy = CHONK_DIVE_SPEED;
+        p.vx = 0;
+        ch.anim = 'dive';
+        // Spawn speed-line particles while diving
+        if (ch.frame % 2 === 0) {
+          this.state.particles.push({
+            x: p.x + p.width / 2 + (Math.random() - 0.5) * 16,
+            y: p.y - 4,
+            vx: (Math.random() - 0.5) * 0.5,
+            vy: -2 - Math.random() * 2,
+            life: 8, color: 0xFFFFAA, size: 2 + Math.random() * 2,
+          });
+        }
+        // Landing: slam!
+        if (p.onGround) {
+          ch.diving = false;
+          ch.slamTimer = CHONK_SLAM_FRAMES;
+          ch.anim = 'slam';
+          emit('bonks-slam');
+          // Kill enemies within slam radius (~3 tiles)
+          const slamRadius = TILE * 3;
+          const cx = p.x + p.width / 2;
+          const cy = p.y + p.height;
+          for (const e of this.state.enemies) {
+            if (!e.alive || e.squished > 0 || e.type === 'boss') continue;
+            const ex = e.x + e.width / 2;
+            const ey = e.y + e.height / 2;
+            const dist = Math.sqrt((ex - cx) ** 2 + (ey - cy) ** 2);
+            if (dist < slamRadius) {
+              e.alive = false;
+              this.state.score += 200;
+              this.spawnParticles(e.x + e.width / 2, e.y, 0xFFAA00, 6);
+              this.spawnScorePopup(e.x, e.y, '+200');
+            }
+          }
+          // Ground slam particles (burst outward)
+          for (let i = 0; i < 16; i++) {
+            const angle = (i / 16) * Math.PI * 2;
+            this.state.particles.push({
+              x: cx, y: cy,
+              vx: Math.cos(angle) * (2 + Math.random() * 2),
+              vy: Math.sin(angle) * (1 + Math.random()) - 2,
+              life: 15, color: 0xFFAA00, size: 3 + Math.random() * 3,
+            });
+          }
+        }
+      } else if (ch.tongueTimer <= 0 && ch.slamTimer <= 0) {
         ch.anim = p.onGround ? (Math.abs(p.vx) > 0.3 ? 'walk' : 'idle') : (p.vy < 0 ? 'jump' : 'fall');
       }
 
-      // Reset flutter on ground
+      // Reset dive on ground (safety)
       if (p.onGround) {
-        ch.flutterTimer = CHONK_FLUTTER_FRAMES;
+        ch.diving = false;
       }
 
-      // Dismount: press Down
-      const wantDown = this.keys.has('ArrowDown') || this.keys.has('s') || this.keys.has('S');
+      // Z button: tongue on ground, dive slam in air
+      if (this.justPressed('z') || this.justPressed('Z')) {
+        if (p.onGround) {
+          // Ground: tongue attack
+          if (ch.tongueTimer <= 0) {
+            ch.tongueTimer = CHONK_TONGUE_FRAMES;
+            ch.anim = 'tongue';
+            emit('bonks-tongue');
+            // Check for enemies in tongue range
+            const tongueDir = p.facing === 'right' ? 1 : -1;
+            const tongueX = p.x + (tongueDir > 0 ? p.width : -CHONK_TONGUE_RANGE);
+            const tongueW = CHONK_TONGUE_RANGE;
+            const tongueY = p.y;
+            const tongueH = p.height;
+            for (const e of this.state.enemies) {
+              if (!e.alive || e.squished > 0) continue;
+              if (this.overlaps(
+                { x: tongueX, y: tongueY, width: tongueW, height: tongueH },
+                e
+              )) {
+                e.alive = false;
+                this.state.score += 200;
+                this.spawnParticles(e.x + e.width / 2, e.y, 0xFF6699, 8);
+                this.spawnScorePopup(e.x, e.y, '+200');
+              }
+            }
+          }
+        } else {
+          // Air: start dive slam
+          if (!ch.diving && ch.slamTimer <= 0) {
+            ch.diving = true;
+            ch.anim = 'dive';
+            emit('bonks-jump');
+          }
+        }
+      }
+
+      // Dismount: press Down (justPressed so holding after warp doesn't trigger)
+      const wantDown = this.justPressed('ArrowDown') || this.justPressed('s') || this.justPressed('S');
       if (wantDown && p.onGround) {
-        this.dismountChonk(false);
-        emit('bonks-jump');
+        const pCol = Math.floor((p.x + p.width / 2) / TILE);
+        const groundRow = Math.floor((p.y + p.height) / TILE);
+        const onDigSpot = !this.state.inSubLevel &&
+          this.state.digSpots.some(d => d.col === pCol && d.row === groundRow);
+        if (!onDigSpot) {
+          this.dismountChonk(false);
+          emit('bonks-jump');
+        }
       }
       return;
     }
@@ -1418,7 +1816,8 @@ export class BonksGame {
     const ch = this.state.companion;
     if (!ch) return;
     ch.mounted = true;
-    ch.flutterTimer = CHONK_FLUTTER_FRAMES;
+    ch.diving = false; ch.slamTimer = 0;
+    ch.tongueTimer = 0;
   }
 
   private dismountChonk(fromHit: boolean): void {
@@ -1428,12 +1827,15 @@ export class BonksGame {
     ch.mounted = false;
 
     if (fromHit) {
-      // Chonk runs away, returns after a delay
-      ch.runningAway = true;
-      ch.returnTimer = CHONK_RETURN_FRAMES;
-      ch.vx = p.facing === 'right' ? -3 : 3; // run opposite direction
-      ch.vy = -5;
-      p.invincible = INVINCIBLE_FRAMES / 2;
+      // Yoshi-style: player pops off, Chonk stays put (doesn't run away)
+      ch.vx = 0;
+      ch.vy = 0;
+      ch.anim = 'idle'; // sits and barks
+      ch.diving = false; ch.slamTimer = 0;
+      ch.tongueTimer = 0;
+      // Player bounces upward and gets invincibility
+      p.vy = -6;
+      p.invincible = INVINCIBLE_FRAMES;
     }
   }
 
@@ -1489,6 +1891,9 @@ export class BonksGame {
       ch.vy = 0;
       ch.runningAway = false;
       ch.mounted = false;
+      ch.tongueTimer = 0;
+      ch.diving = false;
+      ch.slamTimer = 0;
     }
   }
 
@@ -1496,13 +1901,47 @@ export class BonksGame {
   // CAMERA
   // ═══════════════════════════════════════
 
+  private updateMovingPlatforms(): void {
+    for (const mp of this.state.movingPlatforms) {
+      mp.x += mp.speed * mp.dir;
+      if (mp.x > mp.startX + mp.range) {
+        mp.x = mp.startX + mp.range;
+        mp.dir = -1;
+      } else if (mp.x < mp.startX - mp.range) {
+        mp.x = mp.startX - mp.range;
+        mp.dir = 1;
+      }
+    }
+  }
+
   private updateCamera(): void {
     const p = this.state.player;
-    const targetX = p.x - 400;
+    const CANVAS_W = 900;
+    const CANVAS_H = 500;
+
+    // Horizontal camera
+    const targetX = p.x - CANVAS_W * 0.44;
     this.state.cameraX += (targetX - this.state.cameraX) * 0.1;
     if (this.state.cameraX < 0) this.state.cameraX = 0;
-    const maxCam = this.state.levelWidth - 900;
-    if (maxCam > 0 && this.state.cameraX > maxCam) this.state.cameraX = maxCam;
+    const maxCamX = this.state.levelWidth - CANVAS_W;
+    if (maxCamX > 0 && this.state.cameraX > maxCamX) this.state.cameraX = maxCamX;
+
+    // Vertical camera — push ground to bottom of canvas
+    const MAIN_ROWS = 13;
+    const mainBottom = MAIN_ROWS * TILE; // 416
+    const isTallLevel = this.state.levelHeight > CANVAS_H + TILE * 2;
+    if (this.state.inSubLevel || isTallLevel) {
+      // In sub-level or tall level: follow player vertically
+      const targetY = p.y - CANVAS_H * 0.5;
+      const maxCamY = this.state.levelHeight - CANVAS_H;
+      this.state.cameraY += (targetY - this.state.cameraY) * 0.12;
+      if (this.state.cameraY < 0) this.state.cameraY = 0;
+      if (this.state.cameraY > maxCamY) this.state.cameraY = maxCamY;
+    } else {
+      // Main level: lock ground to bottom of canvas
+      const targetCamY = mainBottom - CANVAS_H; // -84 for 13-row levels
+      this.state.cameraY += (targetCamY - this.state.cameraY) * 0.15;
+    }
   }
 
   // ═══════════════════════════════════════
@@ -1521,11 +1960,240 @@ export class BonksGame {
   }
 
   // ═══════════════════════════════════════
+  // DIG SPOTS & WARP EXITS
+  // ═══════════════════════════════════════
+
+  private checkDigSpots(emit: (s: string) => void): void {
+    const p = this.state.player;
+    const ch = this.state.companion;
+    if (!p.alive || !p.onGround) return;
+    if (this.state.inSubLevel) return;
+    if (this.state.warpAnim) return; // animation already running
+
+    const wantDown = this.justPressed('ArrowDown') || this.justPressed('s') || this.justPressed('S');
+    if (!wantDown) return;
+
+    // Must be riding Chonk to dig
+    if (!ch?.mounted) return;
+
+    const pCol = Math.floor((p.x + p.width / 2) / TILE);
+    const groundRow = Math.floor((p.y + p.height) / TILE);
+
+    for (const dig of this.state.digSpots) {
+      if (dig.col === pCol && dig.row === groundRow) {
+        // Start dig-down animation
+        this.state.warpAnim = {
+          type: 'dig-down',
+          phase: 'dig',
+          timer: 30,  // dig phase: Chonk digs for 30 frames
+          startX: p.x,
+          startY: p.y,
+          targetX: dig.targetX,
+          targetY: dig.targetY - TILE * 2, // arrive above target, fall down
+          startCam: this.state.cameraX,
+        };
+        p.vx = 0;
+        p.vy = 0;
+        emit('bonks-brick');
+        return;
+      }
+    }
+  }
+
+  private checkWarpExits(emit: (s: string) => void): void {
+    const p = this.state.player;
+    if (!p.alive || !p.onGround || !this.state.inSubLevel) return;
+    if (this.state.warpAnim) return;
+
+    const wantUp = this.justPressed('ArrowUp') || this.justPressed('w') || this.justPressed('W');
+    if (!wantUp) return;
+
+    const pCol = Math.floor((p.x + p.width / 2) / TILE);
+    const groundRow = Math.floor((p.y + p.height) / TILE);
+
+    for (const warp of this.state.warpExits) {
+      if (Math.abs(pCol - warp.col) <= 1 && warp.row >= groundRow - 3 && warp.row <= groundRow) {
+        // Start warp-up animation
+        this.state.warpAnim = {
+          type: 'warp-up',
+          phase: 'sink',  // skip dig, go straight to sink (rise into pipe)
+          timer: 25,
+          startX: p.x,
+          startY: p.y,
+          targetX: warp.returnX,
+          targetY: warp.returnY - TILE * 2, // arrive above target, fall down
+          startCam: this.state.cameraX,
+        };
+        p.vx = 0;
+        p.vy = 0;
+        emit('bonks-coin');
+        return;
+      }
+    }
+  }
+
+  private updateWarpAnim(emit: (s: string) => void): void {
+    const wa = this.state.warpAnim;
+    if (!wa) return;
+
+    const p = this.state.player;
+
+    wa.timer--;
+
+    if (wa.phase === 'dig') {
+      // Chonk digs — player shakes slightly and sinks a bit
+      p.vx = 0;
+      p.vy = 0;
+      const progress = 1 - wa.timer / 30;
+      p.y = wa.startY + progress * (TILE * 0.5); // sink slightly during dig
+      // Companion shakes
+      const ch = this.state.companion;
+      if (ch) {
+        ch.anim = 'tongue'; // use tongue anim as "digging" visual
+        ch.x = p.x - 2 + (Math.random() * 4 - 2); // shake
+        ch.y = p.y + p.height - ch.height;
+      }
+      if (wa.timer <= 0) {
+        wa.phase = 'sink';
+        wa.timer = 20; // sink into pipe for 20 frames
+        emit('bonks-block');
+      }
+    } else if (wa.phase === 'sink') {
+      // Player sinks down (dig) or rises up (warp) into the pipe
+      p.vx = 0;
+      p.vy = 0;
+      const progress = 1 - wa.timer / 20;
+      if (wa.type === 'dig-down') {
+        // Sink downward into the ground
+        p.y = wa.startY + TILE * 0.5 + progress * TILE * 1.5;
+      } else {
+        // Rise upward into the pipe
+        p.y = wa.startY - progress * TILE * 2;
+      }
+      const ch = this.state.companion;
+      if (ch?.mounted) {
+        ch.x = p.x - 2;
+        ch.y = p.y + p.height - ch.height;
+      }
+      if (wa.timer <= 0) {
+        wa.phase = 'blackout';
+        wa.timer = 15; // brief black screen
+      }
+    } else if (wa.phase === 'blackout') {
+      // Screen is black — teleport happens here mid-blackout
+      p.vx = 0;
+      p.vy = 0;
+      if (wa.timer === 10) {
+        // Teleport to destination
+        p.x = wa.targetX;
+        p.y = wa.targetY;
+        const ch = this.state.companion;
+        if (ch?.mounted) {
+          ch.x = p.x - 2;
+          ch.y = p.y + p.height - ch.height;
+          ch.anim = 'idle';
+        }
+        this.state.cameraX = Math.max(0, p.x - 400);
+        if (wa.type === 'dig-down') {
+          this.state.inSubLevel = true;
+          this.state.hintText = 'CHONK DUG A TUNNEL!';
+          this.state.hintTimer = 180;
+        } else {
+          this.state.inSubLevel = false;
+          this.state.hintText = 'BACK TO THE SURFACE!';
+          this.state.hintTimer = 150;
+        }
+      }
+      if (wa.timer <= 0) {
+        wa.phase = 'arrive';
+        wa.timer = 20; // fall into view
+      }
+    } else if (wa.phase === 'arrive') {
+      // Player falls from above into the destination
+      const progress = 1 - wa.timer / 20;
+      const fallDist = TILE * 2;
+      p.y = wa.targetY + progress * fallDist;
+      p.vy = 0;
+      p.vx = 0;
+      const ch = this.state.companion;
+      if (ch?.mounted) {
+        ch.x = p.x - 2;
+        ch.y = p.y + p.height - ch.height;
+      }
+      // Update camera to follow
+      const targetCam = Math.max(0, p.x - 450);
+      this.state.cameraX += (targetCam - this.state.cameraX) * 0.15;
+      if (wa.timer <= 0) {
+        // Animation complete — resume normal gameplay
+        p.vy = 0;
+        this.state.warpAnim = null;
+        emit('bonks-stomp');
+      }
+    }
+  }
+
+  private updateHints(): void {
+    if (this.state.hintTimer > 0) {
+      this.state.hintTimer--;
+      if (this.state.hintTimer <= 0) this.state.hintText = '';
+      return;
+    }
+
+    const p = this.state.player;
+    const ch = this.state.companion;
+
+    // Hint: near Chonk (not mounted yet)
+    if (ch && ch.alive && !ch.mounted && !ch.runningAway) {
+      const dist = Math.abs(p.x - ch.x) + Math.abs(p.y - ch.y);
+      if (dist < TILE * 5) {
+        this.state.hintText = 'JUMP ON CHONK TO RIDE!';
+        this.state.hintTimer = 0; // show continuously while near
+        return;
+      }
+    }
+
+    // Hint: just mounted Chonk (show abilities)
+    if (ch?.mounted && ch.frame < 120) {
+      this.state.hintText = 'Z: TONGUE (GROUND)  Z: DIVE SLAM (AIR)';
+      this.state.hintTimer = 0;
+      return;
+    }
+
+    // Hint: near dig spot while riding Chonk
+    if (ch?.mounted && !this.state.inSubLevel) {
+      const pCol = Math.floor((p.x + p.width / 2) / TILE);
+      const groundRow = Math.floor((p.y + p.height) / TILE);
+      for (const dig of this.state.digSpots) {
+        if (Math.abs(dig.col - pCol) <= 3 && dig.row === groundRow) {
+          this.state.hintText = 'PRESS DOWN TO DIG!';
+          this.state.hintTimer = 0;
+          return;
+        }
+      }
+    }
+
+    // Hint: near warp exit in sub-level
+    if (this.state.inSubLevel) {
+      const pCol = Math.floor((p.x + p.width / 2) / TILE);
+      const groundRow = Math.floor((p.y + p.height) / TILE);
+      for (const warp of this.state.warpExits) {
+        if (Math.abs(pCol - warp.col) <= 3 && warp.row >= groundRow - 3 && warp.row <= groundRow) {
+          this.state.hintText = 'PRESS UP TO EXIT!';
+          this.state.hintTimer = 0;
+          return;
+        }
+      }
+    }
+
+    this.state.hintText = '';
+  }
+
+  // ═══════════════════════════════════════
   // FLAG / LEVEL END
   // ═══════════════════════════════════════
 
   private checkFlagReached(emit: (s: string) => void): void {
-    if (this.state.flagReached) return;
+    if (!this.hasFlag || this.state.flagReached) return;
     const p = this.state.player;
     if (p.x + p.width > this.flagX && p.x < this.flagX + TILE * 2) {
       this.state.flagReached = true;

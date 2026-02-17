@@ -4,8 +4,9 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { Application, Container, Sprite, Graphics } from 'pixi.js';
-import { BonksState, TILE, LEVELS, WORLD_MAP, getTile, isSolid, isQuestionLike,
-  CHARACTERS, CharacterId, SELECTABLE_CHARACTERS, CINEMATIC_SCENES, STORY } from './rules';
+import { BonksState, EnemyState, TILE, LEVELS, WORLD_MAP, getTile, isSolid, isQuestionLike,
+  CHARACTERS, CharacterId, SELECTABLE_CHARACTERS, CINEMATIC_SCENES, WORLD2_CINEMATIC_SCENES, STORY,
+  CHONK_TONGUE_FRAMES, CHONK_TONGUE_RANGE, PLANT_CYCLE, PLANT_UP_HEIGHT, MovingPlatform } from './rules';
 import { tex, hasTex, PX, FONT_W, FONT_H, initBonksTextures } from './BonksSprites';
 
 const CANVAS_W = 900;
@@ -173,7 +174,8 @@ export class BonksRenderer {
   // ═══════════════════════════════════════
 
   private renderCinematic(state: BonksState): void {
-    const scene = CINEMATIC_SCENES[state.cinematicScene];
+    const scenes = state.cinematicTarget === 'level' ? WORLD2_CINEMATIC_SCENES : CINEMATIC_SCENES;
+    const scene = scenes[state.cinematicScene];
     if (!scene) return;
 
     // Dark starry background
@@ -241,7 +243,7 @@ export class BonksRenderer {
 
     // Scene indicator dots
     const dotY = CANVAS_H - 42;
-    for (let i = 0; i < CINEMATIC_SCENES.length; i++) {
+    for (let i = 0; i < scenes.length; i++) {
       const g = new Graphics();
       const isCurrent = i === state.cinematicScene;
       const color = isCurrent ? 0xFFDD00 : 0x444444;
@@ -544,8 +546,11 @@ export class BonksRenderer {
       }
     }
 
-    // World name header
-    this.drawCentered('WORLD 1: GREEN HILLS', 12, 0xFFDD00, this.overlayContainer, 1.3);
+    // World name header — dynamic based on selected node
+    const selNode = WORLD_MAP[state.worldMapIndex];
+    const worldNum = selNode ? (selNode.name.startsWith('2') ? 2 : 1) : 1;
+    const worldLabel = worldNum === 2 ? 'WORLD 2: CLOUD KINGDOM' : 'WORLD 1: GREEN HILLS';
+    this.drawCentered(worldLabel, 12, 0xFFDD00, this.overlayContainer, 1.3);
     const divW = 280;
     const div = new Graphics();
     div.rect(CANVAS_W / 2 - divW / 2, 34, divW, 1).fill({ color: 0xFFDD00, alpha: 0.3 });
@@ -633,38 +638,134 @@ export class BonksRenderer {
   private renderGameplay(state: BonksState): void {
     this.renderGameplayWorld(state);
 
+    // Warp animation overlay
+    if (state.warpAnim) {
+      this.drawWarpAnimOverlay(state);
+    }
+
     // HUD (not shown during title)
     this.drawHUD(state);
+
+    // Hint text — fixed position below HUD bar
+    if (state.hintText && state.phase === 'playing') {
+      const alpha = state.hintTimer > 0 ? Math.min(1, state.hintTimer / 20) : 0.85;
+      const tw = state.hintText.length * (FONT_W + 1) * PX + 12;
+      const hx = CANVAS_W / 2;
+      const hy = 36;
+      const pill = new Graphics();
+      pill.roundRect(hx - tw / 2, hy - 4, tw, 18, 6).fill({ color: 0x000000, alpha: alpha * 0.7 });
+      this.hudContainer.addChild(pill);
+      this.drawText(state.hintText, hx - tw / 2 + 6, hy, 0xFFDD00, this.hudContainer, 1, alpha);
+    }
+  }
+
+  private drawWarpAnimOverlay(state: BonksState): void {
+    const wa = state.warpAnim;
+    if (!wa) return;
+
+    const g = new Graphics();
+
+    if (wa.phase === 'dig') {
+      const cx = state.player.x - state.cameraX + state.player.width / 2;
+      const cy = state.player.y - state.cameraY + state.player.height;
+      const progress = 1 - wa.timer / 30;
+      const numParticles = Math.floor(progress * 12);
+      for (let i = 0; i < numParticles; i++) {
+        const angle = (i / 12) * Math.PI * 2 + this.frameCount * 0.3;
+        const radius = 10 + progress * 25;
+        const px = cx + Math.cos(angle) * radius;
+        const py = cy - Math.sin(angle) * radius * 0.6 - progress * 20;
+        const size = 3 + Math.random() * 3;
+        g.rect(px - size / 2, py - size / 2, size, size).fill({ color: 0x8B6534, alpha: 0.7 });
+      }
+      // Slight screen shake
+      if (wa.timer % 4 < 2) {
+        this.worldContainer.x = (Math.random() - 0.5) * 3;
+        this.worldContainer.y = (Math.random() - 0.5) * 3;
+      } else {
+        this.worldContainer.x = 0;
+        this.worldContainer.y = 0;
+      }
+    } else if (wa.phase === 'sink') {
+      const progress = 1 - wa.timer / 20;
+      const cx = state.player.x - state.cameraX + state.player.width / 2;
+      const cy = state.player.y - state.cameraY + state.player.height / 2;
+      const maxR = Math.max(CANVAS_W, CANVAS_H);
+      const r = maxR * (1 - progress);
+      // Draw black with a hole (approximate with 4 rects)
+      if (r < maxR * 0.95) {
+        const alpha = Math.min(1, progress * 1.5);
+        // Top
+        g.rect(0, 0, CANVAS_W, Math.max(0, cy - r)).fill({ color: 0x000000, alpha });
+        // Bottom
+        g.rect(0, cy + r, CANVAS_W, CANVAS_H - cy - r).fill({ color: 0x000000, alpha });
+        // Left
+        g.rect(0, cy - r, Math.max(0, cx - r), r * 2).fill({ color: 0x000000, alpha });
+        // Right
+        g.rect(cx + r, cy - r, CANVAS_W - cx - r, r * 2).fill({ color: 0x000000, alpha });
+      }
+      this.worldContainer.x = 0;
+      this.worldContainer.y = 0;
+    } else if (wa.phase === 'blackout') {
+      // Full black screen
+      g.rect(0, 0, CANVAS_W, CANVAS_H).fill({ color: 0x000000, alpha: 1 });
+      // Text in center
+      const text = wa.type === 'dig-down' ? 'GOING UNDERGROUND...' : 'RETURNING TO SURFACE...';
+      const tw = text.length * (FONT_W + 1) * PX;
+      this.drawText(text, CANVAS_W / 2 - tw / 2, CANVAS_H / 2 - 6, 0xFFDD00, this.overlayContainer);
+      this.worldContainer.x = 0;
+      this.worldContainer.y = 0;
+    } else if (wa.phase === 'arrive') {
+      const progress = 1 - wa.timer / 20;
+      const cx = state.player.x - state.cameraX + state.player.width / 2;
+      const cy = state.player.y - state.cameraY + state.player.height / 2;
+      const maxR = Math.max(CANVAS_W, CANVAS_H);
+      const r = maxR * progress;
+      const alpha = Math.max(0, 1 - progress * 1.5);
+      if (alpha > 0.01) {
+        g.rect(0, 0, CANVAS_W, Math.max(0, cy - r)).fill({ color: 0x000000, alpha });
+        g.rect(0, cy + r, CANVAS_W, CANVAS_H - cy - r).fill({ color: 0x000000, alpha });
+        g.rect(0, cy - r, Math.max(0, cx - r), r * 2).fill({ color: 0x000000, alpha });
+        g.rect(cx + r, cy - r, CANVAS_W - cx - r, r * 2).fill({ color: 0x000000, alpha });
+      }
+      this.worldContainer.x = 0;
+      this.worldContainer.y = 0;
+    }
+
+    this.overlayContainer.addChild(g);
   }
 
   private renderGameplayWorld(state: BonksState): void {
     const cam = state.cameraX;
-    const bgColor = LEVELS[state.level]?.bgColor ?? 0x6699FF;
+    const camY = state.cameraY;
+    const bgColor = state.inSubLevel ? 0x222244 : (LEVELS[state.level]?.bgColor ?? 0x6699FF);
 
     // Sky
     const sky = new Graphics();
     sky.rect(0, 0, CANVAS_W, CANVAS_H).fill({ color: bgColor });
     this.bgContainer.addChild(sky);
 
-    this.drawBackground(cam, state);
-    this.drawTiles(state, cam);
-    this.drawPowerUpItems(state, cam);
-    this.drawCoins(state, cam);
-    this.drawEnemies(state, cam);
-    this.drawCompanion(state, cam);
+    if (!state.inSubLevel) this.drawBackground(cam, state);
+    this.drawWater(state, cam, camY);
+    this.drawTiles(state, cam, camY);
+    this.drawDigSpotIndicators(state, cam, camY);
+    this.drawPowerUpItems(state, cam, camY);
+    this.drawMovingPlatforms(state, cam, camY);
+    this.drawCoins(state, cam, camY);
+    this.drawEnemies(state, cam, camY);
+    this.drawCompanion(state, cam, camY);
 
     if (state.player.alive) {
-      this.drawPlayer(state, cam);
+      this.drawPlayer(state, cam, camY);
     } else if (state.phase === 'dying') {
-      // Blink the player during death (flash in/out)
       if (Math.floor(state.transitionTimer / 4) % 2 === 0) {
-        this.drawPlayer(state, cam);
+        this.drawPlayer(state, cam, camY);
       }
     }
 
-    this.drawFireballs(state, cam);
-    this.drawParticles(state, cam);
-    this.drawFlag(state, cam);
+    this.drawFireballs(state, cam, camY);
+    this.drawParticles(state, cam, camY);
+    this.drawFlag(state, cam, camY);
   }
 
   // ═══════════════════════════════════════
@@ -698,7 +799,7 @@ export class BonksRenderer {
         if (hx < -200 || hx > CANVAS_W + 200) continue;
         const hill = new Sprite(hillTex);
         hill.x = hx;
-        hill.y = CANVAS_H - 70 - (i % 2) * 20;
+        hill.y = CANVAS_H - 50 - (i % 2) * 20;
         hill.alpha = 0.4;
         hill.scale.set(3);
         this.bgContainer.addChild(hill);
@@ -713,7 +814,7 @@ export class BonksRenderer {
         if (bx < -100 || bx > CANVAS_W + 100) continue;
         const bush = new Sprite(bushTex);
         bush.x = bx;
-        bush.y = CANVAS_H - 40;
+        bush.y = CANVAS_H - 20;
         bush.alpha = 0.35;
         bush.scale.set(2);
         this.bgContainer.addChild(bush);
@@ -722,21 +823,113 @@ export class BonksRenderer {
   }
 
   // ═══════════════════════════════════════
+  // WATER (fills gaps in ground)
+  // ═══════════════════════════════════════
+
+  private drawWater(state: BonksState, cam: number, camY: number): void {
+    if (state.inSubLevel) return;
+    // Cloud Kingdom has no water — bottomless pits instead
+    const level = LEVELS[state.level];
+    if (level && level.world >= 2) return;
+    // Main level ground is always at rows 11-12 regardless of total level height
+    const groundRow = 11;
+    const groundRow2 = 12;
+
+    const startCol = Math.max(0, Math.floor(cam / TILE) - 1);
+    const endCol = Math.min((state.tiles[0]?.length ?? 0), Math.ceil((cam + CANVAS_W) / TILE) + 1);
+    // Offset water surface 6px below ground tile top so waves never peek above ground
+    const waterSurface = groundRow * TILE - camY + 6;
+    const waterBottom = CANVAS_H + 20;
+
+    const g = new Graphics();
+    for (let col = startCol; col < endCol; col++) {
+      // Only draw water where both ground rows are empty (full gap)
+      const t1 = getTile(state.tiles, col, groundRow);
+      const t2 = getTile(state.tiles, col, groundRow2);
+      if (isSolid(t1) || isSolid(t2)) continue;
+      const x = col * TILE - cam;
+
+      // Deep water body
+      g.rect(x, waterSurface + 8, TILE, waterBottom - waterSurface).fill({ color: 0x1155AA, alpha: 0.85 });
+      // Surface layer with wave (only oscillates downward)
+      const wave = Math.abs(Math.sin(this.frameCount * 0.06 + col * 0.8)) * 4;
+      g.rect(x, waterSurface + wave, TILE, 10).fill({ color: 0x3399DD, alpha: 0.7 });
+      // Foam / highlights
+      const foam = Math.abs(Math.sin(this.frameCount * 0.04 + col * 1.2)) * 2;
+      g.rect(x + 4, waterSurface + wave + foam, TILE - 8, 3).fill({ color: 0x88CCFF, alpha: 0.5 });
+    }
+    this.bgContainer.addChild(g);
+
+    // Sparkle dots
+    const sparkles = new Graphics();
+    for (let col = startCol; col < endCol; col++) {
+      const t1 = getTile(state.tiles, col, groundRow);
+      const t2 = getTile(state.tiles, col, groundRow2);
+      if (isSolid(t1) || isSolid(t2)) continue;
+      if ((col + Math.floor(this.frameCount / 20)) % 4 !== 0) continue;
+      const x = col * TILE - cam + TILE / 2;
+      const sparkY = waterSurface + 16 + Math.sin(this.frameCount * 0.05 + col) * 5;
+      const alpha = (Math.sin(this.frameCount * 0.1 + col * 2) + 1) * 0.3;
+      sparkles.circle(x, sparkY, 1.5).fill({ color: 0xFFFFFF, alpha });
+    }
+    this.bgContainer.addChild(sparkles);
+  }
+
+  // ═══════════════════════════════════════
+  // MOVING PLATFORMS (Cloud Kingdom)
+  // ═══════════════════════════════════════
+
+  private drawMovingPlatforms(state: BonksState, cam: number, camY: number): void {
+    if (state.movingPlatforms.length === 0) return;
+
+    for (const mp of state.movingPlatforms) {
+      const x = mp.x - cam;
+      if (x < -mp.width || x > 900 + mp.width) continue;
+      const y = mp.y - camY;
+
+      const g = new Graphics();
+      // Cloud platform body — fluffy cloud shape
+      const w = mp.width;
+      const h = 14;
+
+      // Main cloud body (rounded rectangle)
+      g.roundRect(x + 2, y + 2, w - 4, h, 6).fill({ color: 0xFFFFFF, alpha: 0.95 });
+
+      // Cloud puffs on top
+      const puffR = 10;
+      g.circle(x + w * 0.2, y + 2, puffR).fill({ color: 0xFFFFFF });
+      g.circle(x + w * 0.5, y - 2, puffR + 2).fill({ color: 0xFFFFFF });
+      g.circle(x + w * 0.8, y + 2, puffR).fill({ color: 0xFFFFFF });
+
+      // Light shading
+      g.roundRect(x + 4, y + h - 4, w - 8, 4, 3).fill({ color: 0xDDDDEE, alpha: 0.5 });
+
+      // Subtle outline
+      g.roundRect(x + 2, y + 2, w - 4, h, 6).stroke({ color: 0xBBBBCC, width: 1, alpha: 0.4 });
+
+      this.tileContainer.addChild(g);
+    }
+  }
+
+  // ═══════════════════════════════════════
   // TILES
   // ═══════════════════════════════════════
 
-  private drawTiles(state: BonksState, cam: number): void {
+  private drawTiles(state: BonksState, cam: number, camY: number): void {
     const startCol = Math.max(0, Math.floor(cam / TILE) - 1);
     const endCol = Math.min((state.tiles[0]?.length ?? 0), Math.ceil((cam + CANVAS_W) / TILE) + 1);
+    const startRow = Math.max(0, Math.floor(camY / TILE) - 1);
+    const endRow = Math.min(state.tiles.length, Math.ceil((camY + CANVAS_H) / TILE) + 1);
 
-    for (let row = 0; row < state.tiles.length; row++) {
+    for (let row = startRow; row < endRow; row++) {
       for (let col = startCol; col < endCol; col++) {
         const tile = getTile(state.tiles, col, row);
         if (tile === '.' || tile === 'S' || tile === 'E' || tile === 'C' || tile === 'G'
-            || tile === 'k' || tile === 'I' || tile === 'D') continue;
+            || tile === 'k' || tile === 'D' || tile === 'W' || tile === 'V'
+            || tile === 'L' || tile === 'M') continue;
 
         const x = col * TILE - cam;
-        const y = row * TILE;
+        const y = row * TILE - camY;
         const texName = this.getTileTexture(tile, col, row, state);
 
         if (texName && this.texturesReady && hasTex(texName)) {
@@ -768,8 +961,24 @@ export class BonksRenderer {
       }
       case 'P': return 'tile-pipe-top';
       case 'p': return 'tile-pipe-body';
+      case 'H': return 'tile-dig-spot'; // dig spot — dirt mound
+      case 'I': return 'tile-platform'; // one-way platform
       case 'F': return null;
       default: return null;
+    }
+  }
+
+  private drawDigSpotIndicators(state: BonksState, cam: number, camY: number): void {
+    if (state.inSubLevel) return;
+    for (const dig of state.digSpots) {
+      const x = dig.x + TILE / 2 - cam;
+      if (x < -TILE || x > CANVAS_W + TILE) continue;
+      const bob = Math.sin(this.frameCount * 0.08) * 4;
+      const y = dig.y - TILE - 8 + bob - camY;
+      const g = new Graphics();
+      g.moveTo(x, y + 12).lineTo(x - 6, y).lineTo(x + 6, y).closePath();
+      g.fill({ color: 0xFFDD00, alpha: 0.8 });
+      this.tileContainer.addChild(g);
     }
   }
 
@@ -779,6 +988,8 @@ export class BonksRenderer {
       case 'B': return 0xC87533;
       case '?': case 'R': case 'X': return 0xF5C542;
       case 'P': case 'p': return 0x33AA33;
+      case 'H': return 0x8B6534;
+      case 'I': return 0x8B7355;
       default: return 0x888888;
     }
   }
@@ -787,35 +998,37 @@ export class BonksRenderer {
   // PLAYER
   // ═══════════════════════════════════════
 
-  private drawPlayer(state: BonksState, cam: number): void {
+  private drawPlayer(state: BonksState, cam: number, camY: number): void {
     const p = state.player;
     const x = p.x - cam;
-    let y = p.y;
+    let y = p.y - camY;
 
-    // When riding Chonk, shift player up to sit on top
+    // When riding Chonk, lower player to sit into Chonk's body
     const mounted = state.companion?.mounted;
     if (mounted && state.companion) {
-      y = state.companion.y - p.height + 4; // sit on Chonk's back
+      const ch = state.companion;
+      // Player bottom at ~45% down Chonk's body (riding, not standing on head)
+      y = ch.y + Math.round(ch.height * 0.45) - p.height - camY;
     }
 
     if (p.invincible > 0 && Math.floor(p.invincible / 3) % 2 === 0) return;
 
     const prefix = CHAR_PREFIXES[p.character];
     const size = p.powerUp === 'none' ? 'sm' : (p.powerUp === 'fire' ? 'fire' : 'bg');
-    const frame = this.getPlayerFrame(p);
+    // Use idle frame when mounted (sitting pose)
+    const frame = mounted ? 'idle' : this.getPlayerFrame(p);
     const texKey = `${prefix}-${size}-${frame}`;
 
-    // Anchor at horizontal center so facing-flip has zero visual shift
     const centerX = x + p.width / 2;
 
     if (this.texturesReady && hasTex(texKey)) {
       const spr = new Sprite(tex(texKey));
-      spr.anchor.set(0.5, 1); // anchor bottom-center for proper ground alignment
+      spr.anchor.set(0.5, 1);
       spr.x = centerX;
-      spr.y = y + p.height; // position at feet
-      // Sprite art faces left by default; flip when facing right
+      spr.y = y + p.height;
       spr.scale.x = p.facing === 'right' ? -SPRITE_SCALE : SPRITE_SCALE;
-      spr.scale.y = SPRITE_SCALE;
+      // Squish vertically when mounted to suggest sitting pose
+      spr.scale.y = mounted ? SPRITE_SCALE * 0.8 : SPRITE_SCALE;
 
       if (p.growTimer > 0 && Math.floor(p.growTimer / 3) % 2 === 0) {
         spr.alpha = 0.5;
@@ -827,6 +1040,16 @@ export class BonksRenderer {
       const color = p.character === 'bojangles' ? 0x33BB33 : 0xE91E8C;
       g.rect(x, y, p.width, p.height).fill({ color });
       this.entityContainer.addChild(g);
+    }
+
+    // BooBonks umbrella float visual (sprite)
+    if (p.floating && p.character === 'boobonks' && this.texturesReady && hasTex('item-umbrella')) {
+      const spr = new Sprite(tex('item-umbrella'));
+      spr.anchor.set(0.5, 1);
+      spr.x = centerX;
+      spr.y = y - 2;
+      spr.scale.set(SPRITE_SCALE);
+      this.entityContainer.addChild(spr);
     }
   }
 
@@ -851,22 +1074,31 @@ export class BonksRenderer {
   // ENEMIES
   // ═══════════════════════════════════════
 
-  private drawEnemies(state: BonksState, cam: number): void {
+  private drawEnemies(state: BonksState, cam: number, camY: number): void {
     for (const e of state.enemies) {
       if (!e.alive && e.squished <= 0) continue;
       const x = e.x - cam;
       if (x < -TILE * 2 || x > CANVAS_W + TILE * 2) continue;
 
-      const texKey = this.getEnemyTexture(e);
+      if (e.type === 'plant') {
+        this.drawPlantEnemy(e, x, camY);
+        continue;
+      }
 
-      // Anchor at horizontal center so direction-flip has zero visual shift
+      if (e.type === 'boss') {
+        this.drawBoss(e, x, camY);
+        continue;
+      }
+
+      const texKey = this.getEnemyTexture(e);
       const eCenterX = x + e.width / 2;
+      const ey = e.y - camY;
 
       if (texKey && this.texturesReady && hasTex(texKey)) {
         const spr = new Sprite(tex(texKey));
-        spr.anchor.set(0.5, 1); // anchor bottom-center for ground alignment
+        spr.anchor.set(0.5, 1);
         spr.x = eCenterX;
-        spr.y = e.y + e.height; // position at feet
+        spr.y = ey + e.height;
         const flipX = (e.vx > 0 && e.state !== 'shell' && e.state !== 'shell-slide') ? -1 : 1;
         spr.scale.x = flipX * SPRITE_SCALE;
         spr.scale.y = SPRITE_SCALE;
@@ -875,13 +1107,179 @@ export class BonksRenderer {
         const g = new Graphics();
         const color = e.type === 'goomba' ? 0x996644 : 0x44BB44;
         if (e.squished > 0) {
-          g.ellipse(x + e.width / 2, e.y + e.height - 4, e.width / 2, 4).fill({ color });
+          g.ellipse(x + e.width / 2, ey + e.height - 4, e.width / 2, 4).fill({ color });
         } else {
-          g.rect(x, e.y, e.width, e.height).fill({ color });
+          g.rect(x, ey, e.width, e.height).fill({ color });
         }
         this.entityContainer.addChild(g);
       }
     }
+  }
+
+  private drawPlantEnemy(e: { x: number; y: number; width: number; height: number; frame: number; startY: number }, screenX: number, camY: number): void {
+    const phase = e.frame % PLANT_CYCLE;
+    const halfCycle = PLANT_CYCLE / 2;
+    const isUp = phase >= halfCycle;
+
+    let visibleHeight: number;
+    if (!isUp) {
+      visibleHeight = 8;
+    } else {
+      const upProgress = (phase - halfCycle) / 15;
+      visibleHeight = 8 + Math.min(1, upProgress) * PLANT_UP_HEIGHT;
+    }
+
+    const baseY = e.startY + TILE - 8 - camY;
+    const topY = baseY - visibleHeight;
+    const centerX = screenX + e.width / 2;
+
+    const texKey = isUp && visibleHeight > 20 ? 'enemy-plant-up' : 'enemy-plant-hidden';
+    if (this.texturesReady && hasTex(texKey)) {
+      const spr = new Sprite(tex(texKey));
+      spr.anchor.set(0.5, 1);
+      spr.x = centerX;
+      spr.y = baseY;
+      spr.scale.set(SPRITE_SCALE);
+      if (isUp && visibleHeight > 20) {
+        spr.scale.y = SPRITE_SCALE * (visibleHeight / (TILE * 1.4));
+      }
+      this.entityContainer.addChild(spr);
+    } else {
+      const g = new Graphics();
+      g.rect(centerX - 3, topY + 12, 6, visibleHeight - 12).fill({ color: 0x33AA33 });
+      if (visibleHeight > 20) {
+        g.circle(centerX, topY + 8, 8).fill({ color: 0x9933CC });
+        g.circle(centerX - 3, topY + 7, 2).fill({ color: 0xFF3333 });
+        g.circle(centerX + 3, topY + 7, 2).fill({ color: 0xFF3333 });
+        g.circle(centerX - 8, topY + 4, 2).fill({ color: 0x664422 });
+        g.circle(centerX + 8, topY + 4, 2).fill({ color: 0x664422 });
+      }
+      g.rect(centerX - 6, baseY - 6, 12, 6).fill({ color: 0x55AA22 });
+      this.entityContainer.addChild(g);
+    }
+  }
+
+  private drawBoss(e: EnemyState, screenX: number, camY: number): void {
+    const g = new Graphics();
+    const ey = e.y - camY;
+    const cx = screenX + e.width / 2;
+    const cy = ey + e.height / 2;
+    const w = e.width;
+    const h = e.height;
+
+    // Stun flash — alpha oscillation
+    const stunned = (e.stunTimer ?? 0) > 0;
+    if (stunned && Math.floor(this.frameCount / 3) % 2 === 0) return;
+
+    // Death animation — shrink
+    if (e.squished > 0) {
+      const shrink = e.squished / 60;
+      const sw = w * shrink;
+      const sh = h * shrink;
+      g.rect(cx - sw / 2, ey + h - sh, sw, sh).fill({ color: 0x884422 });
+      // Eyes X's
+      g.moveTo(cx - 12, ey + h - sh + 10).lineTo(cx - 4, ey + h - sh + 18);
+      g.moveTo(cx - 4, ey + h - sh + 10).lineTo(cx - 12, ey + h - sh + 18);
+      g.stroke({ color: 0xFFFFFF, width: 2 });
+      g.moveTo(cx + 4, ey + h - sh + 10).lineTo(cx + 12, ey + h - sh + 18);
+      g.moveTo(cx + 12, ey + h - sh + 10).lineTo(cx + 4, ey + h - sh + 18);
+      g.stroke({ color: 0xFFFFFF, width: 2 });
+      this.entityContainer.addChild(g);
+      return;
+    }
+
+    const phase = e.bossPhase ?? 0;
+
+    // Body (large rounded rectangle)
+    const bodyColor = [0x884422, 0xAA4422, 0xCC2200][phase] ?? 0x884422;
+    g.roundRect(screenX + 4, ey + 8, w - 8, h - 8, 12).fill({ color: bodyColor });
+    // Darker belly
+    g.roundRect(screenX + 16, ey + h * 0.4, w - 32, h * 0.45, 8).fill({ color: 0xBB8855 });
+
+    // Crown
+    const crownY = ey - 4;
+    g.rect(cx - 20, crownY, 40, 12).fill({ color: 0xFFDD00 });
+    // Crown points
+    g.moveTo(cx - 20, crownY).lineTo(cx - 16, crownY - 10).lineTo(cx - 10, crownY).fill({ color: 0xFFDD00 });
+    g.moveTo(cx - 5, crownY).lineTo(cx, crownY - 14).lineTo(cx + 5, crownY).fill({ color: 0xFFDD00 });
+    g.moveTo(cx + 10, crownY).lineTo(cx + 16, crownY - 10).lineTo(cx + 20, crownY).fill({ color: 0xFFDD00 });
+    // Crown jewels
+    g.circle(cx, crownY - 8, 3).fill({ color: 0xFF2222 });
+    g.circle(cx - 14, crownY - 4, 2).fill({ color: 0x22FF22 });
+    g.circle(cx + 14, crownY - 4, 2).fill({ color: 0x2222FF });
+
+    // Eyes
+    const eyeY = ey + 20;
+    const blink = this.frameCount % 120 < 5;
+    // Angry eyebrows
+    g.moveTo(cx - 20, eyeY - 8).lineTo(cx - 8, eyeY - 4);
+    g.stroke({ color: 0x000000, width: 3 });
+    g.moveTo(cx + 8, eyeY - 4).lineTo(cx + 20, eyeY - 8);
+    g.stroke({ color: 0x000000, width: 3 });
+    if (blink) {
+      g.rect(cx - 18, eyeY, 12, 3).fill({ color: 0x000000 });
+      g.rect(cx + 6, eyeY, 12, 3).fill({ color: 0x000000 });
+    } else {
+      // White sclera
+      g.ellipse(cx - 12, eyeY + 2, 9, 7).fill({ color: 0xFFFFFF });
+      g.ellipse(cx + 12, eyeY + 2, 9, 7).fill({ color: 0xFFFFFF });
+      // Pupils (look at player direction based on vx)
+      const lookDir = e.vx < 0 ? -2 : e.vx > 0 ? 2 : 0;
+      g.circle(cx - 12 + lookDir, eyeY + 2, 4).fill({ color: 0x000000 });
+      g.circle(cx + 12 + lookDir, eyeY + 2, 4).fill({ color: 0x000000 });
+      // Red tint for angry phases
+      if (phase >= 1) {
+        g.circle(cx - 12 + lookDir, eyeY + 2, 2).fill({ color: 0xFF0000 });
+        g.circle(cx + 12 + lookDir, eyeY + 2, 2).fill({ color: 0xFF0000 });
+      }
+    }
+
+    // Mouth — wider grimace when angrier
+    const mouthY = ey + 42;
+    const mouthW = 12 + phase * 6;
+    g.roundRect(cx - mouthW, mouthY, mouthW * 2, 10, 4).fill({ color: 0x000000 });
+    // Teeth
+    for (let i = 0; i < 4 + phase; i++) {
+      const tx = cx - mouthW + 4 + i * (mouthW * 2 - 8) / (3 + phase);
+      g.rect(tx, mouthY, 4, 5).fill({ color: 0xFFFFFF });
+    }
+
+    // Arms (simple rectangles)
+    const armWave = Math.sin(this.frameCount * 0.1) * 5;
+    g.roundRect(screenX - 8, ey + 28 + armWave, 14, 30, 4).fill({ color: bodyColor });
+    g.roundRect(screenX + w - 6, ey + 28 - armWave, 14, 30, 4).fill({ color: bodyColor });
+    // Fists
+    g.circle(screenX, ey + 58 + armWave, 8).fill({ color: bodyColor });
+    g.circle(screenX + w + 2, ey + 58 - armWave, 8).fill({ color: bodyColor });
+
+    // Feet
+    g.ellipse(cx - 16, ey + h - 2, 14, 6).fill({ color: 0x442211 });
+    g.ellipse(cx + 16, ey + h - 2, 14, 6).fill({ color: 0x442211 });
+
+    this.entityContainer.addChild(g);
+
+    // HP bar above boss
+    const hp = e.hp ?? 3;
+    const maxHp = 3;
+    const barW = 60;
+    const barH = 8;
+    const barX = cx - barW / 2;
+    const barY = ey - 24;
+
+    const hpBar = new Graphics();
+    // Background
+    hpBar.roundRect(barX - 1, barY - 1, barW + 2, barH + 2, 3).fill({ color: 0x000000, alpha: 0.7 });
+    // HP pips
+    for (let i = 0; i < maxHp; i++) {
+      const pipX = barX + 2 + i * ((barW - 4) / maxHp);
+      const pipW = (barW - 8) / maxHp;
+      const color = i < hp ? 0xFF3333 : 0x333333;
+      hpBar.roundRect(pipX, barY + 1, pipW, barH - 2, 2).fill({ color });
+    }
+    this.entityContainer.addChild(hpBar);
+
+    // Boss name label
+    this.drawCenteredAt('KING GRUMBLE', cx, barY - 14, 0xFFDD00, this.entityContainer);
   }
 
   private getEnemyTexture(e: { type: string; state: string; squished: number; frame: number }): string | null {
@@ -893,6 +1291,9 @@ export class BonksRenderer {
       case 'koopa':
         if (e.state === 'shell' || e.state === 'shell-slide') return 'enemy-koopa-shell';
         return `enemy-koopa-walk${walkFrame}`;
+      case 'ladybug':
+        if (e.squished > 0) return 'enemy-ladybug-squish';
+        return `enemy-ladybug-fly${walkFrame}`;
       default:
         return null;
     }
@@ -902,49 +1303,82 @@ export class BonksRenderer {
   // COMPANION (CHONK)
   // ═══════════════════════════════════════
 
-  private drawCompanion(state: BonksState, cam: number): void {
+  private drawCompanion(state: BonksState, cam: number, camY: number): void {
     const ch = state.companion;
     if (!ch || !ch.alive) return;
 
-    // Don't draw if running away and off-screen
     const x = ch.x - cam;
     if (x < -TILE * 2 || x > CANVAS_W + TILE * 2) return;
 
-    // Pick sprite frame
     const anim = ch.anim;
     let frame: string;
     switch (anim) {
       case 'walk': frame = Math.floor(ch.frame / 8) % 2 === 0 ? 'walk1' : 'walk2'; break;
       case 'jump': frame = 'jump'; break;
-      case 'fall': frame = 'fall'; break;
-      case 'flutter': frame = 'flutter'; break;
+      case 'fall': case 'dive': frame = 'fall'; break;
       case 'tongue': frame = 'tongue'; break;
+      case 'slam': frame = 'idle'; break;
       default: frame = 'idle'; break;
     }
 
-    // Use small sprites for Chonk companion
     const texKey = `ch-sm-${frame}`;
     const centerX = x + ch.width / 2;
+    const CHONK_SCALE = SPRITE_SCALE * 1.3;
+    const cy = ch.y - camY;
 
     if (this.texturesReady && hasTex(texKey)) {
       const spr = new Sprite(tex(texKey));
       spr.anchor.set(0.5, 1);
       spr.x = centerX;
-      spr.y = ch.y + ch.height;
-      spr.scale.x = ch.facing === 'right' ? -SPRITE_SCALE : SPRITE_SCALE;
-      spr.scale.y = SPRITE_SCALE;
+      spr.y = cy + ch.height;
+      spr.scale.x = ch.facing === 'right' ? -CHONK_SCALE : CHONK_SCALE;
+      spr.scale.y = CHONK_SCALE;
 
-      // Flash when running away
       if (ch.runningAway && Math.floor(ch.frame / 4) % 2 === 0) {
         spr.alpha = 0.4;
       }
 
       this.entityContainer.addChild(spr);
     } else {
-      // Fallback: white rectangle
       const g = new Graphics();
-      g.rect(x, ch.y, ch.width, ch.height).fill({ color: 0xFFFFFF });
+      g.rect(x, cy, ch.width, ch.height).fill({ color: 0xFFFFFF });
       this.entityContainer.addChild(g);
+    }
+
+    if (ch.tongueTimer > 0 && ch.mounted) {
+      const progress = ch.tongueTimer / CHONK_TONGUE_FRAMES;
+      const extend = Math.sin(progress * Math.PI) * CHONK_TONGUE_RANGE;
+      const dir = ch.facing === 'right' ? 1 : -1;
+      const tongueStartX = centerX + dir * (ch.width / 2);
+      const tongueY = cy + ch.height * 0.55;
+      const g = new Graphics();
+      const tw = extend * dir;
+      g.rect(
+        Math.min(tongueStartX, tongueStartX + tw),
+        tongueY - 3,
+        Math.abs(tw),
+        6,
+      ).fill({ color: 0xFF6699, alpha: 0.9 });
+      g.circle(tongueStartX + tw, tongueY, 5).fill({ color: 0xDD4477 });
+      this.entityContainer.addChild(g);
+    }
+
+    // Dive slam shockwave visual
+    if (ch.slamTimer > 0 && ch.mounted) {
+      const progress = 1 - ch.slamTimer / 15;
+      const radius = TILE * 3 * progress;
+      const sg = new Graphics();
+      sg.circle(centerX, cy + ch.height, radius).stroke({
+        color: 0xFFAA00,
+        width: 3 * (1 - progress),
+        alpha: 0.7 * (1 - progress),
+      });
+      sg.circle(centerX, cy + ch.height, radius * 0.6).stroke({
+        color: 0xFFDD44,
+        width: 2 * (1 - progress),
+        alpha: 0.5 * (1 - progress),
+      });
+      this.entityContainer.addChild(sg);
     }
   }
 
@@ -952,23 +1386,21 @@ export class BonksRenderer {
   // COINS
   // ═══════════════════════════════════════
 
-  private drawCoins(state: BonksState, cam: number): void {
+  private drawCoins(state: BonksState, cam: number, camY: number): void {
     for (const coin of state.coins) {
       if (coin.collected) continue;
       const x = coin.x - cam;
       if (x < -TILE || x > CANVAS_W + TILE) continue;
+      const cy = coin.y - camY;
 
       if (this.texturesReady && hasTex('item-coin')) {
         const spr = new Sprite(tex('item-coin'));
         spr.x = x;
-        spr.y = coin.y;
-        if (coin.floating) {
-          spr.y += Math.sin(this.frameCount * 0.08 + coin.x * 0.05) * 3;
-        }
+        spr.y = cy + (coin.floating ? Math.sin(this.frameCount * 0.08 + coin.x * 0.05) * 3 : 0);
         this.entityContainer.addChild(spr);
       } else {
         const g = new Graphics();
-        g.circle(x + 8, coin.y + 8, 6).fill({ color: 0xFFD700 });
+        g.circle(x + 8, cy + 8, 6).fill({ color: 0xFFD700 });
         this.entityContainer.addChild(g);
       }
     }
@@ -978,21 +1410,22 @@ export class BonksRenderer {
   // POWER-UP ITEMS
   // ═══════════════════════════════════════
 
-  private drawPowerUpItems(state: BonksState, cam: number): void {
+  private drawPowerUpItems(state: BonksState, cam: number, camY: number): void {
     for (const item of state.powerUpItems) {
       if (!item.alive) continue;
       const x = item.x - cam;
       if (x < -TILE || x > CANVAS_W + TILE) continue;
+      const iy = item.y - camY;
 
       const texKey = item.type === 'mushroom' ? 'item-mushroom' : 'item-flower';
       if (this.texturesReady && hasTex(texKey)) {
         const spr = new Sprite(tex(texKey));
         spr.x = x;
-        spr.y = item.y;
+        spr.y = iy;
         this.entityContainer.addChild(spr);
       } else {
         const g = new Graphics();
-        g.rect(x, item.y, TILE, TILE).fill({ color: 0xFF00FF });
+        g.rect(x, iy, TILE, TILE).fill({ color: 0xFF00FF });
         this.entityContainer.addChild(g);
       }
     }
@@ -1002,22 +1435,23 @@ export class BonksRenderer {
   // FIREBALLS
   // ═══════════════════════════════════════
 
-  private drawFireballs(state: BonksState, cam: number): void {
+  private drawFireballs(state: BonksState, cam: number, camY: number): void {
     for (const fb of state.player.fireballs) {
       if (!fb.alive) continue;
       const x = fb.x - cam;
+      const fy = fb.y - camY;
       if (this.texturesReady && hasTex('fx-fireball')) {
         const spr = new Sprite(tex('fx-fireball'));
         spr.x = x + 6;
-        spr.y = fb.y + 6;
+        spr.y = fy + 6;
         spr.rotation = this.frameCount * 0.4;
         spr.anchor.set(0.5);
         spr.scale.set(1.8);
         this.entityContainer.addChild(spr);
       } else {
         const g = new Graphics();
-        g.circle(x + 6, fb.y + 6, 7).fill({ color: 0xFF8833 });
-        g.circle(x + 6, fb.y + 6, 4).fill({ color: 0xFFDD44 });
+        g.circle(x + 6, fy + 6, 7).fill({ color: 0xFF8833 });
+        g.circle(x + 6, fy + 6, 4).fill({ color: 0xFFDD44 });
         this.entityContainer.addChild(g);
       }
     }
@@ -1027,7 +1461,7 @@ export class BonksRenderer {
   // FLAG
   // ═══════════════════════════════════════
 
-  private drawFlag(state: BonksState, cam: number): void {
+  private drawFlag(state: BonksState, cam: number, camY: number): void {
     for (let row = 0; row < state.tiles.length; row++) {
       for (let col = 0; col < (state.tiles[row]?.length ?? 0); col++) {
         if (getTile(state.tiles, col, row) !== 'F') continue;
@@ -1036,8 +1470,8 @@ export class BonksRenderer {
 
         const g = new Graphics();
         const poleX = x + TILE / 2;
-        const baseY = (row + 1) * TILE; // bottom of the F tile (ground level)
-        const poleHeight = TILE * 7; // tall pole
+        const baseY = (row + 1) * TILE - camY;
+        const poleHeight = TILE * 7;
         const topY = baseY - poleHeight;
 
         // Pole
@@ -1051,14 +1485,13 @@ export class BonksRenderer {
         // Flag pennant (waves in the wind)
         const wave = Math.sin(this.frameCount * 0.08) * 4;
         const wave2 = Math.sin(this.frameCount * 0.08 + 1) * 3;
-        const flagY = state.flagReached ? baseY - TILE * 2 : topY + 4;
-        g.moveTo(poleX + 2, flagY);
-        g.lineTo(poleX + 30 + wave, flagY + 12 + wave2);
-        g.lineTo(poleX + 2, flagY + 24);
+        const flagPY = state.flagReached ? baseY - TILE * 2 : topY + 4;
+        g.moveTo(poleX + 2, flagPY);
+        g.lineTo(poleX + 30 + wave, flagPY + 12 + wave2);
+        g.lineTo(poleX + 2, flagPY + 24);
         g.closePath();
         g.fill({ color: 0xFF3333 });
-        // Flag detail - star/sparkstone
-        g.circle(poleX + 14, flagY + 12, 3).fill({ color: 0xFFDD00 });
+        g.circle(poleX + 14, flagPY + 12, 3).fill({ color: 0xFFDD00 });
 
         // Base block
         g.rect(poleX - 8, baseY - 8, 16, 8).fill({ color: 0x666666 });
@@ -1074,27 +1507,28 @@ export class BonksRenderer {
   // PARTICLES
   // ═══════════════════════════════════════
 
-  private drawParticles(state: BonksState, cam: number): void {
+  private drawParticles(state: BonksState, cam: number, camY: number): void {
     for (const p of state.particles) {
       const x = p.x - cam;
+      const py = p.y - camY;
       const alpha = Math.min(1, p.life / 10);
 
       if (p.type === 'score' && p.text) {
-        this.drawText(p.text, x, p.y, 0xFFDD00, this.fgContainer, 1, alpha);
+        this.drawText(p.text, x, py, 0xFFDD00, this.fgContainer, 1, alpha);
         continue;
       }
 
       if (p.type === 'debris' && this.texturesReady && hasTex('fx-debris')) {
         const spr = new Sprite(tex('fx-debris'));
         spr.x = x;
-        spr.y = p.y;
+        spr.y = py;
         spr.alpha = alpha;
         spr.rotation = this.frameCount * 0.1;
         spr.anchor.set(0.5);
         this.fgContainer.addChild(spr);
       } else {
         const g = new Graphics();
-        g.rect(x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+        g.rect(x - p.size / 2, py - p.size / 2, p.size, p.size);
         g.fill({ color: p.color, alpha });
         this.fgContainer.addChild(g);
       }

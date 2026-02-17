@@ -27,6 +27,7 @@ const BattleshipPage = lazy(() => import('./games/battleship/BattleshipPage'));
 const BackgammonPage = lazy(() => import('./games/backgammon/BackgammonPage'));
 const BonksPage = lazy(() => import('./games/bonks/BonksPage'));
 const Quest3DPage = lazy(() => import('./games/quest3d/Quest3DPage'));
+const GP2Page = lazy(() => import('./games/gp2/GP2Page'));
 
 function PageLoader() {
   return (
@@ -62,6 +63,7 @@ export default function App() {
           <Route path="play/backgammon" element={<Suspense fallback={<PageLoader />}><BackgammonPage /></Suspense>} />
           <Route path="play/bonks" element={<Suspense fallback={<PageLoader />}><BonksPage /></Suspense>} />
           <Route path="play/quest3d" element={<Suspense fallback={<PageLoader />}><Quest3DPage /></Suspense>} />
+          <Route path="play/gp2" element={<Suspense fallback={<PageLoader />}><GP2Page /></Suspense>} />
           <Route path="admin" element={<Suspense fallback={<PageLoader />}><AdminPage /></Suspense>} />
         </Route>
       </Routes>

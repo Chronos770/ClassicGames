@@ -33,6 +33,7 @@ interface UserState {
   matchHistory: MatchRecord[];
   academyProgress: AcademyProgress;
   bonksSave: SaveData | null;
+  bonksHighScore: number;
   setDisplayName: (name: string) => void;
   dismissGuestBanner: () => void;
   recordGame: (gameId: string, won: boolean, opponent?: string, details?: string) => void;
@@ -43,6 +44,7 @@ interface UserState {
   getCourseProgress: (courseId: string, totalLessons: number) => { completed: number; total: number; percent: number };
   saveBonks: (data: SaveData) => void;
   clearBonksSave: () => void;
+  updateBonksHighScore: (score: number) => void;
 }
 
 const defaultStats: GameStats = { played: 0, won: 0, streak: 0, bestStreak: 0 };
@@ -102,6 +104,7 @@ export const useUserStore = create<UserState>()(
       matchHistory: [],
       academyProgress: { completedLessons: [], completedCourses: [], certificates: [] },
       bonksSave: null,
+      bonksHighScore: 0,
       setDisplayName: (name) => set({ displayName: name }),
       dismissGuestBanner: () => set({ guestBannerDismissed: true }),
       recordGame: (gameId, won, opponent, details) =>
@@ -163,6 +166,25 @@ export const useUserStore = create<UserState>()(
       },
       saveBonks: (data) => set({ bonksSave: data }),
       clearBonksSave: () => set({ bonksSave: null }),
+      updateBonksHighScore: (score) => {
+        const prev = get().bonksHighScore;
+        const newHigh = Math.max(prev, score);
+        if (newHigh > prev) {
+          // Push to Supabase for leaderboard
+          (async () => {
+            try {
+              const { useAuthStore } = await import('./authStore');
+              const userId = useAuthStore.getState().user?.id;
+              if (!userId || !supabase) return;
+              await supabase.from('elo_ratings').upsert(
+                { user_id: userId, game_id: 'bonks', rating: newHigh, peak_rating: newHigh, games_rated: 1 },
+                { onConflict: 'user_id,game_id' }
+              );
+            } catch { /* ignore */ }
+          })();
+        }
+        set({ bonksHighScore: newHigh });
+      },
     }),
     { name: 'user-data' }
   )

@@ -57,7 +57,11 @@ const SOUND_DEFINITIONS: Record<string, SoundDefinition> = {
   'bonks-tongue': { type: 'tone', freq: 250, duration: 80, oscillator: 'sine', volume: 0.15 },
   'bonks-flutter': { type: 'tone', freq: 600, duration: 50, oscillator: 'triangle', volume: 0.1 },
   'bonks-wallkick': { type: 'tone', freq: 450, duration: 70, oscillator: 'square', volume: 0.2 },
+  'bonks-slam': { type: 'chord', freqs: [100, 150, 200], duration: 250, oscillator: 'square', volume: 0.3 },
   'bonks-spit': { type: 'tone', freq: 700, duration: 60, oscillator: 'sawtooth', volume: 0.15 },
+  'bonks-boss-hit': { type: 'chord', freqs: [150, 200], duration: 200, oscillator: 'square', volume: 0.3 },
+  'bonks-boss-land': { type: 'tone', freq: 80, duration: 150, oscillator: 'sine', volume: 0.25 },
+  'bonks-boss-defeat': { type: 'chord', freqs: [262, 330, 392, 523, 659], duration: 800, oscillator: 'square', volume: 0.3 },
 
   // UI
   'ui-click': { type: 'tone', freq: 600, duration: 30, oscillator: 'sine', volume: 0.15 },
@@ -68,6 +72,8 @@ const SOUND_DEFINITIONS: Record<string, SoundDefinition> = {
 export class SoundManager {
   private static instance: SoundManager;
   private ctx: AudioContext | null = null;
+  private musicIntervalId: number | null = null;
+  private musicGain: GainNode | null = null;
 
   private constructor() {}
 
@@ -186,8 +192,142 @@ export class SoundManager {
       osc.connect(gain);
       gain.connect(ctx.destination);
 
-      osc.start(ctx.currentTime + i * 0.03); // Slight stagger for richness
+      osc.start(ctx.currentTime + i * 0.03);
       osc.stop(ctx.currentTime + duration / 1000);
+    }
+  }
+
+  // ═══════════════════════════════════════
+  // BACKGROUND MUSIC
+  // ═══════════════════════════════════════
+
+  startMusic(id: string): void {
+    this.stopMusic();
+    const settings = useSettingsStore.getState();
+    if (!settings.soundEnabled) return;
+
+    const ctx = this.getContext();
+    if (!ctx) return;
+
+    this.musicGain = ctx.createGain();
+    this.musicGain.gain.value = settings.soundVolume * 0.06;
+    this.musicGain.connect(ctx.destination);
+
+    const bpm = 130;
+    const beat = 60 / bpm;
+
+    // Melody (square wave) — beat offset, frequency, duration in beats
+    let melody: [number, number, number][];
+    let bass: [number, number, number][];
+    let loopBeats: number;
+
+    if (id === 'bonks-music') {
+      loopBeats = 16;
+      melody = [
+        // Bar 1: C5 D5 E5 G5 E5 . C5 .
+        [0, 523, 0.5], [0.5, 587, 0.5], [1, 659, 0.5], [1.5, 784, 0.5], [2, 659, 1], [3, 523, 1],
+        // Bar 2: D5 F5 A5 G5 E5 D5 C5 .
+        [4, 587, 0.5], [4.5, 698, 0.5], [5, 880, 0.5], [5.5, 784, 0.5], [6, 659, 0.5], [6.5, 587, 0.5], [7, 523, 1],
+        // Bar 3: E5 G5 A5 C6 B5 . G5 .
+        [8, 659, 0.5], [8.5, 784, 0.5], [9, 880, 0.5], [9.5, 1047, 0.5], [10, 988, 1], [11, 784, 1],
+        // Bar 4: A5 G5 F5 E5 D5 . . .
+        [12, 880, 0.5], [12.5, 784, 0.5], [13, 698, 0.5], [13.5, 659, 0.5], [14, 587, 2],
+      ];
+      bass = [
+        [0, 131, 2], [2, 196, 2],
+        [4, 175, 2], [6, 196, 2],
+        [8, 131, 2], [10, 165, 2],
+        [12, 175, 2], [14, 196, 2],
+      ];
+    } else if (id === 'bonks-music-clouds') {
+      loopBeats = 16;
+      // Light, airy melody — higher register, floaty feel
+      melody = [
+        // Bar 1: E5 G5 A5 . B5 . G5 .
+        [0, 659, 0.5], [0.5, 784, 0.5], [1, 880, 1], [2, 988, 1], [3, 784, 1],
+        // Bar 2: A5 C6 B5 . G5 A5 G5 .
+        [4, 880, 0.5], [4.5, 1047, 0.5], [5, 988, 1], [6, 784, 0.5], [6.5, 880, 0.5], [7, 784, 1],
+        // Bar 3: E5 F#5 G5 A5 B5 . A5 .
+        [8, 659, 0.5], [8.5, 740, 0.5], [9, 784, 0.5], [9.5, 880, 0.5], [10, 988, 1], [11, 880, 1],
+        // Bar 4: G5 E5 D5 . . . . .
+        [12, 784, 0.5], [12.5, 659, 0.5], [13, 587, 1], [14, 523, 2],
+      ];
+      bass = [
+        [0, 165, 2], [2, 196, 2],
+        [4, 175, 2], [6, 165, 2],
+        [8, 131, 2], [10, 147, 2],
+        [12, 165, 2], [14, 196, 2],
+      ];
+    } else if (id === 'bonks-music-cave') {
+      loopBeats = 16;
+      melody = [
+        // Darker, more mysterious melody for cave levels
+        [0, 330, 1], [1, 392, 0.5], [1.5, 440, 0.5], [2, 330, 1], [3, 294, 1],
+        [4, 349, 1], [5, 330, 0.5], [5.5, 294, 0.5], [6, 262, 1], [7, 294, 1],
+        [8, 330, 1], [9, 440, 0.5], [9.5, 494, 0.5], [10, 440, 1], [11, 392, 1],
+        [12, 349, 1], [13, 330, 0.5], [13.5, 294, 0.5], [14, 262, 2],
+      ];
+      bass = [
+        [0, 110, 2], [2, 98, 2],
+        [4, 87, 2], [6, 98, 2],
+        [8, 110, 2], [10, 131, 2],
+        [12, 87, 2], [14, 98, 2],
+      ];
+    } else {
+      return;
+    }
+
+    const loopLen = loopBeats * beat;
+
+    const scheduleLoop = () => {
+      if (!this.musicGain) return;
+      const c = this.getContext();
+      if (!c) return;
+      const now = c.currentTime + 0.05;
+
+      for (const [b, freq, dur] of melody) {
+        this.scheduleMusicNote(c, now + b * beat, freq, dur * beat * 0.85, 'square', 0.1);
+      }
+      for (const [b, freq, dur] of bass) {
+        this.scheduleMusicNote(c, now + b * beat, freq, dur * beat * 0.85, 'triangle', 0.14);
+      }
+    };
+
+    scheduleLoop();
+    this.musicIntervalId = window.setInterval(scheduleLoop, loopLen * 1000);
+  }
+
+  private scheduleMusicNote(ctx: AudioContext, startTime: number, freq: number, duration: number, type: OscillatorType, volume: number): void {
+    if (!this.musicGain) return;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, startTime);
+
+    gain.gain.setValueAtTime(volume, startTime);
+    gain.gain.setValueAtTime(volume, startTime + duration * 0.7);
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+    osc.connect(gain);
+    gain.connect(this.musicGain);
+
+    osc.start(startTime);
+    osc.stop(startTime + duration + 0.01);
+  }
+
+  stopMusic(): void {
+    if (this.musicIntervalId !== null) {
+      clearInterval(this.musicIntervalId);
+      this.musicIntervalId = null;
+    }
+    if (this.musicGain) {
+      try {
+        this.musicGain.gain.setValueAtTime(0, 0);
+        this.musicGain.disconnect();
+      } catch { /* ignore */ }
+      this.musicGain = null;
     }
   }
 }

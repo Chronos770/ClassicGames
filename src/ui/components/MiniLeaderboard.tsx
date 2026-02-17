@@ -5,6 +5,8 @@ interface MiniLeaderboardProps {
   gameId: string;
 }
 
+const SCORE_GAMES = ['bonks']; // Games that use high scores instead of ELO
+
 export default function MiniLeaderboard({ gameId }: MiniLeaderboardProps) {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,12 +36,15 @@ export default function MiniLeaderboard({ gameId }: MiniLeaderboardProps) {
     );
   }
 
+  const isScoreGame = SCORE_GAMES.includes(gameId);
+  const title = isScoreGame ? 'High Scores' : 'Top Players';
+
   if (entries.length === 0) {
     return (
       <div className="glass-panel !p-4">
-        <h3 className="text-sm font-medium text-white/60 mb-3">Top Players</h3>
+        <h3 className="text-sm font-medium text-white/60 mb-3">{title}</h3>
         <p className="text-xs text-white/30 text-center py-4">
-          No ranked players yet. Be the first!
+          {isScoreGame ? 'No high scores yet. Be the first!' : 'No ranked players yet. Be the first!'}
         </p>
       </div>
     );
@@ -47,7 +52,7 @@ export default function MiniLeaderboard({ gameId }: MiniLeaderboardProps) {
 
   return (
     <div className="glass-panel !p-4">
-      <h3 className="text-sm font-medium text-white/60 mb-3">Top Players</h3>
+      <h3 className="text-sm font-medium text-white/60 mb-3">{title}</h3>
       <div className="space-y-1.5">
         {entries.map((entry, i) => (
           <div
@@ -61,7 +66,7 @@ export default function MiniLeaderboard({ gameId }: MiniLeaderboardProps) {
             </span>
             <span className="text-sm">{entry.avatar_emoji}</span>
             <span className="text-xs text-white/70 flex-1 truncate">{entry.display_name}</span>
-            <span className="text-xs font-mono text-amber-400">{entry.rating}</span>
+            <span className="text-xs font-mono text-amber-400">{isScoreGame ? entry.rating.toLocaleString() : entry.rating}</span>
           </div>
         ))}
       </div>

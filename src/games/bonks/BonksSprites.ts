@@ -127,6 +127,12 @@ const PAL_ITEMS: Record<string, number> = {
   c: 0xDD3333, C: 0xAA2222, // collar (dog treat)
 };
 
+const PAL_UMBRELLA: Record<string, number> = {
+  p: 0xFFAACC, P: 0xEE88AA, // pink canopy
+  h: 0x8B4513, H: 0x664411, // brown handle
+  t: 0xFFDD00,               // gold tip
+};
+
 // ═══════════════════════════════════════
 // BOOBONKS SPRITES (16×16 small, 16×24 big)
 // ═══════════════════════════════════════
@@ -1259,6 +1265,124 @@ const SPIKE_ROLL2 = [
   '................',
 ];
 
+// ── Poison Ivy Plant ──
+const PAL_PLANT: Record<string, number> = {
+  g: 0x33AA33,  // green stem
+  G: 0x228822,  // dark green
+  v: 0x88CC44,  // light green leaf
+  V: 0x55AA22,  // mid green leaf
+  p: 0x9933CC,  // purple head
+  P: 0x7722AA,  // dark purple
+  e: 0xFF3333,  // red eye
+  t: 0x664422,  // thorns
+};
+
+// Plant hidden (just a little bump visible)
+const PLANT_HIDDEN = [
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '......vv........',
+  '.....VggV.......',
+  '....GggggG......',
+];
+
+// Plant popping up (head visible with thorns)
+const PLANT_UP = [
+  '....t..t........',
+  '...tpppt........',
+  '..tpPPPpt.......',
+  '..ppePeppt......',
+  '..ppPPPppt......',
+  '...tpppt........',
+  '....gg..........',
+  '...vggv.........',
+  '..VvggvV........',
+  '...vggv.........',
+  '....gg..........',
+  '...vggv.........',
+  '..Vvggv.........',
+  '...vggv.........',
+  '.....VggV.......',
+  '....GggggG......',
+];
+
+// ── Ladybug (flying enemy) ──
+const PAL_LADYBUG: Record<string, number> = {
+  r: 0xDD2222, R: 0xAA1111, // red shell
+  k: 0x222222, K: 0x111111, // black spots/head
+  w: 0xFFFFFF,               // eyes
+  W: 0xCCDDFF,               // wings
+  y: 0xFFDD00,               // antennae
+};
+
+const LADYBUG_FLY1 = [
+  '......yy.yy.....',
+  '.......kk.......',
+  '..WW..kkkk..WW..',
+  '.WWWW.kkkk.WWWW.',
+  '..WWWWrrrrWWWW..',
+  '....rrrKrrrr....',
+  '...rrrKKKrrr....',
+  '..rrrrKrrrrr....',
+  '..rrKrrrrKrr....',
+  '..rrrrrrrrrrr...',
+  '...rrrrrrrrr....',
+  '....rrrrrrr.....',
+  '......kkk.......',
+  '................',
+  '................',
+  '................',
+];
+
+const LADYBUG_FLY2 = [
+  '......yy.yy.....',
+  '.......kk.......',
+  '..WW..kkkk..WW..',
+  '.WWWW.kkkk.WWWW.',
+  '.WWWW.rrrr.WWWW.',
+  '..WW.rrrKrrr.WW.',
+  '....rrrKKKrrr...',
+  '...rrrrKrrrrr...',
+  '...rrKrrrrKrr...',
+  '...rrrrrrrrrrr..',
+  '....rrrrrrrrr...',
+  '.....rrrrrrr....',
+  '......kkk.......',
+  '................',
+  '................',
+  '................',
+];
+
+const LADYBUG_SQUISH = [
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '..krrKrrKrrk....',
+  '..rrrrrrrrrr....',
+  '..rrrKrrKrrr....',
+  '...kkkkkkkk.....',
+  '................',
+];
+
 // ═══════════════════════════════════════
 // TILE SPRITES (16×16)
 // ═══════════════════════════════════════
@@ -1375,6 +1499,25 @@ const TILE_PIPE_TOP = [
   'PPppppppppppppPP',
   'PPppppppppppppPP',
   'PPppppppppppppPP',
+];
+
+const TILE_DIG_SPOT = [
+  'gGg..dDDDDd..gGg',
+  'Gg..dDddddDd..gG',
+  'g..DddddddddD..g',
+  '..DdddddddddDd..',
+  '.DddddddddddddD.',
+  'DdddddddddddddDd',
+  'dddddddddddddddD',
+  'dDddddDdddDdddDd',
+  'dddddddddddddddd',
+  'ddDdddDdddddDddd',
+  'dddddddddddddddd',
+  'dDddddDdddDdddDd',
+  'dddddddddddddddd',
+  'ddDdddddDdddDddd',
+  'dddddddddddddddd',
+  'dDdddDddddDdddDd',
 ];
 
 const TILE_PIPE_BODY = [
@@ -1566,6 +1709,25 @@ const ITEM_COIN = [
   '...yyyyyyyyyy...',
   '....yyyyyyyy....',
   '.....yyyyyy.....',
+  '................',
+  '................',
+  '................',
+];
+
+const ITEM_UMBRELLA = [
+  '................',
+  '....PPPPPPPP....',
+  '..PPppppppppPP..',
+  '.PppppppppppppP.',
+  'PpPpppPpppPpppPP',
+  '.......hh.......',
+  '.......hh.......',
+  '.......hh.......',
+  '.......hh.......',
+  '.......hh.......',
+  '......hHHh......',
+  '.......tt.......',
+  '................',
   '................',
   '................',
   '................',
@@ -2810,7 +2972,40 @@ const CH_HD_SM_WALK1 = [
   '................................',
 ];
 
-const CH_HD_SM_WALK2 = [...CH_HD_SM_IDLE]; // same as idle for walk2 alternation
+const CH_HD_SM_WALK2 = [
+  '................................',
+  '....ee......ee..................',
+  '...efFe....efFe.................',
+  '...eFFFe..eFFFe.................',
+  '...effffffffffe.................',
+  '..fffffffffffffe................',
+  '.ffwpfffffffwpff................',
+  '.ffffkkkfffffff.................',
+  '..fffftttfffff..................',
+  '..ffffffFFFFFF..................',
+  '...cccccccccccc.................',
+  '..fffffffffffffffe..............',
+  '.ffffffffffffffffff.............',
+  '.ffFfffffffFfffff...............',
+  '.fffffffffffffffffff............',
+  '..fffffffffffffffffff...........',
+  '...ffffffffffffffffff...........',
+  '....ffffffffffffffff............',
+  '......fff..fff..ff..............',
+  '......fff..fff..ff..............',
+  '......fff..fff..ff..............',
+  '......gFf..gFf.gFf..............',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+];
 
 const CH_HD_SM_JUMP = [
   '................................',
@@ -3006,12 +3201,257 @@ const CH_HD_BG_IDLE = [
   '................................',
 ];
 
-const CH_HD_BG_WALK1 = [...CH_HD_BG_IDLE]; // share for now
-const CH_HD_BG_WALK2 = [...CH_HD_BG_IDLE];
-const CH_HD_BG_JUMP = [...CH_HD_BG_IDLE];
-const CH_HD_BG_FALL = [...CH_HD_BG_IDLE];
-const CH_HD_BG_FLUTTER = [...CH_HD_BG_IDLE];
-const CH_HD_BG_TONGUE = [...CH_HD_BG_IDLE];
+const CH_HD_BG_WALK1 = [
+  '................................',
+  '....ee......ee..................',
+  '...efFe....efFe.................',
+  '...eFFFe..eFFFe.................',
+  '...effffffffffe.................',
+  '..fffffffffffffe................',
+  '.ffwpfffffffwpff................',
+  '.ffffkkkfffffff.................',
+  '..fffftttfffff..................',
+  '..ffffffFFFFFF..................',
+  '...cccccccccccc.................',
+  '..fffffffffffffffe..............',
+  '.ffffffffffffffffff.............',
+  '.fffffffffffffffffff............',
+  '.ffFfffffffFffffff..............',
+  '.fffffffffffffffffff............',
+  '..fffffffffffffffffff...........',
+  '..fffffffffffffffffff...........',
+  '...ffffffffffffffffff...........',
+  '...ffffffffffffffffff...........',
+  '....ffffffffffffffff............',
+  '....ffffffffffffffff............',
+  '.....fffffffffffff..............',
+  '.....ff...fff....fff............',
+  '.....ff...fff....fff............',
+  '.....ff...fff....fff............',
+  '.....ff...fff....fff............',
+  '.....ff...fff....fff............',
+  '....gFf...gFf....gFf............',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+];
+const CH_HD_BG_WALK2 = [
+  '................................',
+  '....ee......ee..................',
+  '...efFe....efFe.................',
+  '...eFFFe..eFFFe.................',
+  '...effffffffffe.................',
+  '..fffffffffffffe................',
+  '.ffwpfffffffwpff................',
+  '.ffffkkkfffffff.................',
+  '..fffftttfffff..................',
+  '..ffffffFFFFFF..................',
+  '...cccccccccccc.................',
+  '..fffffffffffffffe..............',
+  '.ffffffffffffffffff.............',
+  '.fffffffffffffffffff............',
+  '.ffFfffffffFffffff..............',
+  '.fffffffffffffffffff............',
+  '..fffffffffffffffffff...........',
+  '..fffffffffffffffffff...........',
+  '...ffffffffffffffffff...........',
+  '...ffffffffffffffffff...........',
+  '....ffffffffffffffff............',
+  '....ffffffffffffffff............',
+  '.....fffffffffffff..............',
+  '......fff..fff..ff..............',
+  '......fff..fff..ff..............',
+  '......fff..fff..ff..............',
+  '......fff..fff..ff..............',
+  '......fff..fff..ff..............',
+  '......gFf..gFf.gFf..............',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+];
+const CH_HD_BG_JUMP = [
+  '................................',
+  '....ee......ee..................',
+  '...efFe....efFe.................',
+  '...eFFFe..eFFFe.................',
+  '...effffffffffe.................',
+  '..fffffffffffffe................',
+  '.ffwpfffffffwpff................',
+  '.ffffkkkfffffff.................',
+  '..fffffffffff...................',
+  '..ffffffFFFFFF..................',
+  '...cccccccccccc.................',
+  '..fffffffffffffffe..............',
+  '.ffffffffffffffffff.............',
+  '.fffffffffffffffffff............',
+  '.ffFfffffffFffffff..............',
+  '.fffffffffffffffffff............',
+  '..fffffffffffffffffff...........',
+  '..fffffffffffffffffff...........',
+  '...ffffffffffffffffff...........',
+  '...ffffffffffffffffff...........',
+  '....ffffffffffffffff............',
+  '....ffffffffffffffff............',
+  '.....fffffffffffff..............',
+  '......ff..fff..fff..............',
+  '......ff..fff..fff..............',
+  '.....gFf..gFf..gFf..............',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+];
+const CH_HD_BG_FALL = [...CH_HD_BG_JUMP];
+const CH_HD_BG_FLUTTER = [
+  '................................',
+  '...eee.....eee..................',
+  '..eefFe...eefFe.................',
+  '..eeFFFe..eeFFFe................',
+  '...effffffffffe.................',
+  '..fffffffffffffe................',
+  '.ffwpfffffffwpff................',
+  '.ffffkkkfffffff.................',
+  '..fffftttfffff..................',
+  '..ffffffFFFFFF..................',
+  '...cccccccccccc.................',
+  '..fffffffffffffffe..............',
+  '.ffffffffffffffffff.............',
+  '.fffffffffffffffffff............',
+  '.ffFfffffffFffffff..............',
+  '.fffffffffffffffffff............',
+  '..fffffffffffffffffff...........',
+  '..fffffffffffffffffff...........',
+  '...ffffffffffffffffff...........',
+  '...ffffffffffffffffff...........',
+  '....ffffffffffffffff............',
+  '....ffffffffffffffff............',
+  '.....fffffffffffff..............',
+  '......ff..fff..fff..............',
+  '.......f...ff...ff..............',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+];
+const CH_HD_BG_TONGUE = [
+  '................................',
+  '....ee......ee..................',
+  '...efFe....efFe.................',
+  '...eFFFe..eFFFe.................',
+  '...effffffffffe.................',
+  '..fffffffffffffe................',
+  '.ffwpfffffffwpff................',
+  '.ffffkkkfffffff.................',
+  '..fffftttttttfffff..............',
+  '..ffffffFFFFFF..................',
+  '...cccccccccccc.................',
+  '..fffffffffffffffe..............',
+  '.ffffffffffffffffff.............',
+  '.fffffffffffffffffff............',
+  '.ffFfffffffFffffff..............',
+  '.fffffffffffffffffff............',
+  '..fffffffffffffffffff...........',
+  '..fffffffffffffffffff...........',
+  '...ffffffffffffffffff...........',
+  '...ffffffffffffffffff...........',
+  '....ffffffffffffffff............',
+  '....ffffffffffffffff............',
+  '.....fffffffffffff..............',
+  '......ff..fff..fff..............',
+  '......ff..fff..fff..............',
+  '......ff..fff..fff..............',
+  '......ff..fff..fff..............',
+  '......ff..fff..fff..............',
+  '.....gFf..gFf..gFf..............',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+];
 const CH_HD_BG_DEATH = [...CH_HD_BG_IDLE];
 
 // ═══════════════════════════════════════
@@ -3187,6 +3627,11 @@ export function initBonksTextures(app: Application): void {
   cache['enemy-buzzer-fly2'] = bake(app, BUZZER_FLY2, PAL_BUZZER);
   cache['enemy-spike-roll1'] = bake(app, SPIKE_ROLL1, PAL_SPIKEBALL);
   cache['enemy-spike-roll2'] = bake(app, SPIKE_ROLL2, PAL_SPIKEBALL);
+  cache['enemy-plant-hidden'] = bake(app, PLANT_HIDDEN, PAL_PLANT);
+  cache['enemy-plant-up'] = bake(app, PLANT_UP, PAL_PLANT);
+  cache['enemy-ladybug-fly1'] = bake(app, LADYBUG_FLY1, PAL_LADYBUG);
+  cache['enemy-ladybug-fly2'] = bake(app, LADYBUG_FLY2, PAL_LADYBUG);
+  cache['enemy-ladybug-squish'] = bake(app, LADYBUG_SQUISH, PAL_LADYBUG);
 
   // ── Tiles (green theme) ──
   cache['tile-ground'] = bake(app, TILE_GROUND, PAL_TILES);
@@ -3196,6 +3641,7 @@ export function initBonksTextures(app: Application): void {
   cache['tile-used'] = bake(app, TILE_USED, PAL_TILES);
   cache['tile-pipe-top'] = bake(app, TILE_PIPE_TOP, PAL_TILES);
   cache['tile-pipe-body'] = bake(app, TILE_PIPE_BODY, PAL_TILES);
+  cache['tile-dig-spot'] = bake(app, TILE_DIG_SPOT, PAL_TILES);
   cache['tile-platform'] = bake(app, TILE_PLATFORM, PAL_TILES);
   cache['tile-checkpoint'] = bake(app, TILE_CHECKPOINT, PAL_TILES);
   cache['tile-lava'] = bake(app, TILE_LAVA, PAL_TILES);
@@ -3215,6 +3661,7 @@ export function initBonksTextures(app: Application): void {
   cache['item-1up'] = bake(app, ITEM_1UP, PAL_ITEMS);
   cache['item-treat'] = bake(app, ITEM_DOG_TREAT, PAL_ITEMS);
   cache['item-coin'] = bake(app, ITEM_COIN, PAL_ITEMS);
+  cache['item-umbrella'] = bake(app, ITEM_UMBRELLA, PAL_UMBRELLA);
 
   // ── Effects ──
   const fxPal = { b: 0x8B4513, B: 0x6B3513, y: 0xFFDD00, Y: 0xFFAA00, w: 0xFFFFFF, W: 0xDDDDDD, o: 0xFF8833, g: 0x44BB44, G: 0x228822, r: 0xDD2222 };
