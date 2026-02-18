@@ -37,7 +37,6 @@ export default function GP2Page() {
           url: '/games/gp2.jsdos?v=4',
           autoStart: true,
           theme: 'dark',
-          noSideBar: true,
           noSocialLinks: true,
         });
 
@@ -110,11 +109,19 @@ export default function GP2Page() {
       <div className="mt-4 bg-white/5 rounded-lg p-4">
         <h3 className="text-sm font-bold text-white/70 mb-2">Controls</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-white/50">
-          <div><span className="text-white/70 font-medium">Arrow keys</span> - Steer / Accelerate / Brake</div>
-          <div><span className="text-white/70 font-medium">Enter</span> - Select / Confirm</div>
+          <div><span className="text-white/70 font-medium">A / Z</span> - Accelerate / Brake</div>
+          <div><span className="text-white/70 font-medium">&lt; &gt;</span> - Steer left / right</div>
+          <div><span className="text-white/70 font-medium">Space</span> - Gear down (A+Space = up)</div>
           <div><span className="text-white/70 font-medium">Esc</span> - Menu / Back</div>
-          <div><span className="text-white/70 font-medium">Space</span> - Gear shift</div>
         </div>
+        <h3 className="text-sm font-bold text-white/70 mt-3 mb-2">Driving Aids (toggle in-race)</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-white/50">
+          <div><span className="text-white/70 font-medium">F1</span> - Auto brakes</div>
+          <div><span className="text-white/70 font-medium">F2</span> - Auto gears</div>
+          <div><span className="text-white/70 font-medium">F5</span> - Ideal racing line</div>
+          <div><span className="text-white/70 font-medium">F7</span> - Steering/throttle help</div>
+        </div>
+        <p className="text-xs text-white/30 mt-3">Use the js-dos sidebar (right edge) to save/load state. Supports same-computer 2-player from the in-game menu.</p>
       </div>
     </div>
   );
