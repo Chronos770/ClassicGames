@@ -16,6 +16,7 @@ const GAME_ICONS: Record<string, string> = {
   checkers: '\u26C0',
   battleship: '\u2693',
   backgammon: '\u2680',
+  gp2: '\u{1F3CE}\u{FE0F}',
 };
 
 // Tiny pixel art for the 3 bonks characters (8x10 each, side by side)

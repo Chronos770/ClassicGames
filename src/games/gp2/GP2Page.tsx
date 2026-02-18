@@ -34,7 +34,7 @@ export default function GP2Page() {
         }
 
         const ci = await Dos(containerRef.current!, {
-          url: '/games/gp2.jsdos',
+          url: '/games/gp2.jsdos?v=4',
           autoStart: true,
           theme: 'dark',
           noSideBar: true,

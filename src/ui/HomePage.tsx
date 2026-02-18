@@ -162,9 +162,7 @@ export default function HomePage() {
               </span>
             </h1>
             <p className="text-sm text-white/50 mb-4 leading-relaxed">
-              We grew up playing cards with great-grandma — it's always been a family tradition.
-              We built Castle & Cards to share our love for classic games with anyone who feels
-              the same way.
+              Classic card and board games — play free against AI or with friends.
             </p>
             <div className="flex flex-wrap gap-2 mb-6">
               <button
