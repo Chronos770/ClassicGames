@@ -88,11 +88,14 @@ export async function getUsers(search?: string, limit = 50, offset = 0): Promise
     off: offset,
   });
 
-  if (!rpcError && rpcData && rpcData.length >= 0) {
+  if (!rpcError && Array.isArray(rpcData)) {
     const total = rpcData.length > 0 ? (rpcData[0] as { total_count: number }).total_count : 0;
     const users = (rpcData as Array<AdminUser & { total_count: number }>).map(({ total_count: _, ...rest }) => rest);
     return { users, total: Number(total) };
   }
+
+  // RPC not available — log for debugging, fall back to profiles query
+  if (rpcError) console.warn('admin_get_users_with_email RPC failed:', rpcError.message);
 
   // Fallback: query profiles directly (no email column)
   let query = supabase

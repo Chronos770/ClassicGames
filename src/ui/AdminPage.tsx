@@ -150,19 +150,18 @@ function UsersTab({ adminId }: { adminId: string }) {
 
   const handleResetPassword = async (userId: string) => {
     if (newPassword.length < 6) {
-      setResetStatus({ userId, msg: 'Password must be at least 6 characters', ok: false });
+      setResetStatus({ userId, msg: 'Min 6 characters', ok: false });
       return;
     }
     setResetting(true);
     const result = await adminSetPassword(userId, newPassword, adminId);
     setResetting(false);
     if (result.success) {
-      setResetStatus({ userId, msg: 'Password updated successfully', ok: true });
+      setResetStatus({ userId, msg: 'Password saved!', ok: true });
       setNewPassword('');
-      setResetUserId(null);
-      setTimeout(() => setResetStatus(null), 3000);
+      setTimeout(() => { setResetUserId(null); setResetStatus(null); }, 2000);
     } else {
-      setResetStatus({ userId, msg: result.error || 'Failed to reset password', ok: false });
+      setResetStatus({ userId, msg: result.error || 'Failed', ok: false });
     }
   };
 
@@ -230,44 +229,46 @@ function UsersTab({ adminId }: { adminId: string }) {
                 </td>
                 <td className="px-4 py-3">
                   {resetUserId === u.id ? (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="password"
-                        placeholder="New password"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleResetPassword(u.id)}
-                        className="w-32 bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white placeholder-white/30 focus:border-amber-500/50 focus:outline-none"
-                        autoFocus
-                      />
-                      <button
-                        onClick={() => handleResetPassword(u.id)}
-                        disabled={resetting || newPassword.length < 6}
-                        className="text-xs px-2 py-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded transition-colors disabled:opacity-30"
-                      >
-                        {resetting ? '...' : 'Save'}
-                      </button>
-                      <button
-                        onClick={cancelReset}
-                        className="text-xs px-2 py-1 bg-white/5 hover:bg-white/10 text-white/50 rounded transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </div>
+                    resetStatus?.userId === u.id && resetStatus.ok ? (
+                      <span className="text-xs px-3 py-1.5 bg-green-500/20 text-green-400 rounded-lg font-medium">
+                        {'\u2713'} Password saved!
+                      </span>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="password"
+                          placeholder="New password"
+                          value={newPassword}
+                          onChange={(e) => { setNewPassword(e.target.value); setResetStatus(null); }}
+                          onKeyDown={(e) => e.key === 'Enter' && handleResetPassword(u.id)}
+                          className="w-32 bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white placeholder-white/30 focus:border-amber-500/50 focus:outline-none"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => handleResetPassword(u.id)}
+                          disabled={resetting || newPassword.length < 6}
+                          className="text-xs px-2 py-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded transition-colors disabled:opacity-30"
+                        >
+                          {resetting ? 'Saving...' : 'Save'}
+                        </button>
+                        <button
+                          onClick={cancelReset}
+                          className="text-xs px-2 py-1 bg-white/5 hover:bg-white/10 text-white/50 rounded transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        {resetStatus?.userId === u.id && !resetStatus.ok && (
+                          <span className="text-xs text-red-400">{resetStatus.msg}</span>
+                        )}
+                      </div>
+                    )
                   ) : (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => { cancelReset(); setResetUserId(u.id); }}
-                        className="text-xs px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-lg transition-colors whitespace-nowrap"
-                      >
-                        Reset Password
-                      </button>
-                      {resetStatus?.userId === u.id && (
-                        <span className={`text-xs ${resetStatus.ok ? 'text-green-400' : 'text-red-400'}`}>
-                          {resetStatus.msg}
-                        </span>
-                      )}
-                    </div>
+                    <button
+                      onClick={() => { cancelReset(); setResetUserId(u.id); }}
+                      className="text-xs px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-lg transition-colors whitespace-nowrap"
+                    >
+                      Reset Password
+                    </button>
                   )}
                 </td>
               </tr>
