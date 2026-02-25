@@ -749,6 +749,7 @@ export class BonksRenderer {
     this.drawWater(state, cam, camY);
     this.drawTiles(state, cam, camY);
     this.drawDigSpotIndicators(state, cam, camY);
+    this.drawWarpExitIndicators(state, cam, camY);
     this.drawPowerUpItems(state, cam, camY);
     this.drawMovingPlatforms(state, cam, camY);
     this.drawCoins(state, cam, camY);
@@ -978,6 +979,21 @@ export class BonksRenderer {
       const g = new Graphics();
       g.moveTo(x, y + 12).lineTo(x - 6, y).lineTo(x + 6, y).closePath();
       g.fill({ color: 0xFFDD00, alpha: 0.8 });
+      this.tileContainer.addChild(g);
+    }
+  }
+
+  private drawWarpExitIndicators(state: BonksState, cam: number, camY: number): void {
+    if (!state.inSubLevel) return;
+    for (const warp of state.warpExits) {
+      const x = warp.x + TILE / 2 - cam;
+      if (x < -TILE || x > CANVAS_W + TILE) continue;
+      const bob = Math.sin(this.frameCount * 0.08) * 4;
+      const y = warp.y - TILE - 8 + bob - camY;
+      const g = new Graphics();
+      // Green upward-pointing arrow (inverse of dig spot's downward yellow arrow)
+      g.moveTo(x, y).lineTo(x - 6, y + 12).lineTo(x + 6, y + 12).closePath();
+      g.fill({ color: 0x44FF44, alpha: 0.85 });
       this.tileContainer.addChild(g);
     }
   }

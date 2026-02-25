@@ -99,11 +99,21 @@ const GAMES: GameConfig[] = [
     thumbnail: '',
     color: '#c41e3a',
   },
+  {
+    id: 'grandprix',
+    name: 'Grand Prix 3D',
+    description: 'Race 3D F1 cars around iconic circuits. 10-car grid, full physics.',
+    minPlayers: 1,
+    maxPlayers: 1,
+    hasAI: true,
+    thumbnail: '',
+    color: '#c41e3a',
+  },
 ];
 
 const NEW_GAMES = new Set<string>(['backgammon']);
 const DEV_GAMES = new Set<string>(['bonks']);
-const ADMIN_GAMES = new Set<string>(['gp2']);
+const ADMIN_GAMES = new Set<string>(['gp2', 'grandprix']);
 
 function StatsTeaser() {
   const stats = useUserStore((s) => s.stats);

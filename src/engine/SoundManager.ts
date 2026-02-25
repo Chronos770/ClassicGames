@@ -63,6 +63,16 @@ const SOUND_DEFINITIONS: Record<string, SoundDefinition> = {
   'bonks-boss-land': { type: 'tone', freq: 80, duration: 150, oscillator: 'sine', volume: 0.25 },
   'bonks-boss-defeat': { type: 'chord', freqs: [262, 330, 392, 523, 659], duration: 800, oscillator: 'square', volume: 0.3 },
 
+  // Grand Prix 3D
+  'gp-shift-up': { type: 'chord', freqs: [400, 800], duration: 60, oscillator: 'square', volume: 0.2 },
+  'gp-shift-down': { type: 'chord', freqs: [300, 150], duration: 80, oscillator: 'square', volume: 0.2 },
+  'gp-skid': { type: 'noise', duration: 200, volume: 0.3 },
+  'gp-crash': { type: 'noise', duration: 400, volume: 0.5 },
+  'gp-start-beep': { type: 'tone', freq: 880, duration: 200, oscillator: 'sine', volume: 0.3 },
+  'gp-start-go': { type: 'tone', freq: 1760, duration: 300, oscillator: 'sine', volume: 0.4 },
+  'gp-lap': { type: 'chord', freqs: [523, 659, 784], duration: 150, oscillator: 'sine', volume: 0.25 },
+  'gp-finish': { type: 'chord', freqs: [523, 659, 784, 1047], duration: 500, oscillator: 'sine', volume: 0.3 },
+
   // UI
   'ui-click': { type: 'tone', freq: 600, duration: 30, oscillator: 'sine', volume: 0.15 },
   'game-win': { type: 'chord', freqs: [261.63, 329.63, 392, 523.25], duration: 600, oscillator: 'sine', volume: 0.5 },

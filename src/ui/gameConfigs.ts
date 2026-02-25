@@ -201,6 +201,26 @@ export const GAME_CONFIGS: Record<string, ExtendedGameConfig> = {
       'Admin-only retro gaming experience running via DOSBox WebAssembly',
     ],
   },
+  grandprix: {
+    id: 'grandprix',
+    name: 'Grand Prix 3D',
+    description: 'Race 3D F1 cars around iconic circuits. 10-car grid, multiple cameras, full physics.',
+    minPlayers: 1,
+    maxPlayers: 1,
+    hasAI: true,
+    thumbnail: '',
+    color: '#c41e3a',
+    icon: '\u{1F3CE}\u{FE0F}',
+    category: 'strategy',
+    playModes: ['solo'],
+    rules: [
+      'Arrow keys or WASD to accelerate, brake, and steer your F1 car',
+      'Race against 9 AI opponents around a Monza-inspired circuit',
+      'Press C to cycle cameras: chase, cockpit, TV, and helicopter views',
+      'Hold Tab to view live standings, press Esc to pause',
+      'Complete all laps to see the final results and standings',
+    ],
+  },
 };
 
 export function getGameConfig(gameId: string): ExtendedGameConfig | undefined {

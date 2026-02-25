@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/authStore';
 import {
   getDashboardStats,
   getUsers,
+  adminSetPassword,
   getEloStats,
   resetEloRatings,
   getAnnouncements,
@@ -81,7 +82,7 @@ export default function AdminPage() {
 
         {/* Tab Content */}
         {tab === 'dashboard' && <DashboardTab />}
-        {tab === 'users' && <UsersTab />}
+        {tab === 'users' && <UsersTab adminId={user!.id} />}
         {tab === 'elo' && <EloTab adminId={user!.id} />}
         {tab === 'announcements' && <AnnouncementsTab adminId={user!.id} />}
         {tab === 'tickets' && <TicketsTab adminId={user!.id} />}
@@ -123,11 +124,15 @@ function DashboardTab() {
 
 // ── Users Tab ──────────────────────────────────────────────────
 
-function UsersTab() {
+function UsersTab({ adminId }: { adminId: string }) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
+  const [resetUserId, setResetUserId] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [resetStatus, setResetStatus] = useState<{ userId: string; msg: string; ok: boolean } | null>(null);
+  const [resetting, setResetting] = useState(false);
   const pageSize = 20;
 
   const load = useCallback(async () => {
@@ -143,12 +148,36 @@ function UsersTab() {
     return Date.now() - new Date(dateStr).getTime() < 5 * 60 * 1000;
   };
 
+  const handleResetPassword = async (userId: string) => {
+    if (newPassword.length < 6) {
+      setResetStatus({ userId, msg: 'Password must be at least 6 characters', ok: false });
+      return;
+    }
+    setResetting(true);
+    const result = await adminSetPassword(userId, newPassword, adminId);
+    setResetting(false);
+    if (result.success) {
+      setResetStatus({ userId, msg: 'Password updated successfully', ok: true });
+      setNewPassword('');
+      setResetUserId(null);
+      setTimeout(() => setResetStatus(null), 3000);
+    } else {
+      setResetStatus({ userId, msg: result.error || 'Failed to reset password', ok: false });
+    }
+  };
+
+  const cancelReset = () => {
+    setResetUserId(null);
+    setNewPassword('');
+    setResetStatus(null);
+  };
+
   return (
     <div>
       <div className="flex gap-3 mb-4">
         <input
           type="text"
-          placeholder="Search by name..."
+          placeholder="Search by name or email..."
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(0); }}
           className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/30 focus:border-amber-500/50 focus:outline-none"
@@ -156,14 +185,16 @@ function UsersTab() {
         <span className="text-sm text-white/40 self-center">{total} users</span>
       </div>
 
-      <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+      <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-white/10">
               <th className="text-left px-4 py-3 text-xs text-white/40 font-medium">User</th>
+              <th className="text-left px-4 py-3 text-xs text-white/40 font-medium">Email</th>
               <th className="text-left px-4 py-3 text-xs text-white/40 font-medium">Role</th>
               <th className="text-left px-4 py-3 text-xs text-white/40 font-medium">Status</th>
               <th className="text-left px-4 py-3 text-xs text-white/40 font-medium">Joined</th>
+              <th className="text-left px-4 py-3 text-xs text-white/40 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -174,6 +205,9 @@ function UsersTab() {
                     <span className="text-lg">{u.avatar_emoji || '\u{1F3AE}'}</span>
                     <span className="text-white/80">{u.display_name}</span>
                   </div>
+                </td>
+                <td className="px-4 py-3 text-xs text-white/50 max-w-[200px] truncate">
+                  {u.email || <span className="text-white/20 italic">n/a</span>}
                 </td>
                 <td className="px-4 py-3">
                   <span className={`text-xs px-2 py-0.5 rounded-full ${
@@ -193,6 +227,48 @@ function UsersTab() {
                 </td>
                 <td className="px-4 py-3 text-xs text-white/40">
                   {new Date(u.created_at).toLocaleDateString()}
+                </td>
+                <td className="px-4 py-3">
+                  {resetUserId === u.id ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="password"
+                        placeholder="New password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleResetPassword(u.id)}
+                        className="w-32 bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white placeholder-white/30 focus:border-amber-500/50 focus:outline-none"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => handleResetPassword(u.id)}
+                        disabled={resetting || newPassword.length < 6}
+                        className="text-xs px-2 py-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded transition-colors disabled:opacity-30"
+                      >
+                        {resetting ? '...' : 'Save'}
+                      </button>
+                      <button
+                        onClick={cancelReset}
+                        className="text-xs px-2 py-1 bg-white/5 hover:bg-white/10 text-white/50 rounded transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => { cancelReset(); setResetUserId(u.id); }}
+                        className="text-xs px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-lg transition-colors whitespace-nowrap"
+                      >
+                        Reset Password
+                      </button>
+                      {resetStatus?.userId === u.id && (
+                        <span className={`text-xs ${resetStatus.ok ? 'text-green-400' : 'text-red-400'}`}>
+                          {resetStatus.msg}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

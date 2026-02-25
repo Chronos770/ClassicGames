@@ -81,6 +81,20 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 export async function getUsers(search?: string, limit = 50, offset = 0): Promise<{ users: AdminUser[]; total: number }> {
   if (!supabase) return { users: [], total: 0 };
 
+  // Try RPC that joins auth.users for email (requires 005_admin_users.sql migration)
+  const { data: rpcData, error: rpcError } = await supabase.rpc('admin_get_users_with_email', {
+    search_term: search || '',
+    lim: limit,
+    off: offset,
+  });
+
+  if (!rpcError && rpcData && rpcData.length >= 0) {
+    const total = rpcData.length > 0 ? (rpcData[0] as { total_count: number }).total_count : 0;
+    const users = (rpcData as Array<AdminUser & { total_count: number }>).map(({ total_count: _, ...rest }) => rest);
+    return { users, total: Number(total) };
+  }
+
+  // Fallback: query profiles directly (no email column)
   let query = supabase
     .from('profiles')
     .select('id, display_name, avatar_emoji, role, created_at, online_at', { count: 'exact' });
@@ -95,6 +109,28 @@ export async function getUsers(search?: string, limit = 50, offset = 0): Promise
     .range(offset, offset + limit - 1);
 
   return { users: (data ?? []) as AdminUser[], total: count ?? 0 };
+}
+
+// ── Admin Password Reset ──────────────────────────────────────
+
+export async function adminSetPassword(
+  targetUserId: string,
+  newPassword: string,
+  adminId: string,
+): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) return { success: false, error: 'No database connection' };
+
+  const { error } = await supabase.rpc('admin_set_user_password', {
+    target_user_id: targetUserId,
+    new_password: newPassword,
+  });
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  await logAdminAction(adminId, 'reset_password', 'user', targetUserId, {});
+  return { success: true };
 }
 
 // ── ELO Ratings ────────────────────────────────────────────────

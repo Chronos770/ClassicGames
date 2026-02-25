@@ -167,8 +167,7 @@ export class HeartsGame {
     } else {
       this.state.phase = 'round-over';
     }
-
-    this.notify();
+    // notify() removed — playCard() calls notify() after completeTrick()/completeRound()
   }
 
   startNextRound(): void {

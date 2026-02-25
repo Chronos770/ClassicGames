@@ -118,6 +118,8 @@ export default function HeartsPage() {
   const [message, setMessage] = useState('');
   const [mySeat, setMySeat] = useState(isMultiplayer ? (isHost ? 0 : -1) : 0);
   const [gameStarted, setGameStarted] = useState(!isMultiplayer);
+  const [passSubmitted, setPassSubmitted] = useState(false);
+  const [nextRoundRequested, setNextRoundRequested] = useState(false);
   const [lobbyPlayerIds, setLobbyPlayerIds] = useState<(string | null)[]>(
     isHost ? ['host', null, null, null] : [null, null, null, null]
   );
@@ -134,6 +136,8 @@ export default function HeartsPage() {
   const pendingStateRef = useRef<HeartsState | null>(null);
   const animatingRef = useRef(false);
   const myHandRef = useRef<Card[]>([]); // Non-host: stores real hand from 'your-hand' messages
+  const destroyedRef = useRef(false);
+  const aiPlayingRef = useRef(false);
 
   // Stable refs
   const selectedCardsRef = useRef<Set<string>>(selectedCards);
@@ -172,6 +176,7 @@ export default function HeartsPage() {
     if (s.phase !== 'playing' || s.currentPlayer === 0) return;
 
     await new Promise((r) => setTimeout(r, 400));
+    if (destroyedRef.current) return;
 
     const current = game.getState();
     if (current.phase !== 'playing' || current.currentPlayer === 0) return;
@@ -234,9 +239,12 @@ export default function HeartsPage() {
   // ── Host: AI play for unfilled multiplayer seats ───────────
   const hostAiPlayRef = useRef<(game: HeartsGame, aiSeats: Set<number>) => Promise<void>>();
   hostAiPlayRef.current = async (game: HeartsGame, aiSeats: Set<number>) => {
+    if (aiPlayingRef.current) return;
+    aiPlayingRef.current = true;
     let s = game.getState();
     while (s.phase === 'playing' && aiSeats.has(s.currentPlayer)) {
       await new Promise((r) => setTimeout(r, 400));
+      if (destroyedRef.current) { aiPlayingRef.current = false; return; }
       s = game.getState();
       if (s.phase !== 'playing' || !aiSeats.has(s.currentPlayer)) break;
       const card = selectPlay(s, s.currentPlayer);
@@ -296,6 +304,7 @@ export default function HeartsPage() {
         setMessage(`Waiting for ${name}...`);
       }
     }
+    aiPlayingRef.current = false;
   };
 
   // ── Multiplayer: broadcast state (host only) ───────────────
@@ -397,7 +406,7 @@ export default function HeartsPage() {
     } else if (data.type === 'room-full') {
       // Room is full, navigate back
       setMessage('Room is full. Returning to lobby...');
-      setTimeout(() => navigate('/lobby/hearts'), 1500);
+      setTimeout(() => { if (!destroyedRef.current) navigate('/lobby/hearts'); }, 1500);
       return;
     } else if (data.type === 'player-info') {
       // A new player announces themselves
@@ -456,6 +465,8 @@ export default function HeartsPage() {
     } else if (data.type === 'deal-start') {
       // Host is dealing — play deal animation on non-host, queue state
       if (!isHost) {
+        setPassSubmitted(false);
+        setNextRoundRequested(false);
         animatingRef.current = true;
         pendingStateRef.current = null;
         const handSizes: number[] = data.handSizes || [13, 13, 13, 13];
@@ -476,7 +487,16 @@ export default function HeartsPage() {
         const absoluteSeat: number = data.seat;
         const card: Card = data.card;
         const rotatedSeat = (absoluteSeat - mySeatRef.current + 4) % 4;
-        rendererRef.current.animateCardToTrick(rotatedSeat, card);
+        // Guard: block game-state renders during card animation to prevent visual glitch
+        animatingRef.current = true;
+        rendererRef.current.animateCardToTrick(rotatedSeat, card, () => {
+          animatingRef.current = false;
+          if (pendingStateRef.current) {
+            const s = pendingStateRef.current;
+            pendingStateRef.current = null;
+            applyRemoteState(s);
+          }
+        });
         SoundManager.getInstance().play('card-flip');
       }
     } else if (data.type === 'trick-won') {
@@ -508,13 +528,36 @@ export default function HeartsPage() {
     } else if (data.type === 'pass-execute') {
       // Host says cards were passed
       if (!isHost) {
+        setPassSubmitted(false);
         setMessage('Cards passed!');
-        setTimeout(() => setMessage(''), 1500);
+        setTimeout(() => { if (!destroyedRef.current) setMessage(''); }, 1500);
+      }
+    } else if (data.type === 'pass-ack') {
+      // Host acknowledged our pass card submission
+      if (!isHost && data.seat === mySeatRef.current) {
+        setMessage('Pass submitted! Waiting for others...');
       }
     } else if (data.type === 'your-hand') {
       // Host sends us our real hand (broadcast state has hands hidden)
       if (!isHost && data.seat === mySeatRef.current) {
         myHandRef.current = data.hand;
+        // If game-state arrived first and rendered with dummy cards, re-render with real hand
+        const currentState = stateRef.current;
+        if (currentState && !animatingRef.current) {
+          const ourHand = currentState.hands[mySeatRef.current];
+          if (ourHand && ourHand.some((c: Card) => c.id?.startsWith('hidden-'))) {
+            const merged: HeartsState = {
+              ...currentState,
+              hands: currentState.hands.map((hand, i) =>
+                i === mySeatRef.current ? data.hand.slice(0, hand.length) : hand
+              ),
+            };
+            setState({ ...merged });
+            const rotated = rotateStateForSeat(merged, mySeatRef.current);
+            const sel = merged.phase === 'passing' ? selectedCardsRef.current : new Set<string>();
+            rendererRef.current?.render(rotated, sel);
+          }
+        }
       }
     } else if (data.type === 'game-state') {
       // Host broadcasts state with hidden hands — merge in our real hand
@@ -547,6 +590,8 @@ export default function HeartsPage() {
         for (const card of cards) {
           game.selectPassCard(seat, card);
         }
+        // Acknowledge receipt to the submitter
+        broadcastEvent({ type: 'pass-ack', seat });
         // Broadcast who has submitted so far
         const s = game.getState();
         const submitted = s.passingCards.map((p) => p.length >= 3);
@@ -616,6 +661,7 @@ export default function HeartsPage() {
             broadcastEvent({ type: 'trick-won', winner, points: trickPts });
 
             setTimeout(() => {
+              if (destroyedRef.current) return;
               game.clearLastCompletedTrick();
               broadcastState(game);
               setMessage('');
@@ -910,6 +956,7 @@ export default function HeartsPage() {
                   broadcastEvent({ type: 'trick-won', winner, points: trickPts });
 
                   setTimeout(() => {
+                    if (destroyedRef.current) return;
                     g.clearLastCompletedTrick();
                     broadcastState(g);
                     setMessage('');
@@ -959,6 +1006,8 @@ export default function HeartsPage() {
               // Non-host: send to host for validation
               adapterRef.current?.sendMove({ type: 'play-card', seat, card });
               SoundManager.getInstance().play('card-place');
+              // Optimistically remove from local hand cache to prevent stale hand display
+              myHandRef.current = myHandRef.current.filter(c => c.id !== card.id);
             }
           }
         } else {
@@ -1002,6 +1051,7 @@ export default function HeartsPage() {
                 showBubble(commentOnTrickWon(winner, pts));
 
                 setTimeout(() => {
+                  if (destroyedRef.current) return;
                   g.clearLastCompletedTrick();
                   setState({ ...newState });
                   renderer.render(newState, new Set());
@@ -1046,6 +1096,7 @@ export default function HeartsPage() {
     init();
     return () => {
       destroyed = true;
+      destroyedRef.current = true;
       if (bubbleTimerRef.current) clearTimeout(bubbleTimerRef.current);
       rendererRef.current?.destroy();
       if (appRef.current) { appRef.current.destroy(true); appRef.current = null; }
@@ -1105,7 +1156,7 @@ export default function HeartsPage() {
           } else {
             setMessage('');
           }
-          if (newS.currentPlayer !== mySeat && aiSeatsRef.current.has(newS.currentPlayer)) {
+          if (newS.currentPlayer !== mySeatRef.current && aiSeatsRef.current.has(newS.currentPlayer)) {
             hostAiPlayRef.current?.(game, aiSeatsRef.current);
           }
         } else {
@@ -1121,13 +1172,14 @@ export default function HeartsPage() {
         }
       } else {
         // Non-host: send pass cards to host (use host-synced React state, not local game)
-        if (mySeat < 0) return; // Shouldn't happen, but guard
+        if (mySeatRef.current < 0) return; // Shouldn't happen, but guard
         const hostState = state ?? game.getState();
-        const myHand = hostState.hands[mySeat];
+        const myHand = hostState.hands[mySeatRef.current];
         const passCards = myHand.filter((c) => selectedCards.has(c.id));
-        adapterRef.current?.sendMove({ type: 'pass-cards', seat: mySeat, cards: passCards });
+        adapterRef.current?.sendMove({ type: 'pass-cards', seat: mySeatRef.current, cards: passCards });
         selectedCardsRef.current = new Set();
         setSelectedCards(new Set());
+        setPassSubmitted(true);
         setMessage('Waiting for other players to pass...');
       }
     } else {
@@ -1180,10 +1232,10 @@ export default function HeartsPage() {
           }
         }
       });
-      adapterRef.current?.sendMove({ type: 'next-round' });
     } else if (isMultiplayer && !isHost) {
       // Non-host requests next round (host will handle it)
       adapterRef.current?.sendMove({ type: 'next-round-req' });
+      setNextRoundRequested(true);
     } else {
       // Single-player
       game.startNextRound();
@@ -1485,12 +1537,14 @@ export default function HeartsPage() {
 
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-[900px] flex items-center justify-center gap-3 mt-3">
         {displayState?.phase === 'passing' && (
-          <button onClick={handlePass} className="btn-primary text-sm py-2 px-4" disabled={selectedCards.size !== 3}>
+          <button onClick={handlePass} className="btn-primary text-sm py-2 px-4" disabled={selectedCards.size !== 3 || passSubmitted}>
             Pass Cards ({selectedCards.size}/3)
           </button>
         )}
         {displayState?.phase === 'round-over' && (
-          <button onClick={handleNextRound} className="btn-primary text-sm py-2 px-4">Next Round</button>
+          <button onClick={handleNextRound} className="btn-primary text-sm py-2 px-4" disabled={nextRoundRequested}>
+            {nextRoundRequested ? 'Waiting...' : 'Next Round'}
+          </button>
         )}
         {isMultiplayer && !gameOver && (
           <button onClick={handleResign} className="text-sm py-2 px-4 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors">

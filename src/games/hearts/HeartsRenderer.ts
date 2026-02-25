@@ -105,47 +105,6 @@ export class HeartsRenderer {
     this.mainContainer.addChild(roundText);
   }
 
-  private renderAvatar(cx: number, cy: number, opp: HeartsOpponent): void {
-    const r = AVATAR_RADIUS;
-
-    // Shadow
-    const shadow = new Graphics();
-    shadow.circle(cx + 1, cy + 2, r + 1).fill({ color: 0x000000, alpha: 0.3 });
-    this.mainContainer.addChild(shadow);
-
-    // Main circle
-    const circle = new Graphics();
-    circle.circle(cx, cy, r).fill(opp.color);
-    circle.circle(cx, cy, r).stroke({ width: 2, color: 0xffffff, alpha: 0.5 });
-    this.mainContainer.addChild(circle);
-
-    // Initial letter
-    const style = new TextStyle({
-      fontSize: 18,
-      fill: '#ffffff',
-      fontFamily: 'Inter, sans-serif',
-      fontWeight: 'bold',
-    });
-    const txt = new Text({ text: opp.initial, style });
-    txt.anchor.set(0.5, 0.5);
-    txt.x = cx;
-    txt.y = cy;
-    this.mainContainer.addChild(txt);
-
-    // Name below
-    const nameStyle = new TextStyle({
-      fontSize: 10,
-      fill: '#ffffffcc',
-      fontFamily: 'Inter, sans-serif',
-      fontWeight: '500',
-    });
-    const nameTxt = new Text({ text: opp.name, style: nameStyle });
-    nameTxt.anchor.set(0.5, 0);
-    nameTxt.x = cx;
-    nameTxt.y = cy + r + 3;
-    this.mainContainer.addChild(nameTxt);
-  }
-
   showBubble(comment: HeartsComment): void {
     this.clearBubble();
     if (!this.opponents.length) return;
@@ -353,75 +312,6 @@ export class HeartsRenderer {
       sprite.x = positions[i][0] - CARD.width / 2;
       sprite.y = positions[i][1] - CARD.height / 2;
       this.mainContainer.addChild(sprite);
-    }
-  }
-
-  private renderScores(state: HeartsState, w: number): void {
-    const names = this.getNames();
-
-    // Score panel background
-    const panelX = w - 160;
-    const panelY = 6;
-    const panelW = 154;
-    const panelH = 110;
-    const panelBg = new Graphics();
-    panelBg.roundRect(panelX, panelY, panelW, panelH, 8).fill({ color: 0x000000, alpha: 0.4 });
-    this.mainContainer.addChild(panelBg);
-
-    // Round header
-    const roundText = new Text({
-      text: `Round ${state.roundNumber}`,
-      style: new TextStyle({ fontSize: 11, fill: '#ffffff88', fontFamily: 'Inter, sans-serif', fontWeight: 'bold' }),
-    });
-    roundText.x = panelX + 10;
-    roundText.y = panelY + 8;
-    this.mainContainer.addChild(roundText);
-
-    for (let i = 0; i < 4; i++) {
-      const isOpp = i > 0 && this.opponents.length === 3;
-      const nameColor = isOpp
-        ? '#' + this.opponents[i - 1].color.toString(16).padStart(6, '0')
-        : '#ffffff';
-      const isYou = i === 0;
-
-      // Name
-      const nameStyle = new TextStyle({
-        fontSize: 12,
-        fill: nameColor,
-        fontFamily: 'Inter, sans-serif',
-        fontWeight: isYou ? 'bold' : 'normal',
-      });
-      const nameText = new Text({ text: names[i], style: nameStyle });
-      nameText.x = panelX + 10;
-      nameText.y = panelY + 26 + i * 20;
-      this.mainContainer.addChild(nameText);
-
-      // Total score (big)
-      const totalStyle = new TextStyle({
-        fontSize: 13,
-        fill: '#ffffff',
-        fontFamily: 'Inter, sans-serif',
-        fontWeight: 'bold',
-      });
-      const totalText = new Text({ text: `${state.totalScores[i]}`, style: totalStyle });
-      totalText.anchor.set(1, 0);
-      totalText.x = panelX + panelW - 40;
-      totalText.y = panelY + 25 + i * 20;
-      this.mainContainer.addChild(totalText);
-
-      // Round score (+N)
-      const roundScore = state.scores[i];
-      const rsColor = roundScore > 0 ? '#ff6666' : '#66ff66';
-      const rsStyle = new TextStyle({
-        fontSize: 10,
-        fill: roundScore > 0 ? rsColor : '#ffffff66',
-        fontFamily: 'Inter, sans-serif',
-      });
-      const rsText = new Text({ text: `+${roundScore}`, style: rsStyle });
-      rsText.anchor.set(1, 0);
-      rsText.x = panelX + panelW - 10;
-      rsText.y = panelY + 27 + i * 20;
-      this.mainContainer.addChild(rsText);
     }
   }
 
@@ -722,27 +612,30 @@ export class HeartsRenderer {
       const sx = sprite.x, sy = sprite.y, sr = sprite.rotation;
       const start = performance.now();
       const tick = () => {
+        if (this.destroyed) return;
         const p = Math.min((performance.now() - start) / duration, 1);
         const e = easeOutCubic(p);
         sprite.x = sx + (tx - sx) * e;
         sprite.y = sy + (ty - sy) * e;
         sprite.rotation = sr + (tRot - sr) * e;
-        if (p < 1) requestAnimationFrame(tick);
-        else {
+        if (p < 1) {
+          this.pendingRAFs.push(requestAnimationFrame(tick));
+        } else {
           completedAnims++;
           if (completedAnims >= totalCards) {
             setTimeout(() => {
+              if (this.destroyed) return;
               dealContainer.destroy({ children: true });
               onComplete();
             }, 150);
           }
         }
       };
-      requestAnimationFrame(tick);
+      this.pendingRAFs.push(requestAnimationFrame(tick));
     };
 
     const dealNext = () => {
-      if (dealt >= totalCards) return;
+      if (this.destroyed || dealt >= totalCards) return;
       const player = dealt % 4;
       if (counters[player] >= handSizes[player]) {
         dealt++;
@@ -761,11 +654,11 @@ export class HeartsRenderer {
       const target = getTarget(player, idx, handSizes[player]);
       animateCard(sprite, target.x, target.y, target.rot, 180);
 
-      setTimeout(dealNext, 35);
+      setTimeout(() => { if (!this.destroyed) dealNext(); }, 35);
     };
 
     // Small delay then start dealing
-    setTimeout(dealNext, 300);
+    setTimeout(() => { if (!this.destroyed) dealNext(); }, 300);
   }
 
   destroy(): void {

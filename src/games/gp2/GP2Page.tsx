@@ -10,7 +10,6 @@ export default function GP2Page() {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<DosInstance | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Admin gate
@@ -34,10 +33,9 @@ export default function GP2Page() {
         }
 
         const ci = await Dos(containerRef.current!, {
-          url: '/games/gp2.jsdos?v=4',
+          url: '/games/gp2.jsdos?v=2',
           autoStart: true,
           theme: 'dark',
-          noSocialLinks: true,
         });
 
         if (cancelled) {
@@ -46,11 +44,9 @@ export default function GP2Page() {
         }
 
         instanceRef.current = ci;
-        setLoading(false);
       } catch (err) {
         if (!cancelled) {
           setError(`Failed to start GP2: ${err}`);
-          setLoading(false);
         }
       }
     }
@@ -93,12 +89,6 @@ export default function GP2Page() {
 
       {/* js-dos container */}
       <div className="relative bg-black rounded-lg overflow-hidden" style={{ width: 800, height: 600 }}>
-        {loading && !error && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-black">
-            <div className="text-white/60 animate-pulse text-sm mb-2">Loading Grand Prix II...</div>
-            <div className="text-white/30 text-xs">~32 MB download - please wait</div>
-          </div>
-        )}
         <div
           ref={containerRef}
           style={{ width: 800, height: 600 }}
@@ -121,7 +111,7 @@ export default function GP2Page() {
           <div><span className="text-white/70 font-medium">F5</span> - Ideal racing line</div>
           <div><span className="text-white/70 font-medium">F7</span> - Steering/throttle help</div>
         </div>
-        <p className="text-xs text-white/30 mt-3">Use the js-dos sidebar (right edge) to save/load state. Supports same-computer 2-player from the in-game menu.</p>
+        <p className="text-xs text-white/30 mt-3">After changing settings or saving in-game, click the floppy disk icon in the js-dos sidebar (left edge) to persist. On next visit, click the play button and your changes will be restored. Supports same-computer 2-player from the in-game menu.</p>
       </div>
     </div>
   );
