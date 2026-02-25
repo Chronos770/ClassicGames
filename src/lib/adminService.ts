@@ -82,16 +82,18 @@ export async function getUsers(search?: string, limit = 50, offset = 0): Promise
   if (!supabase) return { users: [], total: 0 };
 
   // Try RPC that joins auth.users for email (requires 005_admin_users.sql migration)
+  // Returns JSON: { users: [...], total: number }
   const { data: rpcData, error: rpcError } = await supabase.rpc('admin_get_users_with_email', {
     search_term: search || '',
     lim: limit,
     off: offset,
   });
 
-  if (!rpcError && Array.isArray(rpcData)) {
-    const total = rpcData.length > 0 ? (rpcData[0] as { total_count: number }).total_count : 0;
-    const users = (rpcData as Array<AdminUser & { total_count: number }>).map(({ total_count: _, ...rest }) => rest);
-    return { users, total: Number(total) };
+  if (!rpcError && rpcData) {
+    const parsed = typeof rpcData === 'string' ? JSON.parse(rpcData) : rpcData;
+    if (parsed && Array.isArray(parsed.users)) {
+      return { users: parsed.users as AdminUser[], total: Number(parsed.total ?? 0) };
+    }
   }
 
   // RPC not available — log for debugging, fall back to profiles query

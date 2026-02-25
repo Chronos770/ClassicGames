@@ -1,31 +1,27 @@
 -- 005_admin_users.sql
 -- Admin functions for viewing user emails and resetting passwords
 -- Run this manually in Supabase SQL Editor
+-- NOTE: If re-running, the CREATE OR REPLACE will update existing functions
 
 -- Ensure pgcrypto is available (usually already enabled on Supabase)
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- ── Get users with email (admin only) ────────────────────────────
 -- Joins profiles with auth.users to expose email to admins
+-- Returns JSON to avoid PostgREST column type mismatch issues
 CREATE OR REPLACE FUNCTION admin_get_users_with_email(
   search_term text DEFAULT '',
   lim int DEFAULT 50,
   off int DEFAULT 0
 )
-RETURNS TABLE (
-  id uuid,
-  display_name text,
-  avatar_emoji text,
-  role text,
-  created_at timestamptz,
-  online_at timestamptz,
-  email text,
-  total_count bigint
-)
+RETURNS json
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  result json;
+  total_count bigint;
 BEGIN
   -- Verify caller is admin
   IF NOT EXISTS (
@@ -36,26 +32,43 @@ BEGIN
     RAISE EXCEPTION 'Unauthorized: admin access required';
   END IF;
 
-  RETURN QUERY
-  SELECT
-    p.id,
-    p.display_name,
-    p.avatar_emoji,
-    p.role,
-    p.created_at,
-    p.online_at,
-    u.email,
-    COUNT(*) OVER() AS total_count
+  -- Get total count
+  SELECT COUNT(*) INTO total_count
   FROM public.profiles p
   JOIN auth.users u ON u.id = p.id
   WHERE (
     search_term = ''
     OR p.display_name ILIKE '%' || search_term || '%'
     OR u.email ILIKE '%' || search_term || '%'
-  )
-  ORDER BY p.created_at DESC
-  LIMIT lim
-  OFFSET off;
+  );
+
+  -- Get paginated results
+  SELECT json_build_object(
+    'users', COALESCE(json_agg(row_to_json(t)), '[]'::json),
+    'total', total_count
+  ) INTO result
+  FROM (
+    SELECT
+      p.id,
+      p.display_name,
+      p.avatar_emoji,
+      p.role,
+      p.created_at,
+      p.online_at,
+      u.email
+    FROM public.profiles p
+    JOIN auth.users u ON u.id = p.id
+    WHERE (
+      search_term = ''
+      OR p.display_name ILIKE '%' || search_term || '%'
+      OR u.email ILIKE '%' || search_term || '%'
+    )
+    ORDER BY p.created_at DESC
+    LIMIT lim
+    OFFSET off
+  ) t;
+
+  RETURN result;
 END;
 $$;
 
@@ -85,9 +98,9 @@ BEGIN
     RAISE EXCEPTION 'Password must be at least 6 characters';
   END IF;
 
-  -- Update the password
+  -- Update the password (use extensions schema where Supabase installs pgcrypto)
   UPDATE auth.users
-  SET encrypted_password = crypt(new_password, gen_salt('bf'))
+  SET encrypted_password = extensions.crypt(new_password, extensions.gen_salt('bf'))
   WHERE auth.users.id = target_user_id;
 
   IF NOT FOUND THEN
