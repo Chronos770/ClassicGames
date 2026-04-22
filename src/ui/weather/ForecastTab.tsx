@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   forecastEmoji,
   getAlerts,
   getForecast,
   getHourlyForecast,
+  parseWindSpeed,
   type NwsAlert,
   type NwsForecast,
   type NwsForecastPeriod,
 } from '../../lib/nwsService';
 import type { WeatherStation } from '../../lib/weatherService';
+import LineChart from './LineChart';
 
 export default function ForecastTab({ station }: { station: WeatherStation | null }) {
   const [forecast, setForecast] = useState<NwsForecast | null>(null);
@@ -65,7 +67,7 @@ export default function ForecastTab({ station }: { station: WeatherStation | nul
     <div className="space-y-5">
       {alerts.length > 0 && <AlertsBanner alerts={alerts} />}
       {forecast && <CurrentPeriod period={forecast.properties.periods[0]} />}
-      {hourly && <HourlyStrip periods={hourly.properties.periods.slice(0, 24)} />}
+      {hourly && <Next24Hours periods={hourly.properties.periods.slice(0, 24)} />}
       {forecast && <DailyGrid periods={forecast.properties.periods} />}
       <div className="text-[10px] text-white/30 text-center">
         Forecast: National Weather Service (weather.gov)
@@ -148,36 +150,167 @@ function CurrentPeriod({ period }: { period: NwsForecastPeriod }) {
   );
 }
 
-function HourlyStrip({ periods }: { periods: NwsForecastPeriod[] }) {
+function Next24Hours({ periods }: { periods: NwsForecastPeriod[] }) {
+  const [view, setView] = useState<'strip' | 'list'>('strip');
+
+  const tempSeries = useMemo(
+    () => [
+      {
+        label: 'Temp',
+        color: '#fbbf24',
+        points: periods.map((p) => ({
+          t: new Date(p.startTime).getTime(),
+          v: p.temperature,
+        })),
+      },
+      {
+        label: 'Precip %',
+        color: '#60a5fa',
+        points: periods.map((p) => ({
+          t: new Date(p.startTime).getTime(),
+          v: p.probabilityOfPrecipitation.value,
+        })),
+      },
+    ],
+    [periods],
+  );
+
+  // Summary stats
+  const temps = periods.map((p) => p.temperature);
+  const hiTemp = Math.max(...temps);
+  const loTemp = Math.min(...temps);
+  const maxPrecip = Math.max(
+    ...periods.map((p) => p.probabilityOfPrecipitation.value ?? 0),
+  );
+  const maxWind = Math.max(...periods.map((p) => parseWindSpeed(p.windSpeed) ?? 0));
+
   return (
     <div className="bg-white/5 rounded-xl border border-white/10 p-4">
-      <div className="text-xs uppercase tracking-wide text-white/40 mb-3 font-semibold">Next 24 Hours</div>
-      <div className="overflow-x-auto">
-        <div className="flex gap-2 min-w-max pb-1">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div className="text-xs uppercase tracking-wide text-white/40 font-semibold">Next 24 Hours</div>
+        <div className="flex gap-1 border border-white/10 rounded-lg p-0.5">
+          <button
+            onClick={() => setView('strip')}
+            className={`text-xs px-2.5 py-1 rounded transition-colors ${
+              view === 'strip' ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white/80'
+            }`}
+          >
+            Quick
+          </button>
+          <button
+            onClick={() => setView('list')}
+            className={`text-xs px-2.5 py-1 rounded transition-colors ${
+              view === 'list' ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white/80'
+            }`}
+          >
+            Detailed
+          </button>
+        </div>
+      </div>
+
+      {/* Summary bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 pb-4 border-b border-white/5">
+        <SummaryStat label="High" value={`${hiTemp}°`} tone="amber" />
+        <SummaryStat label="Low" value={`${loTemp}°`} tone="blue" />
+        <SummaryStat label="Max Precip" value={`${maxPrecip}%`} tone={maxPrecip > 30 ? 'blue' : 'dim'} />
+        <SummaryStat label="Peak Wind" value={`${Math.round(maxWind)} mph`} tone={maxWind > 15 ? 'amber' : 'dim'} />
+      </div>
+
+      {/* Temp chart (always visible for at-a-glance) */}
+      <div className="mb-4">
+        <LineChart series={tempSeries} height={140} />
+      </div>
+
+      {view === 'strip' ? (
+        <div className="overflow-x-auto">
+          <div className="flex gap-2 min-w-max pb-1">
+            {periods.map((p) => {
+              const hour = new Date(p.startTime);
+              return (
+                <div
+                  key={p.number}
+                  className="flex flex-col items-center bg-white/5 rounded-lg p-2 min-w-[70px] text-center border border-white/5"
+                >
+                  <div className="text-[10px] text-white/50">
+                    {hour.toLocaleTimeString([], { hour: 'numeric' })}
+                  </div>
+                  <div className="text-xl my-1">{forecastEmoji(p.shortForecast, p.isDaytime)}</div>
+                  <div className="text-sm font-semibold text-white tabular-nums">
+                    {p.temperature}°
+                  </div>
+                  {p.probabilityOfPrecipitation.value !== null &&
+                    p.probabilityOfPrecipitation.value > 0 && (
+                      <div className="text-[10px] text-blue-300 mt-0.5">
+                        {p.probabilityOfPrecipitation.value}%
+                      </div>
+                    )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-1">
           {periods.map((p) => {
             const hour = new Date(p.startTime);
+            const wind = parseWindSpeed(p.windSpeed);
             return (
               <div
                 key={p.number}
-                className="flex flex-col items-center bg-white/5 rounded-lg p-2 min-w-[70px] text-center border border-white/5"
+                className="flex items-center gap-2 sm:gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors text-sm"
               >
-                <div className="text-[10px] text-white/50">
-                  {hour.toLocaleTimeString([], { hour: 'numeric' })}
+                <div className="w-16 sm:w-20 text-xs text-white/50 tabular-nums flex-shrink-0">
+                  {hour.toLocaleTimeString([], { hour: 'numeric', hour12: true })}
                 </div>
-                <div className="text-xl my-1">{forecastEmoji(p.shortForecast, p.isDaytime)}</div>
-                <div className="text-sm font-semibold text-white tabular-nums">
+                <div className="text-xl w-7 text-center flex-shrink-0">
+                  {forecastEmoji(p.shortForecast, p.isDaytime)}
+                </div>
+                <div className="w-12 text-base font-semibold text-white tabular-nums flex-shrink-0">
                   {p.temperature}°
                 </div>
-                {p.probabilityOfPrecipitation.value !== null && p.probabilityOfPrecipitation.value > 0 && (
-                  <div className="text-[10px] text-blue-300 mt-0.5">
-                    {p.probabilityOfPrecipitation.value}%
-                  </div>
-                )}
+                <div className="flex-1 min-w-0 text-xs text-white/60 truncate">
+                  {p.shortForecast}
+                </div>
+                <div className="hidden sm:flex items-center gap-1 text-xs text-white/50 w-24 justify-end tabular-nums">
+                  <span className="text-white/30">💨</span>
+                  <span>{wind !== null ? `${Math.round(wind)}` : '--'}</span>
+                  <span className="text-white/30">{p.windDirection}</span>
+                </div>
+                <div className="w-14 text-xs text-right tabular-nums flex-shrink-0">
+                  {p.probabilityOfPrecipitation.value !== null &&
+                  p.probabilityOfPrecipitation.value > 0 ? (
+                    <span className="text-blue-300">{p.probabilityOfPrecipitation.value}%</span>
+                  ) : (
+                    <span className="text-white/20">—</span>
+                  )}
+                </div>
               </div>
             );
           })}
         </div>
-      </div>
+      )}
+    </div>
+  );
+}
+
+function SummaryStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: 'amber' | 'blue' | 'dim';
+}) {
+  const toneClass: Record<string, string> = {
+    amber: 'text-amber-400',
+    blue: 'text-blue-300',
+    dim: 'text-white/60',
+  };
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wide text-white/40">{label}</div>
+      <div className={`text-lg font-semibold tabular-nums ${toneClass[tone]}`}>{value}</div>
     </div>
   );
 }
