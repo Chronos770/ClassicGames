@@ -52,10 +52,12 @@ export interface NwsAlert {
 
 async function invokeProxy<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke('weather-proxy', { body });
-  if (error) throw new Error(`weather-proxy: ${error.message}`);
-  if (data && typeof data === 'object' && 'error' in data) {
-    throw new Error(`weather-proxy: ${(data as { error: string }).error}`);
-  }
+  if (error) throw new Error(`weather-proxy transport: ${error.message}`);
+  if (!data || typeof data !== 'object') throw new Error('weather-proxy returned no data');
+  const envelope = data as { ok?: boolean; data?: unknown; error?: string };
+  if (envelope.ok === false) throw new Error(envelope.error || 'weather-proxy unknown error');
+  if (envelope.ok === true) return envelope.data as T;
+  // Backward-compat: older deploy returned raw data.
   return data as T;
 }
 

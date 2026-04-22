@@ -9,13 +9,17 @@
 //   { kind: 'nws-alerts',    lat: number, lon: number }
 //   { kind: 'nws-point',     lat: number, lon: number }
 //   { kind: 'rainviewer' }
+//
+// Design: always returns HTTP 200, with { ok: true, data } on success or
+// { ok: false, error } on failure — that way supabase-js's invoke() doesn't
+// blanket-fail the whole request on a transient upstream error. We retry each
+// upstream call twice with a small backoff since NWS in particular can return
+// flaky 500s during forecast regeneration.
 
 // deno-lint-ignore-file no-explicit-any
 
 const NWS_BASE = 'https://api.weather.gov';
 const RAINVIEWER_MAPS = 'https://api.rainviewer.com/public/weather-maps.json';
-
-// NWS requires a User-Agent. Identify the app + contact for good API citizenship.
 const NWS_UA = 'CastleAndCards/1.0 (sfisherit@gmail.com)';
 
 const corsHeaders = {
@@ -24,21 +28,42 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
 
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function fetchWithRetry(url: string, init: RequestInit, retries = 2): Promise<Response> {
+  let lastErr: any;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, init);
+      if (res.ok) return res;
+      // Retry on 5xx or 429
+      if (res.status >= 500 || res.status === 429) {
+        lastErr = new Error(`${res.status}: ${(await res.text()).slice(0, 200)}`);
+        await sleep(300 * (attempt + 1));
+        continue;
+      }
+      // Non-retryable
+      throw new Error(`${res.status}: ${(await res.text()).slice(0, 200)}`);
+    } catch (e) {
+      lastErr = e;
+      if (attempt < retries) await sleep(300 * (attempt + 1));
+    }
+  }
+  throw lastErr;
+}
+
 async function nwsFetch(url: string) {
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     headers: {
       'User-Agent': NWS_UA,
       Accept: 'application/geo+json',
     },
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`NWS ${res.status}: ${text.slice(0, 500)}`);
-  }
   return await res.json();
 }
 
-// Simple in-function cache for the /points endpoint (rarely changes per lat/lon)
 const pointCache = new Map<string, { at: number; data: any }>();
 async function getPoint(lat: number, lon: number) {
   const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
@@ -47,6 +72,13 @@ async function getPoint(lat: number, lon: number) {
   const data = await nwsFetch(`${NWS_BASE}/points/${key}`);
   pointCache.set(key, { at: Date.now(), data });
   return data;
+}
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
 }
 
 Deno.serve(async (req) => {
@@ -83,24 +115,16 @@ Deno.serve(async (req) => {
         );
         break;
       case 'rainviewer': {
-        const res = await fetch(RAINVIEWER_MAPS);
-        if (!res.ok) throw new Error(`RainViewer ${res.status}`);
+        const res = await fetchWithRetry(RAINVIEWER_MAPS, {});
         data = await res.json();
         break;
       }
       default:
-        return new Response(JSON.stringify({ error: `Unknown kind: ${kind}` }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        return json({ ok: false, error: `Unknown kind: ${kind}` });
     }
-    return new Response(JSON.stringify(data), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return json({ ok: true, data });
   } catch (e: any) {
-    return new Response(JSON.stringify({ error: String(e?.message ?? e) }), {
-      status: 502,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    console.error(`weather-proxy ${kind} failed:`, e?.message ?? e);
+    return json({ ok: false, error: String(e?.message ?? e).slice(0, 500) });
   }
 });

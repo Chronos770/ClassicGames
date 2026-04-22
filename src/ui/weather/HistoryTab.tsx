@@ -153,8 +153,22 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
       case 'rain':
         return {
           series: [
-            { label: 'Rate ("/hr)', color: '#60a5fa', points: readings.map((r) => ({ t: t(r), v: r.rain_rate_last_in })) },
-            { label: 'Peak 15m Rate', color: '#f472b6', points: readings.map((r) => ({ t: t(r), v: r.rain_rate_hi_last_15_min_in })) },
+            {
+              label: 'Rate ("/hr)',
+              color: '#60a5fa',
+              // Historical rows only have rain_rate_hi_in (per-period peak);
+              // current-ingest rows have both rain_rate_last_in and the hi
+              // variant — fall through to whichever is available.
+              points: readings.map((r) => ({
+                t: t(r),
+                v: r.rain_rate_last_in ?? r.rain_rate_hi_in,
+              })),
+            },
+            {
+              label: 'Period Rainfall',
+              color: '#3b82f6',
+              points: readings.map((r) => ({ t: t(r), v: r.rainfall_last_15_min_in })),
+            },
           ] as Series[],
           yUnit: '"',
           yDomain: undefined,

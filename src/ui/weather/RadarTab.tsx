@@ -225,8 +225,10 @@ function RainViewerMap({ station }: { station: WeatherStation }) {
       .invoke('weather-proxy', { body: { kind: 'rainviewer' } })
       .then(({ data, error }) => {
         if (cancelled) return;
-        if (error) throw error;
-        const d = data as RainViewerWeatherMaps;
+        if (error) throw new Error(error.message);
+        const envelope = data as { ok?: boolean; data?: RainViewerWeatherMaps; error?: string };
+        if (envelope?.ok === false) throw new Error(envelope.error || 'unknown');
+        const d = (envelope?.ok === true ? envelope.data : (data as RainViewerWeatherMaps)) as RainViewerWeatherMaps;
         const past = d.radar?.past ?? [];
         const nowcast = d.radar?.nowcast ?? [];
         setHost(d.host);
