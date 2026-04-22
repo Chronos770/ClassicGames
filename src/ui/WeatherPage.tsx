@@ -16,6 +16,7 @@ import OverviewTab from './weather/OverviewTab';
 import HistoryTab from './weather/HistoryTab';
 import RadarTab from './weather/RadarTab';
 import HealthTab from './weather/HealthTab';
+import { WeatherInstallButton, useWeatherManifest } from './weather/WeatherPwa';
 
 type Tab = 'overview' | 'history' | 'radar' | 'health';
 
@@ -54,6 +55,10 @@ export default function WeatherPage() {
   useEffect(() => {
     if (!user || !isAdmin) navigate('/');
   }, [user, isAdmin, navigate]);
+
+  // Swap manifest, apple-touch-icon, theme-color, and title to weather branding
+  // while on this page so "Add to Home Screen" installs the Weather app.
+  useWeatherManifest();
 
   // Load stations once
   useEffect(() => {
@@ -220,6 +225,8 @@ export default function WeatherPage() {
             {ingestMsg}
           </div>
         )}
+
+        <WeatherInstallButton />
 
         {/* Tab bar */}
         <div className="flex gap-1 mb-5 overflow-x-auto pb-1">

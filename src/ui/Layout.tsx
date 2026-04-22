@@ -10,10 +10,15 @@ import { useAuthStore } from '../stores/authStore';
 import { useUserStore } from '../stores/userStore';
 import InstallBanner from './components/InstallBanner';
 import { getActiveAnnouncements, type Announcement } from '../lib/adminService';
+import { useIsWeatherPwa } from './weather/WeatherPwa';
 
 export default function Layout() {
   const location = useLocation();
   const isInGame = location.pathname.startsWith('/play/');
+  // When launched from the installed Weather PWA, hide all the Castle & Cards
+  // chrome (header, banners, install prompts) so the page looks like a
+  // dedicated weather app.
+  const isWeatherPwa = useIsWeatherPwa() && location.pathname.startsWith('/weather');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [bannerAuthOpen, setBannerAuthOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -43,7 +48,7 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {!isInGame && (
+      {!isInGame && !isWeatherPwa && (
         <header className="relative z-20 border-b border-white/10">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
             <Link to="/" className="flex items-center gap-2 sm:gap-3 group">
@@ -147,7 +152,7 @@ export default function Layout() {
       )}
 
       {/* Guest upgrade banner */}
-      {!isInGame && isGuest && !guestBannerDismissed && (
+      {!isInGame && !isWeatherPwa && isGuest && !guestBannerDismissed && (
         <div className="bg-amber-500/10 border-b border-amber-500/20">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2 sm:py-2.5 flex items-center justify-between gap-2">
             <p className="text-xs sm:text-sm text-amber-200/80">
@@ -170,10 +175,10 @@ export default function Layout() {
         </div>
       )}
 
-      {!isInGame && <InstallBanner />}
+      {!isInGame && !isWeatherPwa && <InstallBanner />}
 
       {/* Announcements banner */}
-      {!isInGame && announcements.filter((a) => !dismissedAnnouncements.has(a.id)).length > 0 && (
+      {!isInGame && !isWeatherPwa && announcements.filter((a) => !dismissedAnnouncements.has(a.id)).length > 0 && (
         <div className="space-y-0">
           {announcements.filter((a) => !dismissedAnnouncements.has(a.id)).map((ann) => {
             const colors: Record<string, string> = {

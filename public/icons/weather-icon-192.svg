@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0c4a6e"/>
+      <stop offset="100%" stop-color="#0a0a1a"/>
+    </linearGradient>
+    <linearGradient id="cloud" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e0f2fe"/>
+      <stop offset="100%" stop-color="#7dd3fc"/>
+    </linearGradient>
+    <linearGradient id="bolt" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fde68a"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="36" fill="url(#bg)"/>
+  <g transform="translate(0,12)">
+    <!-- Cloud body -->
+    <path d="M132,86c0-19-15-34-34-34c-15,0-28,9-32,22c-3-1-7-2-10-2c-13,0-24,11-24,24c0,13,11,24,24,24h74c14,0,26-11,26-26C156,98,146,87,132,86z"
+          fill="url(#cloud)" stroke="#bae6fd" stroke-width="2"/>
+    <!-- Lightning bolt -->
+    <path d="M96,108 L80,140 L94,140 L86,168 L116,128 L100,128 L108,108 Z"
+          fill="url(#bolt)" stroke="#b45309" stroke-width="1.5" stroke-linejoin="round"/>
+  </g>
+</svg>
