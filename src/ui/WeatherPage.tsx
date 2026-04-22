@@ -35,6 +35,7 @@ export default function WeatherPage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const profile = useAuthStore((s) => s.profile);
+  const authLoading = useAuthStore((s) => s.isLoading);
   const isAdmin = profile?.role === 'admin';
 
   const [stations, setStations] = useState<WeatherStation[]>([]);
@@ -51,10 +52,18 @@ export default function WeatherPage() {
   const [realtimeOk, setRealtimeOk] = useState(false);
   const stationIdRef = useRef<number | null>(null);
 
-  // Redirect non-admins
+  // Redirect non-admins (only after auth has finished loading and we've had a
+  // chance to fetch the profile — otherwise a fresh page load races the
+  // session restore and bounces you to / before your role is known).
   useEffect(() => {
-    if (!user || !isAdmin) navigate('/');
-  }, [user, isAdmin, navigate]);
+    if (authLoading) return;
+    if (!user) {
+      navigate('/');
+      return;
+    }
+    // user is loaded but profile may still be fetching — wait one tick
+    if (profile && !isAdmin) navigate('/');
+  }, [authLoading, user, profile, isAdmin, navigate]);
 
   // Swap manifest, apple-touch-icon, theme-color, and title to weather branding
   // while on this page so "Add to Home Screen" installs the Weather app.

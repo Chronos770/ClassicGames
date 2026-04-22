@@ -29,16 +29,21 @@ export default function AdminPage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const profile = useAuthStore((s) => s.profile);
+  const authLoading = useAuthStore((s) => s.isLoading);
   const isAdmin = profile?.role === 'admin';
 
   const [tab, setTab] = useState<Tab>('dashboard');
 
-  // Redirect non-admins
+  // Redirect non-admins — wait for auth + profile to load first so a session
+  // restore on a fresh tab doesn't race the redirect.
   useEffect(() => {
-    if (!user || !isAdmin) {
+    if (authLoading) return;
+    if (!user) {
       navigate('/');
+      return;
     }
-  }, [user, isAdmin, navigate]);
+    if (profile && !isAdmin) navigate('/');
+  }, [authLoading, user, profile, isAdmin, navigate]);
 
   if (!isAdmin) return null;
 
