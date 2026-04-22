@@ -101,7 +101,16 @@ export default function WeatherPage() {
         },
         (payload) => {
           const row = payload.new as WeatherReading;
-          setReading(row);
+          // Only replace the displayed reading if this is NEWER than what we
+          // have — backfills insert historical rows that would otherwise
+          // clobber the current reading with stale/null data.
+          setReading((prev) => {
+            if (!prev) return row;
+            return new Date(row.observed_at).getTime() >
+              new Date(prev.observed_at).getTime()
+              ? row
+              : prev;
+          });
           setLastIngestTick((t) => t + 1);
         },
       )

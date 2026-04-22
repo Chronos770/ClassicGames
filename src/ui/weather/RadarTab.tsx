@@ -34,7 +34,7 @@ export default function RadarTab({ station }: { station: WeatherStation | null }
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2 bg-white/5 rounded-xl border border-white/10 p-3">
+      <div className="flex flex-wrap items-center gap-2 bg-white/5 rounded-xl border border-white/10 p-3">
         <span className="text-[10px] uppercase tracking-wide text-white/40 mr-1">Provider</span>
         {(['windy', 'radar'] as Provider[]).map((p) => (
           <button
@@ -46,7 +46,7 @@ export default function RadarTab({ station }: { station: WeatherStation | null }
                 : 'text-white/50 hover:text-white/80 hover:bg-white/5'
             }`}
           >
-            {p === 'windy' ? 'Windy (multi-layer)' : 'RainViewer Radar'}
+            {p === 'windy' ? 'Windy' : 'RainViewer'}
           </button>
         ))}
       </div>
@@ -65,21 +65,28 @@ export default function RadarTab({ station }: { station: WeatherStation | null }
 function WindyEmbed({ station }: { station: WeatherStation }) {
   const [overlay, setOverlay] = useState('radar');
   const [level, setLevel] = useState('surface');
+  const [iframeBlocked, setIframeBlocked] = useState(false);
+  const [iframeKey, setIframeKey] = useState(0);
 
   const lat = station.latitude!;
   const lon = station.longitude!;
 
-  const src =
+  const embedSrc =
     `https://embed.windy.com/embed2.html?` +
     `lat=${lat}&lon=${lon}` +
     `&detailLat=${lat}&detailLon=${lon}` +
-    `&width=100%25&height=480&zoom=7` +
+    `&zoom=7` +
     `&level=${encodeURIComponent(level)}` +
     `&overlay=${encodeURIComponent(overlay)}` +
-    `&product=ecmwf` +
-    `&menu=&message=true&marker=true&calendar=now&pressure=&type=map` +
+    `&product=${overlay === 'radar' ? 'radar' : 'ecmwf'}` +
+    `&menu=&message=&marker=true&calendar=now&pressure=&type=map` +
     `&location=coordinates&detail=` +
     `&metricWind=mph&metricTemp=%C2%B0F&radarRange=-1`;
+
+  // Direct windy.com URL (full site) for the "Open in new tab" fallback.
+  // This always works since it's not an iframe.
+  const directSrc =
+    `https://www.windy.com/?${overlay},${lat.toFixed(3)},${lon.toFixed(3)},7`;
 
   const levels = [
     { id: 'surface', label: 'Surface' },
@@ -89,10 +96,25 @@ function WindyEmbed({ station }: { station: WeatherStation }) {
     { id: '300h', label: '300 hPa' },
   ];
 
+  // Detect iframe load failure — some networks (parental controls, corporate
+  // DNS, Microsoft Family) block embed.windy.com and we never get onload.
+  // Show a fallback after 4 seconds if the iframe doesn't signal it loaded.
+  useEffect(() => {
+    setIframeBlocked(false);
+    const t = setTimeout(() => setIframeBlocked(true), 4000);
+    return () => clearTimeout(t);
+  }, [iframeKey, overlay, level]);
+
+  const handleIframeLoad = () => {
+    // Iframe fired load — assume it worked. (We can't actually read the inner
+    // DOM across origins, so this is a best-effort heuristic.)
+    setIframeBlocked(false);
+  };
+
   return (
     <>
-      <div className="flex flex-wrap items-center gap-3 bg-white/5 rounded-xl border border-white/10 p-3">
-        <div className="flex flex-col gap-1">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-3 bg-white/5 rounded-xl border border-white/10 p-3">
+        <div className="flex flex-col gap-1 w-full sm:w-auto sm:flex-1">
           <span className="text-[10px] uppercase tracking-wider text-white/30">Overlay</span>
           <div className="flex flex-wrap gap-1">
             {WINDY_OVERLAYS.map((o) => (
@@ -110,9 +132,9 @@ function WindyEmbed({ station }: { station: WeatherStation }) {
             ))}
           </div>
         </div>
-        <div className="flex flex-col gap-1 ml-auto">
+        <div className="flex flex-col gap-1">
           <span className="text-[10px] uppercase tracking-wider text-white/30">Altitude</span>
-          <div className="flex gap-1">
+          <div className="flex flex-wrap gap-1">
             {levels.map((l) => (
               <button
                 key={l.id}
@@ -130,20 +152,67 @@ function WindyEmbed({ station }: { station: WeatherStation }) {
         </div>
       </div>
 
-      <div className="rounded-xl border border-white/10 overflow-hidden bg-[#0a0a0d]">
+      {/* Action buttons */}
+      <div className="flex flex-wrap gap-2">
+        <a
+          href={directSrc}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-lg transition-colors flex items-center gap-1.5"
+        >
+          ↗ Open Full Windy Map
+        </a>
+        <button
+          onClick={() => setIframeKey((k) => k + 1)}
+          className="text-xs px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white/60 rounded-lg transition-colors"
+        >
+          ↻ Reload embed
+        </button>
+      </div>
+
+      <div className="rounded-xl border border-white/10 overflow-hidden bg-[#0a0a0d] relative">
         <iframe
-          key={`${overlay}-${level}`}
-          src={src}
+          key={`${iframeKey}-${overlay}-${level}`}
+          src={embedSrc}
           title="Windy map"
           width="100%"
           height="540"
           frameBorder="0"
-          referrerPolicy="no-referrer-when-downgrade"
-          style={{ display: 'block', border: 0 }}
+          loading="lazy"
+          referrerPolicy="origin"
+          onLoad={handleIframeLoad}
+          style={{ display: 'block', border: 0, minHeight: 540 }}
         />
+        {iframeBlocked && (
+          <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-6 text-center">
+            <div className="max-w-md">
+              <div className="text-white text-lg font-semibold mb-2">Windy embed blocked by your browser or network</div>
+              <div className="text-white/60 text-sm mb-4 leading-relaxed">
+                Your browser, DNS, or network is blocking <code className="bg-white/10 px-1 rounded">embed.windy.com</code>.
+                Common causes: Microsoft Family Safety, Cloudflare for Families, corporate proxy, or strict tracking protection.
+              </div>
+              <div className="flex flex-wrap gap-2 justify-center">
+                <a
+                  href={directSrc}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-lg transition-colors"
+                >
+                  ↗ Open Full Windy Map
+                </a>
+                <button
+                  onClick={() => setIframeBlocked(false)}
+                  className="text-sm px-4 py-2 bg-white/5 hover:bg-white/10 text-white/60 rounded-lg transition-colors"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-      <div className="text-[10px] text-white/30 text-center">
-        Map: Windy.com (ECMWF model) · {WINDY_OVERLAYS.find((o) => o.id === overlay)?.label}
+      <div className="text-[10px] text-white/30 text-center leading-relaxed">
+        Windy.com · {overlay === 'radar' ? 'NEXRAD radar' : `ECMWF model · ${WINDY_OVERLAYS.find((o) => o.id === overlay)?.label}`}
         {level !== 'surface' && ` · ${levels.find((l) => l.id === level)?.label}`}
       </div>
     </>
