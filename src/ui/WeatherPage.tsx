@@ -14,16 +14,14 @@ import {
 } from '../lib/weatherService';
 import OverviewTab from './weather/OverviewTab';
 import HistoryTab from './weather/HistoryTab';
-import ForecastTab from './weather/ForecastTab';
 import RadarTab from './weather/RadarTab';
 import HealthTab from './weather/HealthTab';
 
-type Tab = 'overview' | 'history' | 'forecast' | 'radar' | 'health';
+type Tab = 'overview' | 'history' | 'radar' | 'health';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'overview', label: 'Overview', icon: '\u{1F4CA}' },
   { id: 'history', label: 'History', icon: '\u{1F4C8}' },
-  { id: 'forecast', label: 'Forecast', icon: '\u{1F324}\u{FE0F}' },
   { id: 'radar', label: 'Radar', icon: '\u{1F4E1}' },
   { id: 'health', label: 'Station', icon: '\u{1F4CD}' },
 ];
@@ -252,7 +250,6 @@ export default function WeatherPage() {
           <>
             {tab === 'overview' && reading && <OverviewTab reading={reading} station={station} />}
             {tab === 'history' && <HistoryTab stationId={stationId} lastIngestTick={lastIngestTick} />}
-            {tab === 'forecast' && <ForecastTab station={station} />}
             {tab === 'radar' && <RadarTab station={station} />}
             {tab === 'health' && reading && (
               <HealthTab reading={reading} station={station} stationId={stationId} lastIngestTick={lastIngestTick} />

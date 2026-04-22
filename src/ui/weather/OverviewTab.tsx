@@ -12,13 +12,17 @@ import {
 } from '../../lib/weatherService';
 import WindCompass from './WindCompass';
 import RainGauge from './RainGauge';
+import ForecastSection from './ForecastSection';
 
 export default function OverviewTab({ reading, station }: { reading: WeatherReading; station: WeatherStation | null }) {
   return (
     <>
       <HeroBanner reading={reading} />
       <ConditionsGrid reading={reading} />
-      <ConsoleBar reading={reading} station={station} />
+      <div className="mt-6">
+        <h2 className="text-sm text-white/60 mb-3 uppercase tracking-wide font-semibold">Forecast</h2>
+        <ForecastSection station={station} />
+      </div>
     </>
   );
 }
@@ -196,29 +200,6 @@ function ConditionsGrid({ reading }: { reading: WeatherReading }) {
   );
 }
 
-function ConsoleBar({ reading, station }: { reading: WeatherReading; station: WeatherStation | null }) {
-  return (
-    <div className="mt-6 bg-white/5 rounded-xl border border-white/10 p-4">
-      <div className="text-xs uppercase tracking-wide text-white/40 mb-3 font-semibold">Console Health</div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-        <Stat label="Battery" value={reading.battery_percent !== null ? `${reading.battery_percent}%` : '--'} />
-        <Stat label="Battery V" value={reading.battery_voltage !== null ? `${(reading.battery_voltage / 1000).toFixed(3)} V` : '--'} />
-        <Stat label="WiFi RSSI" value={reading.wifi_rssi !== null ? `${reading.wifi_rssi} dBm` : '--'} />
-        <Stat label="Firmware" value={reading.console_sw_version ?? station?.firmware_version ?? '--'} />
-      </div>
-      {station && (
-        <div className="mt-3 pt-3 border-t border-white/5 text-[10px] text-white/30 flex flex-wrap gap-x-4 gap-y-1">
-          <span>Station ID: {station.station_id}</span>
-          {station.gateway_type && <span>Gateway: {station.gateway_type}</span>}
-          {station.subscription_type && <span>Plan: {station.subscription_type}</span>}
-          {station.recording_interval && <span>Interval: {station.recording_interval}m</span>}
-          {station.last_ingested_at && <span>Last ingest: {timeAgo(station.last_ingested_at)}</span>}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function HumidityArc({ pct, size = 80 }: { pct: number | null; size?: number }) {
   const v = pct ?? 0;
   const cx = size / 2;
@@ -272,11 +253,3 @@ function DataRow({ label, value, mono = false, valueClass = '' }: { label: strin
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-white/40 uppercase tracking-wide text-[10px] mb-0.5">{label}</div>
-      <div className="text-white/90 font-mono text-sm">{value}</div>
-    </div>
-  );
-}

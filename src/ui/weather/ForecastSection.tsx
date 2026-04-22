@@ -12,7 +12,7 @@ import {
 import type { WeatherStation } from '../../lib/weatherService';
 import LineChart from './LineChart';
 
-export default function ForecastTab({ station }: { station: WeatherStation | null }) {
+export default function ForecastSection({ station }: { station: WeatherStation | null }) {
   const [forecast, setForecast] = useState<NwsForecast | null>(null);
   const [hourly, setHourly] = useState<NwsForecast | null>(null);
   const [alerts, setAlerts] = useState<NwsAlert[]>([]);
