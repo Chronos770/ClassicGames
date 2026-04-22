@@ -1,10 +1,156 @@
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { supabase } from '../../lib/supabase';
 import { getAlerts, type NwsAlert } from '../../lib/nwsService';
 import type { WeatherStation } from '../../lib/weatherService';
 
-type Layer = 'radar' | 'clouds' | 'temp' | 'precip' | 'wind' | 'none';
+type Provider = 'windy' | 'radar';
+
+// Windy supports many overlays for free — these are the most useful ones.
+const WINDY_OVERLAYS: { id: string; label: string }[] = [
+  { id: 'radar', label: 'Radar (NEXRAD)' },
+  { id: 'wind', label: 'Wind' },
+  { id: 'rain', label: 'Precipitation' },
+  { id: 'temp', label: 'Temperature' },
+  { id: 'rh', label: 'Humidity' },
+  { id: 'clouds', label: 'Clouds' },
+  { id: 'pressure', label: 'Pressure' },
+  { id: 'gust', label: 'Wind Gusts' },
+  { id: 'snow', label: 'Snow Depth' },
+  { id: 'thunder', label: 'Thunderstorms' },
+  { id: 'cape', label: 'CAPE Index' },
+  { id: 'waves', label: 'Waves' },
+  { id: 'cloudtop', label: 'Cloud Tops' },
+  { id: 'visibility', label: 'Visibility' },
+];
+
+export default function RadarTab({ station }: { station: WeatherStation | null }) {
+  const [provider, setProvider] = useState<Provider>('windy');
+
+  if (!station || station.latitude === null || station.longitude === null) {
+    return <div className="text-white/30 text-sm py-8 text-center">Station location missing; radar unavailable.</div>;
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 bg-white/5 rounded-xl border border-white/10 p-3">
+        <span className="text-[10px] uppercase tracking-wide text-white/40 mr-1">Provider</span>
+        {(['windy', 'radar'] as Provider[]).map((p) => (
+          <button
+            key={p}
+            onClick={() => setProvider(p)}
+            className={`text-xs px-3 py-1 rounded transition-colors ${
+              provider === p
+                ? 'bg-amber-500/20 text-amber-400 font-medium'
+                : 'text-white/50 hover:text-white/80 hover:bg-white/5'
+            }`}
+          >
+            {p === 'windy' ? 'Windy (multi-layer)' : 'RainViewer Radar'}
+          </button>
+        ))}
+      </div>
+
+      {provider === 'windy' ? (
+        <WindyEmbed station={station} />
+      ) : (
+        <RainViewerMap station={station} />
+      )}
+    </div>
+  );
+}
+
+// ── Windy embed ───────────────────────────────────────────────────
+
+function WindyEmbed({ station }: { station: WeatherStation }) {
+  const [overlay, setOverlay] = useState('radar');
+  const [level, setLevel] = useState('surface');
+
+  const lat = station.latitude!;
+  const lon = station.longitude!;
+
+  const src =
+    `https://embed.windy.com/embed2.html?` +
+    `lat=${lat}&lon=${lon}` +
+    `&detailLat=${lat}&detailLon=${lon}` +
+    `&width=100%25&height=480&zoom=7` +
+    `&level=${encodeURIComponent(level)}` +
+    `&overlay=${encodeURIComponent(overlay)}` +
+    `&product=ecmwf` +
+    `&menu=&message=true&marker=true&calendar=now&pressure=&type=map` +
+    `&location=coordinates&detail=` +
+    `&metricWind=mph&metricTemp=%C2%B0F&radarRange=-1`;
+
+  const levels = [
+    { id: 'surface', label: 'Surface' },
+    { id: '850h', label: '850 hPa' },
+    { id: '700h', label: '700 hPa' },
+    { id: '500h', label: '500 hPa' },
+    { id: '300h', label: '300 hPa' },
+  ];
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-3 bg-white/5 rounded-xl border border-white/10 p-3">
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] uppercase tracking-wider text-white/30">Overlay</span>
+          <div className="flex flex-wrap gap-1">
+            {WINDY_OVERLAYS.map((o) => (
+              <button
+                key={o.id}
+                onClick={() => setOverlay(o.id)}
+                className={`text-xs px-2 py-1 rounded transition-colors ${
+                  overlay === o.id
+                    ? 'bg-amber-500/20 text-amber-400 font-medium'
+                    : 'text-white/50 hover:text-white/80 hover:bg-white/5'
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-col gap-1 ml-auto">
+          <span className="text-[10px] uppercase tracking-wider text-white/30">Altitude</span>
+          <div className="flex gap-1">
+            {levels.map((l) => (
+              <button
+                key={l.id}
+                onClick={() => setLevel(l.id)}
+                className={`text-xs px-2 py-1 rounded transition-colors ${
+                  level === l.id
+                    ? 'bg-blue-500/20 text-blue-300 font-medium'
+                    : 'text-white/50 hover:text-white/80 hover:bg-white/5'
+                }`}
+              >
+                {l.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-white/10 overflow-hidden bg-[#0a0a0d]">
+        <iframe
+          key={`${overlay}-${level}`}
+          src={src}
+          title="Windy map"
+          width="100%"
+          height="540"
+          frameBorder="0"
+          referrerPolicy="no-referrer-when-downgrade"
+          style={{ display: 'block', border: 0 }}
+        />
+      </div>
+      <div className="text-[10px] text-white/30 text-center">
+        Map: Windy.com (ECMWF model) · {WINDY_OVERLAYS.find((o) => o.id === overlay)?.label}
+        {level !== 'surface' && ` · ${levels.find((l) => l.id === level)?.label}`}
+      </div>
+    </>
+  );
+}
+
+// ── RainViewer + Leaflet ─────────────────────────────────────────
 
 interface RainViewerFrame {
   time: number;
@@ -18,49 +164,38 @@ interface RainViewerWeatherMaps {
     past: RainViewerFrame[];
     nowcast: RainViewerFrame[];
   };
-  satellite: {
-    infrared: RainViewerFrame[];
-  };
 }
 
-export default function RadarTab({ station }: { station: WeatherStation | null }) {
+function RainViewerMap({ station }: { station: WeatherStation }) {
   const mapEl = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const radarLayerRef = useRef<L.TileLayer | null>(null);
-  const overlayLayerRef = useRef<L.TileLayer | null>(null);
   const alertsLayerRef = useRef<L.LayerGroup | null>(null);
-  const stationMarkerRef = useRef<L.CircleMarker | null>(null);
 
   const [frames, setFrames] = useState<RainViewerFrame[]>([]);
   const [frameIdx, setFrameIdx] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [host, setHost] = useState<string>('');
-  const [overlayType, setOverlayType] = useState<Layer>('radar');
   const [alerts, setAlerts] = useState<NwsAlert[]>([]);
   const [showAlerts, setShowAlerts] = useState(true);
   const [status, setStatus] = useState<string>('');
+  const [pastCount, setPastCount] = useState(0);
 
-  // Init map
+  // Init map (lat/lon change → re-init)
   useEffect(() => {
     if (!mapEl.current || mapRef.current) return;
-    if (!station || station.latitude === null || station.longitude === null) return;
-
     const map = L.map(mapEl.current, {
-      center: [station.latitude, station.longitude],
+      center: [station.latitude!, station.longitude!],
       zoom: 8,
       zoomControl: true,
       attributionControl: true,
     });
-
-    // Dark base map (CARTO Dark) — fits the app theme
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; OpenStreetMap &copy; CARTO',
       subdomains: 'abcd',
       maxZoom: 19,
     }).addTo(map);
-
-    // Station marker
-    stationMarkerRef.current = L.circleMarker([station.latitude, station.longitude], {
+    L.circleMarker([station.latitude!, station.longitude!], {
       radius: 8,
       fillColor: '#fbbf24',
       color: '#fff',
@@ -69,104 +204,87 @@ export default function RadarTab({ station }: { station: WeatherStation | null }
       fillOpacity: 0.9,
     })
       .addTo(map)
-      .bindTooltip(`<b>${station.station_name}</b><br/>${station.city ?? ''}${station.region ? ', ' + station.region : ''}`, {
-        direction: 'top',
-        offset: [0, -8],
-        className: 'leaflet-dark-tooltip',
-      });
-
-    // Alerts layer group
+      .bindTooltip(
+        `<b>${station.station_name}</b><br/>${station.city ?? ''}${station.region ? ', ' + station.region : ''}`,
+      );
     alertsLayerRef.current = L.layerGroup().addTo(map);
-
     mapRef.current = map;
-
-    // Cleanup
     return () => {
       map.remove();
       mapRef.current = null;
       radarLayerRef.current = null;
-      overlayLayerRef.current = null;
       alertsLayerRef.current = null;
-      stationMarkerRef.current = null;
     };
-  }, [station?.station_id, station?.latitude, station?.longitude]);
+  }, [station.station_id, station.latitude, station.longitude, station.station_name, station.city, station.region]);
 
-  // Fetch RainViewer frame manifest
+  // Fetch RainViewer manifest via proxy (avoids any CORS quirks)
   useEffect(() => {
+    let cancelled = false;
     setStatus('Loading radar frames...');
-    fetch('https://api.rainviewer.com/public/weather-maps.json')
-      .then((r) => r.json() as Promise<RainViewerWeatherMaps>)
-      .then((data) => {
-        setHost(data.host);
-        const allFrames = [...data.radar.past, ...data.radar.nowcast];
-        setFrames(allFrames);
-        setFrameIdx(Math.max(0, data.radar.past.length - 1));
+    supabase.functions
+      .invoke('weather-proxy', { body: { kind: 'rainviewer' } })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) throw error;
+        const d = data as RainViewerWeatherMaps;
+        const past = d.radar?.past ?? [];
+        const nowcast = d.radar?.nowcast ?? [];
+        setHost(d.host);
+        setFrames([...past, ...nowcast]);
+        setPastCount(past.length);
+        setFrameIdx(Math.max(0, past.length - 1));
         setStatus('');
       })
-      .catch((e) => setStatus(`Radar unavailable: ${String(e?.message ?? e)}`));
+      .catch((e) => {
+        if (!cancelled) setStatus(`Radar unavailable: ${String(e?.message ?? e)}`);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Fetch NWS alerts
+  // Alerts
   useEffect(() => {
-    if (!station || station.latitude === null || station.longitude === null) return;
-    getAlerts(station.latitude, station.longitude).then(setAlerts).catch(() => setAlerts([]));
-  }, [station?.latitude, station?.longitude]);
+    let cancelled = false;
+    getAlerts(station.latitude!, station.longitude!)
+      .then((a) => !cancelled && setAlerts(a))
+      .catch(() => !cancelled && setAlerts([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [station.latitude, station.longitude]);
 
-  // Render radar frame
+  // Render active frame
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !host || frames.length === 0) return;
-
     if (radarLayerRef.current) {
       map.removeLayer(radarLayerRef.current);
       radarLayerRef.current = null;
     }
-
-    if (overlayType === 'none') return;
-
     const frame = frames[frameIdx];
     if (!frame) return;
-
-    // RainViewer tile options
-    // color=1 (Original), smooth=1, snow=1
-    const layerUrl = `${host}${frame.path}/256/{z}/{x}/{y}/1/1_1.png`;
-    const layer = L.tileLayer(layerUrl, {
+    const layer = L.tileLayer(`${host}${frame.path}/256/{z}/{x}/{y}/1/1_1.png`, {
       opacity: 0.7,
       attribution: '&copy; RainViewer',
       maxZoom: 12,
     });
     layer.addTo(map);
     radarLayerRef.current = layer;
-  }, [frames, frameIdx, host, overlayType]);
+  }, [frames, frameIdx, host]);
 
-  // Render overlay (temp/clouds/wind/precip via Open-Meteo tiles or OWM public tiles)
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    if (overlayLayerRef.current) {
-      map.removeLayer(overlayLayerRef.current);
-      overlayLayerRef.current = null;
-    }
-
-    // Only radar is wired for now — the other layers are placeholders kept in
-    // the UI for future integration of a keyed service (OWM requires key).
-  }, [overlayType]);
-
-  // Render alerts polygons
+  // Alerts polygons
   useEffect(() => {
     const layer = alertsLayerRef.current;
     if (!layer) return;
     layer.clearLayers();
     if (!showAlerts) return;
-
     const severityStyle: Record<string, L.PathOptions> = {
       Extreme: { color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.12, weight: 2 },
       Severe: { color: '#f97316', fillColor: '#f97316', fillOpacity: 0.1, weight: 2 },
       Moderate: { color: '#f59e0b', fillColor: '#f59e0b', fillOpacity: 0.1, weight: 1.5 },
       Minor: { color: '#eab308', fillColor: '#eab308', fillOpacity: 0.08, weight: 1.5 },
     };
-
     for (const alert of alerts) {
       const g = (alert as any).geometry;
       if (!g) continue;
@@ -174,16 +292,18 @@ export default function RadarTab({ station }: { station: WeatherStation | null }
       try {
         const geo = L.geoJSON(g, { style: () => style });
         geo.bindPopup(
-          `<b>${alert.properties.event}</b><br/>
-          <i>${alert.properties.severity} / ${alert.properties.urgency}</i><br/>
-          <div style="max-width:280px; font-size:11px; margin-top:4px;">${alert.properties.headline}</div>`,
+          `<b>${alert.properties.event}</b><br/>` +
+            `<i>${alert.properties.severity} / ${alert.properties.urgency}</i><br/>` +
+            `<div style="max-width:280px; font-size:11px; margin-top:4px;">${alert.properties.headline}</div>`,
         );
         layer.addLayer(geo);
-      } catch (_) { /* skip */ }
+      } catch (_) {
+        /* skip */
+      }
     }
   }, [alerts, showAlerts]);
 
-  // Animation
+  // Animation loop
   useEffect(() => {
     if (!playing || frames.length === 0) return;
     const t = setInterval(() => {
@@ -192,37 +312,12 @@ export default function RadarTab({ station }: { station: WeatherStation | null }
     return () => clearInterval(t);
   }, [playing, frames.length]);
 
-  if (!station || station.latitude === null || station.longitude === null) {
-    return <div className="text-white/30 text-sm py-8 text-center">Station location missing; radar unavailable.</div>;
-  }
-
   const currentFrame = frames[frameIdx];
   const frameTime = currentFrame ? new Date(currentFrame.time * 1000) : null;
-  const isNowcast = currentFrame && frames.indexOf(currentFrame) >= frames.findIndex((f) => f.time > Date.now() / 1000 - 60);
-  const pastCount = frames.filter((f) => f.time * 1000 <= Date.now()).length;
 
   return (
-    <div className="space-y-3">
-      {/* Layer & alert controls */}
+    <>
       <div className="flex flex-wrap items-center gap-2 bg-white/5 rounded-xl border border-white/10 p-3">
-        <div className="flex items-center gap-1">
-          <span className="text-[10px] uppercase tracking-wide text-white/40 mr-1">Layer</span>
-          {([
-            { id: 'radar' as Layer, label: 'Radar' },
-            { id: 'none' as Layer, label: 'None' },
-          ]).map((l) => (
-            <button
-              key={l.id}
-              onClick={() => setOverlayType(l.id)}
-              className={`text-xs px-2.5 py-1 rounded transition-colors ${
-                overlayType === l.id ? 'bg-amber-500/20 text-amber-400' : 'text-white/50 hover:text-white/80 hover:bg-white/5'
-              }`}
-            >
-              {l.label}
-            </button>
-          ))}
-        </div>
-        <span className="text-white/20">|</span>
         <button
           onClick={() => setShowAlerts((s) => !s)}
           className={`text-xs px-2.5 py-1 rounded transition-colors ${
@@ -234,20 +329,18 @@ export default function RadarTab({ station }: { station: WeatherStation | null }
         {status && <span className="text-xs text-white/40 ml-auto">{status}</span>}
       </div>
 
-      {/* Map */}
       <div
         ref={mapEl}
-        className="h-[480px] rounded-xl border border-white/10 overflow-hidden relative"
+        className="h-[540px] rounded-xl border border-white/10 overflow-hidden relative"
         style={{ background: '#0a0a0d' }}
       />
 
-      {/* Playback controls */}
-      {frames.length > 0 && overlayType !== 'none' && (
+      {frames.length > 0 && (
         <div className="bg-white/5 rounded-xl border border-white/10 p-3">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setPlaying((p) => !p)}
-              className="text-xs px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-lg transition-colors"
+              className="text-xs px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-lg transition-colors min-w-[80px]"
             >
               {playing ? '❚❚ Pause' : '▶ Play'}
             </button>
@@ -263,23 +356,17 @@ export default function RadarTab({ station }: { station: WeatherStation | null }
               className="flex-1"
             />
             <div className="text-xs tabular-nums text-white/70 min-w-[160px] text-right">
-              {frameTime?.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}{' '}
-              {isNowcast && frameIdx >= pastCount ? (
-                <span className="text-amber-400 ml-1">(forecast)</span>
-              ) : (
-                <span className="text-white/40 ml-1">(past)</span>
-              )}
+              {frameTime?.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+              <span className={`ml-1 ${frameIdx >= pastCount ? 'text-amber-400' : 'text-white/40'}`}>
+                ({frameIdx >= pastCount ? 'forecast' : 'past'})
+              </span>
             </div>
           </div>
           <div className="text-[10px] text-white/30 text-center mt-2">
-            {pastCount} past frames · {frames.length - pastCount} nowcast frames · tiles by RainViewer
+            {pastCount} past · {frames.length - pastCount} nowcast · tiles by RainViewer
           </div>
         </div>
       )}
-
-      <div className="text-[10px] text-white/30 text-center">
-        Map: OpenStreetMap/CARTO &middot; Radar: RainViewer &middot; Alerts: NWS
-      </div>
-    </div>
+    </>
   );
 }

@@ -9,6 +9,8 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- ── Get users with email (admin only) ────────────────────────────
 -- Joins profiles with auth.users to expose email to admins
 -- Returns JSON to avoid PostgREST column type mismatch issues
+-- DROP first because CREATE OR REPLACE cannot change return type
+DROP FUNCTION IF EXISTS admin_get_users_with_email(text, int, int);
 CREATE OR REPLACE FUNCTION admin_get_users_with_email(
   search_term text DEFAULT '',
   lim int DEFAULT 50,

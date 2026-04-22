@@ -1,30 +1,9 @@
 // NWS (National Weather Service) forecast client.
-// Free, no API key required, covers US & territories.
-// Docs: https://www.weather.gov/documentation/services-web-api
+// All calls are proxied through the Supabase Edge Function `weather-proxy`
+// because NWS has aggressive User-Agent / CORS handling that browser requests
+// can trip over.
 
-const NWS_BASE = 'https://api.weather.gov';
-
-export interface NwsPoint {
-  properties: {
-    gridId: string;
-    gridX: number;
-    gridY: number;
-    forecast: string;
-    forecastHourly: string;
-    forecastGridData: string;
-    observationStations: string;
-    forecastZone: string;
-    county: string;
-    timeZone: string;
-    radarStation: string;
-    relativeLocation: {
-      properties: {
-        city: string;
-        state: string;
-      };
-    };
-  };
-}
+import { supabase } from './supabase';
 
 export interface NwsForecastPeriod {
   number: number;
@@ -53,6 +32,7 @@ export interface NwsForecast {
 
 export interface NwsAlert {
   id: string;
+  geometry?: unknown;
   properties: {
     event: string;
     severity: string;
@@ -70,43 +50,28 @@ export interface NwsAlert {
   };
 }
 
-async function nwsFetch<T>(url: string): Promise<T> {
-  const res = await fetch(url, {
-    headers: { Accept: 'application/geo+json' },
-  });
-  if (!res.ok) {
-    throw new Error(`NWS ${res.status}: ${await res.text()}`);
+async function invokeProxy<T>(body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke('weather-proxy', { body });
+  if (error) throw new Error(`weather-proxy: ${error.message}`);
+  if (data && typeof data === 'object' && 'error' in data) {
+    throw new Error(`weather-proxy: ${(data as { error: string }).error}`);
   }
-  return (await res.json()) as T;
-}
-
-const pointCache = new Map<string, Promise<NwsPoint>>();
-export async function getPoint(lat: number, lon: number): Promise<NwsPoint> {
-  const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
-  if (!pointCache.has(key)) {
-    pointCache.set(key, nwsFetch<NwsPoint>(`${NWS_BASE}/points/${key}`));
-  }
-  return pointCache.get(key)!;
+  return data as T;
 }
 
 export async function getForecast(lat: number, lon: number): Promise<NwsForecast> {
-  const point = await getPoint(lat, lon);
-  return nwsFetch<NwsForecast>(point.properties.forecast);
+  return invokeProxy<NwsForecast>({ kind: 'nws-forecast', lat, lon });
 }
 
 export async function getHourlyForecast(lat: number, lon: number): Promise<NwsForecast> {
-  const point = await getPoint(lat, lon);
-  return nwsFetch<NwsForecast>(point.properties.forecastHourly);
+  return invokeProxy<NwsForecast>({ kind: 'nws-hourly', lat, lon });
 }
 
 export async function getAlerts(lat: number, lon: number): Promise<NwsAlert[]> {
-  const res = await nwsFetch<{ features: NwsAlert[] }>(
-    `${NWS_BASE}/alerts/active?point=${lat.toFixed(4)},${lon.toFixed(4)}`,
-  );
-  return res.features ?? [];
+  const res = await invokeProxy<{ features: NwsAlert[] }>({ kind: 'nws-alerts', lat, lon });
+  return res?.features ?? [];
 }
 
-// Map NWS shortForecast to a simple emoji
 export function forecastEmoji(shortForecast: string, isDaytime = true): string {
   const s = shortForecast.toLowerCase();
   if (/thunder/.test(s)) return '⛈️';
@@ -121,7 +86,6 @@ export function forecastEmoji(shortForecast: string, isDaytime = true): string {
   return isDaytime ? '☀️' : '🌙';
 }
 
-// Parse "15 to 20 mph" or "10 mph" — returns middle value
 export function parseWindSpeed(ws: string): number | null {
   const m = ws.match(/(\d+)(?:\s*to\s*(\d+))?/);
   if (!m) return null;
