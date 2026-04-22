@@ -38,7 +38,7 @@ export default function Layout() {
     { to: '/stats', label: 'Stats' },
     { to: '/leaderboard', label: 'Leaderboard' },
     { to: '/help', label: 'Help' },
-    ...(isAdmin ? [{ to: '/admin', label: 'Admin' }] : []),
+    ...(isAdmin ? [{ to: '/weather', label: 'Weather' }, { to: '/admin', label: 'Admin' }] : []),
   ];
 
   return (
