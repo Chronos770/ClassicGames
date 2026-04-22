@@ -65,7 +65,6 @@ export default function RadarTab({ station }: { station: WeatherStation | null }
 function WindyEmbed({ station }: { station: WeatherStation }) {
   const [overlay, setOverlay] = useState('radar');
   const [level, setLevel] = useState('surface');
-  const [iframeBlocked, setIframeBlocked] = useState(false);
   const [iframeKey, setIframeKey] = useState(0);
 
   const lat = station.latitude!;
@@ -83,8 +82,6 @@ function WindyEmbed({ station }: { station: WeatherStation }) {
     `&location=coordinates&detail=` +
     `&metricWind=mph&metricTemp=%C2%B0F&radarRange=-1`;
 
-  // Direct windy.com URL (full site) for the "Open in new tab" fallback.
-  // This always works since it's not an iframe.
   const directSrc =
     `https://www.windy.com/?${overlay},${lat.toFixed(3)},${lon.toFixed(3)},7`;
 
@@ -95,21 +92,6 @@ function WindyEmbed({ station }: { station: WeatherStation }) {
     { id: '500h', label: '500 hPa' },
     { id: '300h', label: '300 hPa' },
   ];
-
-  // Detect iframe load failure — some networks (parental controls, corporate
-  // DNS, Microsoft Family) block embed.windy.com and we never get onload.
-  // Show a fallback after 4 seconds if the iframe doesn't signal it loaded.
-  useEffect(() => {
-    setIframeBlocked(false);
-    const t = setTimeout(() => setIframeBlocked(true), 4000);
-    return () => clearTimeout(t);
-  }, [iframeKey, overlay, level]);
-
-  const handleIframeLoad = () => {
-    // Iframe fired load — assume it worked. (We can't actually read the inner
-    // DOM across origins, so this is a best-effort heuristic.)
-    setIframeBlocked(false);
-  };
 
   return (
     <>
@@ -170,7 +152,7 @@ function WindyEmbed({ station }: { station: WeatherStation }) {
         </button>
       </div>
 
-      <div className="rounded-xl border border-white/10 overflow-hidden bg-[#0a0a0d] relative">
+      <div className="rounded-xl border border-white/10 overflow-hidden bg-[#0a0a0d]">
         <iframe
           key={`${iframeKey}-${overlay}-${level}`}
           src={embedSrc}
@@ -180,36 +162,8 @@ function WindyEmbed({ station }: { station: WeatherStation }) {
           frameBorder="0"
           loading="lazy"
           referrerPolicy="origin"
-          onLoad={handleIframeLoad}
           style={{ display: 'block', border: 0, minHeight: 540 }}
         />
-        {iframeBlocked && (
-          <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-6 text-center">
-            <div className="max-w-md">
-              <div className="text-white text-lg font-semibold mb-2">Windy embed blocked by your browser or network</div>
-              <div className="text-white/60 text-sm mb-4 leading-relaxed">
-                Your browser, DNS, or network is blocking <code className="bg-white/10 px-1 rounded">embed.windy.com</code>.
-                Common causes: Microsoft Family Safety, Cloudflare for Families, corporate proxy, or strict tracking protection.
-              </div>
-              <div className="flex flex-wrap gap-2 justify-center">
-                <a
-                  href={directSrc}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-lg transition-colors"
-                >
-                  ↗ Open Full Windy Map
-                </a>
-                <button
-                  onClick={() => setIframeBlocked(false)}
-                  className="text-sm px-4 py-2 bg-white/5 hover:bg-white/10 text-white/60 rounded-lg transition-colors"
-                >
-                  Dismiss
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
       <div className="text-[10px] text-white/30 text-center leading-relaxed">
         Windy.com · {overlay === 'radar' ? 'NEXRAD radar' : `ECMWF model · ${WINDY_OVERLAYS.find((o) => o.id === overlay)?.label}`}
