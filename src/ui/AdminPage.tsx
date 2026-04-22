@@ -6,6 +6,7 @@ import {
   getDashboardStats,
   getUsers,
   adminSetPassword,
+  adminSetRole,
   getEloStats,
   resetEloRatings,
   getAnnouncements,
@@ -133,6 +134,8 @@ function UsersTab({ adminId }: { adminId: string }) {
   const [newPassword, setNewPassword] = useState('');
   const [resetStatus, setResetStatus] = useState<{ userId: string; msg: string; ok: boolean } | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [roleBusyId, setRoleBusyId] = useState<string | null>(null);
+  const [roleError, setRoleError] = useState<{ userId: string; msg: string } | null>(null);
   const pageSize = 20;
 
   const load = useCallback(async () => {
@@ -169,6 +172,26 @@ function UsersTab({ adminId }: { adminId: string }) {
     setResetUserId(null);
     setNewPassword('');
     setResetStatus(null);
+  };
+
+  const handleToggleRole = async (u: AdminUser) => {
+    const nextRole = u.role === 'admin' ? 'user' : 'admin';
+    const confirmMsg =
+      nextRole === 'admin'
+        ? `Promote ${u.display_name} to admin? Admins have full access to this dashboard and all user data.`
+        : `Demote ${u.display_name} from admin to user?`;
+    if (!window.confirm(confirmMsg)) return;
+    setRoleBusyId(u.id);
+    setRoleError(null);
+    const result = await adminSetRole(u.id, nextRole, adminId);
+    setRoleBusyId(null);
+    if (result.success) {
+      // optimistic update
+      setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, role: nextRole } : x)));
+    } else {
+      setRoleError({ userId: u.id, msg: result.error || 'Failed' });
+      setTimeout(() => setRoleError(null), 4000);
+    }
   };
 
   return (
@@ -209,11 +232,34 @@ function UsersTab({ adminId }: { adminId: string }) {
                   {u.email || <span className="text-white/20 italic">n/a</span>}
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    u.role === 'admin' ? 'bg-red-500/20 text-red-400' : 'bg-white/10 text-white/50'
-                  }`}>
-                    {u.role}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      u.role === 'admin' ? 'bg-red-500/20 text-red-400' : 'bg-white/10 text-white/50'
+                    }`}>
+                      {u.role}
+                    </span>
+                    {u.id !== adminId && (
+                      <button
+                        onClick={() => handleToggleRole(u)}
+                        disabled={roleBusyId === u.id}
+                        title={u.role === 'admin' ? 'Demote to user' : 'Promote to admin'}
+                        className={`text-[10px] px-1.5 py-0.5 rounded transition-colors disabled:opacity-40 ${
+                          u.role === 'admin'
+                            ? 'bg-white/5 hover:bg-white/10 text-white/50'
+                            : 'bg-red-500/10 hover:bg-red-500/20 text-red-400'
+                        }`}
+                      >
+                        {roleBusyId === u.id
+                          ? '...'
+                          : u.role === 'admin'
+                          ? 'Demote'
+                          : 'Make Admin'}
+                      </button>
+                    )}
+                    {roleError?.userId === u.id && (
+                      <span className="text-[10px] text-red-400">{roleError.msg}</span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3">
                   {isRecent(u.online_at) ? (

@@ -138,6 +138,28 @@ export async function adminSetPassword(
   return { success: true };
 }
 
+// ── Admin Set Role ─────────────────────────────────────────────
+
+export async function adminSetRole(
+  targetUserId: string,
+  newRole: 'user' | 'admin',
+  adminId: string,
+): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) return { success: false, error: 'No database connection' };
+
+  const { error } = await supabase.rpc('admin_set_user_role', {
+    target_user_id: targetUserId,
+    new_role: newRole,
+  });
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  await logAdminAction(adminId, 'set_role', 'user', targetUserId, { role: newRole });
+  return { success: true };
+}
+
 // ── ELO Ratings ────────────────────────────────────────────────
 
 export async function resetEloRatings(gameId: string, adminId: string): Promise<boolean> {
