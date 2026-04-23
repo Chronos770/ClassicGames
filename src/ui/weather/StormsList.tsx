@@ -29,7 +29,13 @@ export default function StormsList({
     async function load() {
       setLoading(true);
       try {
-        // Completed storms: distinct rain_storm_last_start_at within range
+        // Completed storms: distinct rain_storm_last_start_at within range.
+        // WeatherLink reports start/end timestamps that drift by 1-3 seconds
+        // between successive readings of the same storm, so a naive
+        // dedup-by-exact-timestamp leaves N near-duplicates per storm. We
+        // bucket by start_at rounded to the nearest 5 minutes — far smaller
+        // than any real storm gap (storms must be > 24hr apart by Davis
+        // definition).
         const { data: lastData } = await supabase
           .from('weather_readings')
           .select('rain_storm_last_start_at, rain_storm_last_end_at, rain_storm_last_in')
@@ -39,23 +45,43 @@ export default function StormsList({
           .lte('rain_storm_last_start_at', toIso)
           .order('rain_storm_last_start_at', { ascending: false });
 
-        // Deduplicate by start_at — latest end/total wins
-        const byStart: Record<string, StormRow> = {};
+        const bucketKey = (iso: string) => {
+          const ms = new Date(iso).getTime();
+          // 5-minute bucket
+          return String(Math.round(ms / (5 * 60_000)));
+        };
+
+        const byBucket: Record<string, StormRow> = {};
         for (const row of (lastData as any[]) ?? []) {
-          const key = row.rain_storm_last_start_at;
-          if (!key) continue;
+          const start = row.rain_storm_last_start_at as string | null;
+          if (!start) continue;
+          const key = bucketKey(start);
           const end = row.rain_storm_last_end_at as string | null;
           const total = Number(row.rain_storm_last_in ?? 0);
           const dur = end
-            ? (new Date(end).getTime() - new Date(key).getTime()) / 3600_000
+            ? (new Date(end).getTime() - new Date(start).getTime()) / 3600_000
             : null;
-          const existing = byStart[key];
-          if (!existing || total > existing.total_in || (end && !existing.end_at)) {
-            byStart[key] = { start_at: key, end_at: end, total_in: total, duration_hrs: dur, ongoing: false };
+          const existing = byBucket[key];
+          // Keep the entry with the largest total (and a real end_at if available).
+          // Use the EARLIEST start and LATEST end so the displayed range covers
+          // the full span observed across the duplicate readings.
+          if (!existing) {
+            byBucket[key] = { start_at: start, end_at: end, total_in: total, duration_hrs: dur, ongoing: false };
+          } else {
+            const newStart = new Date(start).getTime() < new Date(existing.start_at).getTime() ? start : existing.start_at;
+            const newEnd = end && (!existing.end_at || new Date(end).getTime() > new Date(existing.end_at).getTime())
+              ? end : existing.end_at;
+            const newTotal = Math.max(total, existing.total_in);
+            const newDur = newEnd
+              ? (new Date(newEnd).getTime() - new Date(newStart).getTime()) / 3600_000
+              : null;
+            byBucket[key] = { start_at: newStart, end_at: newEnd, total_in: newTotal, duration_hrs: newDur, ongoing: false };
           }
         }
 
-        // Current (ongoing) storm: check most recent reading
+        // Current (ongoing) storm: check most recent reading. Replace any
+        // bucketed entry that matches by start time so we don't double-count
+        // the active storm.
         const { data: current } = await supabase
           .from('weather_readings')
           .select('rain_storm_current_start_at, rain_storm_current_in, observed_at')
@@ -66,11 +92,12 @@ export default function StormsList({
           .maybeSingle();
 
         if (current && (current as any).rain_storm_current_start_at) {
-          const key = (current as any).rain_storm_current_start_at as string;
+          const start = (current as any).rain_storm_current_start_at as string;
+          const key = bucketKey(start);
           const total = Number((current as any).rain_storm_current_in ?? 0);
-          const dur = (Date.now() - new Date(key).getTime()) / 3600_000;
-          byStart[key] = {
-            start_at: key,
+          const dur = (Date.now() - new Date(start).getTime()) / 3600_000;
+          byBucket[key] = {
+            start_at: start,
             end_at: null,
             total_in: total,
             duration_hrs: dur,
@@ -78,7 +105,7 @@ export default function StormsList({
           };
         }
 
-        const arr = Object.values(byStart)
+        const arr = Object.values(byBucket)
           .filter((s) => s.total_in > 0)
           .sort((a, b) => new Date(b.start_at).getTime() - new Date(a.start_at).getTime());
         if (!cancelled) setStorms(arr);
