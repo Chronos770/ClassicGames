@@ -132,7 +132,7 @@ export default function WeatherBackground({ condition, windMph }: Props) {
             y: 30 + Math.random() * (H * 0.55),
             scale: 0.9 + Math.random() * 1.6,
             speed: (10 + Math.random() * 18) * (windFactor !== 0 ? Math.sign(windFactor) : 1),
-            a: condition.isDay ? 0.35 + Math.random() * 0.25 : 0.18 + Math.random() * 0.15,
+            a: condition.isDay ? 0.18 + Math.random() * 0.15 : 0.1 + Math.random() * 0.1,
             type: k === 'windy' ? 'wisp' : Math.random() > 0.6 ? 'wisp' : 'puffy',
           });
         }
@@ -238,11 +238,11 @@ export default function WeatherBackground({ condition, windMph }: Props) {
       const H = h();
       ctx.clearRect(0, 0, W, H);
 
-      // Sun glow
+      // Sun glow — kept subtle so the page content remains the focus.
       if (condition.isDay && (k === 'sunny' || k === 'hot' || k === 'partlyCloudy')) {
-        const grad = ctx.createRadialGradient(sunX(), sunY(), 0, sunX(), sunY(), 320);
-        grad.addColorStop(0, 'rgba(253, 224, 71, 0.55)');
-        grad.addColorStop(0.4, 'rgba(251, 191, 36, 0.22)');
+        const grad = ctx.createRadialGradient(sunX(), sunY(), 0, sunX(), sunY(), 220);
+        grad.addColorStop(0, 'rgba(253, 224, 71, 0.18)');
+        grad.addColorStop(0.4, 'rgba(251, 191, 36, 0.07)');
         grad.addColorStop(1, 'rgba(251, 191, 36, 0)');
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, W, H);
@@ -252,13 +252,13 @@ export default function WeatherBackground({ condition, windMph }: Props) {
           ctx.translate(sunX(), sunY());
           for (const ray of rays) {
             if (!reduced) ray.a += ray.speed * dt;
-            const pulse = 0.5 + 0.3 * Math.sin(t / 350 + ray.phase * 6);
+            const pulse = 0.5 + 0.2 * Math.sin(t / 400 + ray.phase * 6);
             ctx.rotate(ray.a);
-            ctx.fillStyle = `rgba(253, 224, 71, ${0.12 * pulse})`;
+            ctx.fillStyle = `rgba(253, 224, 71, ${0.04 * pulse})`;
             ctx.beginPath();
             ctx.moveTo(0, 0);
-            ctx.lineTo(500, -18);
-            ctx.lineTo(500, 18);
+            ctx.lineTo(280, -10);
+            ctx.lineTo(280, 10);
             ctx.closePath();
             ctx.fill();
             ctx.rotate(-ray.a);
@@ -266,9 +266,9 @@ export default function WeatherBackground({ condition, windMph }: Props) {
           ctx.restore();
         }
 
-        ctx.fillStyle = 'rgba(253, 224, 71, 0.95)';
+        ctx.fillStyle = 'rgba(253, 224, 71, 0.7)';
         ctx.beginPath();
-        ctx.arc(sunX(), sunY(), 36, 0, Math.PI * 2);
+        ctx.arc(sunX(), sunY(), 22, 0, Math.PI * 2);
         ctx.fill();
 
         // Hot: heat shimmer near bottom
