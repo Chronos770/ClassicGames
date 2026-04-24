@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import {
   barTrendLabel,
-  compassFromDegrees,
   timeAgo,
   type WeatherReading,
   type WeatherStation,
@@ -259,22 +258,14 @@ function ConditionsGrid({
       </Card>
 
       <Card title="Wind">
-        <div className="flex items-center gap-2">
+        <div className="flex justify-center py-2">
           <WindCompass
             dirCurrent={reading.wind_dir_last}
             dirAvg={reading.wind_dir_scalar_avg_last_10_min}
             speed={reading.wind_speed_last}
             gust={reading.wind_speed_hi_last_10_min}
-            size={150}
+            size={240}
           />
-          <div className="flex-1 text-xs space-y-1">
-            <DataRow label="Direction" value={`${compassFromDegrees(reading.wind_dir_last)} · ${reading.wind_dir_last ?? '--'}°`} mono />
-            <DataRow label="Avg 2m" value={fmt.fmtWind(reading.wind_speed_avg_last_2_min)} mono />
-            <DataRow label="Avg 10m" value={fmt.fmtWind(reading.wind_speed_avg_last_10_min)} mono />
-            <DataRow label="Gust 2m" value={fmt.fmtWind(reading.wind_speed_hi_last_2_min)} mono />
-            <DataRow label="Gust 10m" value={fmt.fmtWind(reading.wind_speed_hi_last_10_min)} mono />
-            <DataRow label="Run (day)" value={fmt.fmtDistance(reading.wind_run_day)} mono />
-          </div>
         </div>
       </Card>
 

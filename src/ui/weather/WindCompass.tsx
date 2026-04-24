@@ -5,18 +5,23 @@ interface Props {
   dirCurrent: number | null;
   dirAvg: number | null; // unused — kept for API compatibility
   speed: number | null;
-  gust: number | null;   // unused — gust lives in the adjacent data rows
+  gust: number | null;   // unused — kept for API compatibility
   size?: number;
 }
 
-// WeatherLink-console style compass. One ring, 8 cardinal labels around the
-// edge, one small marker pointing to the direction wind is coming FROM,
-// and a single-line horizontal readout in the middle: DIR  SPEED  UNIT.
-export default function WindCompass({ dirCurrent, speed, size = 180 }: Props) {
+// Simple WeatherLink-console style compass. One ring, 8 cardinal labels
+// around the edge, one small marker at the direction wind is coming FROM,
+// and a single-line horizontal readout in the middle: DIR  SPEED  unit.
+export default function WindCompass({ dirCurrent, speed, size = 240 }: Props) {
   const { fmtWindNum, windUnitLabel } = useUnitFormatters();
-  const cx = size / 2;
-  const cy = size / 2;
-  const r = size / 2 - (size < 150 ? 14 : 16);
+
+  // Draw in a fixed 240 viewBox and let the SVG scale to the element's
+  // `size` prop. All measurements below are in those 240 units regardless
+  // of rendered size, so the layout never breaks at smaller sizes.
+  const V = 240;
+  const cx = V / 2;
+  const cy = V / 2;
+  const r = V / 2 - 20;
 
   const polar = (deg: number, radius: number) => {
     const rad = ((deg - 90) * Math.PI) / 180;
@@ -37,25 +42,27 @@ export default function WindCompass({ dirCurrent, speed, size = 180 }: Props) {
   const speedStr = fmtWindNum(speed, 0);
   const dirStr = compassFromDegrees(dirCurrent);
 
-  const centerFont = size < 140 ? 16 : size < 170 ? 22 : 28;
-  const unitFont = Math.round(centerFont * 0.45);
-  const cardinalFont = size < 140 ? 9 : 10;
-
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      {/* Single clean ring */}
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${V} ${V}`}
+      className="max-w-full h-auto"
+      style={{ maxWidth: size }}
+    >
+      {/* Single ring */}
       <circle
         cx={cx}
         cy={cy}
         r={r}
         fill="rgba(96,165,250,0.06)"
         stroke="rgba(96,165,250,0.45)"
-        strokeWidth="1.5"
+        strokeWidth="2"
       />
 
-      {/* 8 cardinal labels sitting on the inside edge */}
+      {/* 8 cardinal labels just inside the ring */}
       {cardinals.map((c) => {
-        const p = polar(c.deg, r - 11);
+        const p = polar(c.deg, r - 14);
         return (
           <text
             key={c.label}
@@ -63,8 +70,8 @@ export default function WindCompass({ dirCurrent, speed, size = 180 }: Props) {
             y={p.y}
             textAnchor="middle"
             dominantBaseline="central"
-            fill={c.label === 'N' ? '#f87171' : 'rgba(255,255,255,0.5)'}
-            fontSize={c.label.length === 1 ? cardinalFont + 1 : cardinalFont}
+            fill={c.label === 'N' ? '#f87171' : 'rgba(255,255,255,0.55)'}
+            fontSize={c.label.length === 1 ? 13 : 11}
             fontWeight="600"
           >
             {c.label}
@@ -72,11 +79,11 @@ export default function WindCompass({ dirCurrent, speed, size = 180 }: Props) {
         );
       })}
 
-      {/* One small marker on the ring pointing toward where wind is FROM. */}
+      {/* Single marker on the ring — points where wind is FROM */}
       {dirCurrent !== null && dirCurrent !== undefined && (() => {
         const tip = polar(dirCurrent, r - 2);
-        const base1 = polar(dirCurrent - 5, r - 14);
-        const base2 = polar(dirCurrent + 5, r - 14);
+        const base1 = polar(dirCurrent - 5, r - 18);
+        const base2 = polar(dirCurrent + 5, r - 18);
         return (
           <polygon
             points={`${tip.x},${tip.y} ${base1.x},${base1.y} ${base2.x},${base2.y}`}
@@ -92,13 +99,13 @@ export default function WindCompass({ dirCurrent, speed, size = 180 }: Props) {
         textAnchor="middle"
         dominantBaseline="central"
         fontWeight="700"
-        fontSize={centerFont}
+        fontSize={34}
         fill="#93c5fd"
         className="tabular-nums"
       >
         <tspan>{dirStr === '--' ? '' : dirStr}</tspan>
-        <tspan dx={centerFont * 0.35}>{speedStr}</tspan>
-        <tspan dx={centerFont * 0.25} fontSize={unitFont} fontWeight="500">
+        <tspan dx={10}>{speedStr}</tspan>
+        <tspan dx={8} fontSize={15} fontWeight="500">
           {windUnitLabel}
         </tspan>
       </text>
