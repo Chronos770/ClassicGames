@@ -302,7 +302,23 @@ export function StatsSummary({ readings }: { readings: WeatherReading[] }) {
   }, [readings]);
 
   const totalRain = useMemo(() => {
-    return readings.reduce((acc, r) => acc + (r.rainfall_last_15_min_in ?? 0), 0);
+    // `rainfall_last_15_min_in` is a rolling window reported on every reading,
+    // so summing it across samples double-counts overlapping windows. The
+    // console instead tracks `rainfall_day_in` as a cumulative counter that
+    // resets at midnight, so for each calendar day take the max observed and
+    // sum those daily totals.
+    const byDay = new Map<string, number>();
+    for (const r of readings) {
+      const v = r.rainfall_day_in;
+      if (v === null || v === undefined || !Number.isFinite(v)) continue;
+      const d = new Date(r.observed_at);
+      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      const cur = byDay.get(key) ?? 0;
+      if (v > cur) byDay.set(key, v);
+    }
+    let total = 0;
+    for (const v of byDay.values()) total += v;
+    return { total, days: byDay.size };
   }, [readings]);
 
   if (readings.length === 0) return null;
@@ -347,8 +363,8 @@ export function StatsSummary({ readings }: { readings: WeatherReading[] }) {
               <td className="px-3 py-1.5 text-right text-white/30">—</td>
               <td className="px-3 py-1.5 text-right text-white/30">—</td>
               <td className="px-3 py-1.5 text-right text-white/30">—</td>
-              <td className="px-3 py-1.5 text-right text-blue-300 font-semibold">{totalRain.toFixed(2)}</td>
-              <td className="px-3 py-1.5 text-right text-white/40 hidden sm:table-cell">—</td>
+              <td className="px-3 py-1.5 text-right text-blue-300 font-semibold">{totalRain.total.toFixed(2)}</td>
+              <td className="px-3 py-1.5 text-right text-white/40 hidden sm:table-cell">{totalRain.days || '—'}</td>
             </tr>
           </tbody>
         </table>
