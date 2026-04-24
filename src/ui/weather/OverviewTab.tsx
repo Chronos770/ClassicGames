@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   barTrendLabel,
   compassFromDegrees,
@@ -14,10 +15,9 @@ import ForecastSection from './ForecastSection';
 import ActiveStormCard from './ActiveStormCard';
 import PressureSparkline from './PressureSparkline';
 import SunArc from './SunArc';
-import SolarDayArc from './SolarDayArc';
+import MoonCard from './MoonCard';
 import WindRose from './WindRose';
 import ETContextCard from './ETContextCard';
-import DegreeDayChart from './DegreeDayChart';
 import AnimatedWeatherIcon from './AnimatedWeatherIcon';
 
 interface Props {
@@ -49,26 +49,11 @@ export default function OverviewTab({ reading, station, stationId, tick }: Props
         </div>
       )}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 mt-4">
-        <SolarDayArc
-          rows={recent.rows.filter((r) => {
-            const d = new Date(r.observed_at);
-            const now = new Date();
-            return (
-              d.getFullYear() === now.getFullYear() &&
-              d.getMonth() === now.getMonth() &&
-              d.getDate() === now.getDate()
-            );
-          })}
-          lat={station?.latitude ?? null}
-          lon={station?.longitude ?? null}
-        />
         <WindRose rows={history30d.rows.filter((r) => {
           const age = Date.now() - new Date(r.observed_at).getTime();
           return age <= 24 * 3600_000;
         })} />
-      </div>
-      <div className="mt-4">
-        <DegreeDayChart stationId={stationId} tick={tick} />
+        <MoonCard now={new Date(reading.observed_at)} />
       </div>
       <div className="mt-6">
         <h2 className="text-sm text-white/60 mb-3 uppercase tracking-wide font-semibold">Forecast</h2>
@@ -204,13 +189,6 @@ function HeroBanner({
             Observed {timeAgo(reading.observed_at)} · {new Date(reading.observed_at).toLocaleString()}
           </div>
         </div>
-        <div className="text-right">
-          <div className="text-xs text-white/40 uppercase tracking-wide mb-2">Today</div>
-          <div className="text-xs text-white/40">Heating Deg Days</div>
-          <div className="text-sm font-mono text-white/80">{reading.hdd_day?.toFixed(2) ?? '--'}</div>
-          <div className="text-xs text-white/40 mt-1">Cooling Deg Days</div>
-          <div className="text-sm font-mono text-white/80">{reading.cdd_day?.toFixed(2) ?? '--'}</div>
-        </div>
       </div>
     </div>
   );
@@ -231,12 +209,36 @@ function ConditionsGrid({
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
       <Card title="Feels Like & Derived">
-        <DataRow label="Heat Index" value={fmt.fmtTemp(reading.heat_index)} />
-        <DataRow label="Wind Chill" value={fmt.fmtTemp(reading.wind_chill)} />
-        <DataRow label="THW Index" value={fmt.fmtTemp(reading.thw_index)} />
-        <DataRow label="THSW Index" value={fmt.fmtTemp(reading.thsw_index)} />
-        <DataRow label="Wet Bulb" value={fmt.fmtTemp(reading.wet_bulb)} />
-        <DataRow label="Dew Point" value={fmt.fmtTemp(reading.dew_point)} />
+        <DataRow
+          label="Heat Index"
+          tip="How hot it feels combining temp + humidity. NWS standard, only relevant when warm + humid."
+          value={fmt.fmtTemp(reading.heat_index)}
+        />
+        <DataRow
+          label="Wind Chill"
+          tip="How cold it feels combining temp + wind speed. Only meaningful below ~50°F with wind."
+          value={fmt.fmtTemp(reading.wind_chill)}
+        />
+        <DataRow
+          label="THW Index"
+          tip="Temperature–Humidity–Wind. Davis's all-in-one feels-like that blends heat index and wind chill year-round."
+          value={fmt.fmtTemp(reading.thw_index)}
+        />
+        <DataRow
+          label="THSW Index"
+          tip="THW plus solar radiation. Adds the heating effect of being in direct sun. Requires a solar sensor."
+          value={fmt.fmtTemp(reading.thsw_index)}
+        />
+        <DataRow
+          label="Wet Bulb"
+          tip="Coolest temp you can achieve by evaporation — what a wet thermometer would read. Used for swamp coolers, athletic heat safety."
+          value={fmt.fmtTemp(reading.wet_bulb)}
+        />
+        <DataRow
+          label="Dew Point"
+          tip="Temp at which the air would saturate with water vapor. Below 55°F = dry, 60s = comfortable, 70s = sticky, 75°+ = oppressive."
+          value={fmt.fmtTemp(reading.dew_point)}
+        />
       </Card>
 
       <Card title="Humidity">
@@ -245,8 +247,18 @@ function ConditionsGrid({
           <div className="flex-1 space-y-1.5">
             <DataRow label="Outdoor" value={reading.hum !== null ? `${reading.hum.toFixed(1)}%` : '--'} mono />
             <DataRow label="Indoor" value={reading.hum_in !== null ? `${reading.hum_in.toFixed(1)}%` : '--'} mono />
-            <DataRow label="Dew Point" value={fmt.fmtTemp(reading.dew_point)} mono />
-            <DataRow label="Indoor Dew" value={fmt.fmtTemp(reading.dew_point_in)} mono />
+            <DataRow
+              label="Dew Point"
+              tip="Temp at which air saturates with water. Lower = drier; 60s comfortable, 70s+ humid."
+              value={fmt.fmtTemp(reading.dew_point)}
+              mono
+            />
+            <DataRow
+              label="Indoor Dew"
+              tip="Indoor air's dew point — useful for window-condensation risk in winter."
+              value={fmt.fmtTemp(reading.dew_point_in)}
+              mono
+            />
           </div>
         </div>
       </Card>
@@ -318,22 +330,7 @@ function ConditionsGrid({
           <DataRow label="Sea Level" value={fmt.fmtPressure(reading.bar_sea_level)} mono />
           <DataRow label="Trend (3hr)" value={reading.bar_trend !== null ? (reading.bar_trend > 0 ? '+' : '') + reading.bar_trend.toFixed(3) : '--'} mono />
         </div>
-      </Card>
-
-      <Card title="Solar & UV">
-        {reading.solar_rad !== null || reading.uv_index !== null ? (
-          <>
-            <DataRow label="Solar Radiation" value={reading.solar_rad !== null ? `${reading.solar_rad.toFixed(0)} W/m²` : '--'} mono />
-            <DataRow label="Solar Energy (day)" value={reading.solar_energy_day !== null ? `${reading.solar_energy_day.toFixed(2)} Ly` : '--'} mono />
-            <DataRow label="UV Index" value={reading.uv_index !== null ? reading.uv_index.toFixed(1) : '--'} mono />
-            <DataRow label="UV Dose (day)" value={reading.uv_dose_day !== null ? `${reading.uv_dose_day.toFixed(2)} MEDs` : '--'} mono />
-          </>
-        ) : (
-          <div className="text-sm text-white/30 italic">
-            No solar/UV sensor on this station.
-            <div className="text-xs text-white/30 mt-1">(Vantage Pro2 with solar/UV sensors required.)</div>
-          </div>
-        )}
+        <BarometerExplainer pressureInHg={reading.bar_sea_level} trendInHg={reading.bar_trend} />
       </Card>
 
       <Card title="Indoor (Console)">
@@ -357,6 +354,47 @@ function ConditionsGrid({
           mono
         />
       </Card>
+    </div>
+  );
+}
+
+function BarometerExplainer({
+  pressureInHg,
+  trendInHg,
+}: {
+  pressureInHg: number | null;
+  trendInHg: number | null;
+}) {
+  // Plain-English meaning of the current pressure level + 3hr trend.
+  const level = (() => {
+    if (pressureInHg === null) return null;
+    if (pressureInHg >= 30.20) return { label: 'High', tone: 'text-amber-300', meaning: 'fair, dry weather' };
+    if (pressureInHg >= 29.80) return { label: 'Normal', tone: 'text-white/80', meaning: 'changeable conditions' };
+    return { label: 'Low', tone: 'text-blue-300', meaning: 'stormy / wet weather possible' };
+  })();
+  const trend = (() => {
+    if (trendInHg === null) return null;
+    if (trendInHg > 0.06) return { label: 'rising rapidly', meaning: 'fair weather coming soon' };
+    if (trendInHg > 0.02) return { label: 'rising', meaning: 'improving conditions' };
+    if (trendInHg < -0.06) return { label: 'falling rapidly', meaning: 'storm or front approaching' };
+    if (trendInHg < -0.02) return { label: 'falling', meaning: 'unsettled weather coming' };
+    return { label: 'steady', meaning: 'no major change expected' };
+  })();
+  if (!level && !trend) return null;
+  return (
+    <div className="mt-3 pt-3 border-t border-white/5 text-[10px] text-white/50 leading-relaxed">
+      {level && (
+        <div>
+          <span className={`font-semibold ${level.tone}`}>{level.label}</span>
+          <span className="text-white/40"> · {level.meaning}</span>
+        </div>
+      )}
+      {trend && (
+        <div className="mt-0.5">
+          Pressure is <span className="text-white/70 font-medium">{trend.label}</span>
+          <span className="text-white/40"> — {trend.meaning}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -406,11 +444,55 @@ function Card({ title, children }: { title: React.ReactNode; children: React.Rea
   );
 }
 
-function DataRow({ label, value, mono = false, valueClass = '' }: { label: string; value: string; mono?: boolean; valueClass?: string }) {
+function DataRow({
+  label,
+  value,
+  tip,
+  mono = false,
+  valueClass = '',
+}: {
+  label: string;
+  value: string;
+  tip?: string;
+  mono?: boolean;
+  valueClass?: string;
+}) {
   return (
-    <div className="flex items-baseline justify-between text-xs">
-      <span className="text-white/50">{label}</span>
-      <span className={`${mono ? 'font-mono' : ''} text-white/90 ${valueClass}`}>{value}</span>
+    <div className="flex items-baseline justify-between text-xs gap-2">
+      <span className="text-white/50 flex items-center gap-1 min-w-0">
+        <span>{label}</span>
+        {tip && <InfoTip label={label}>{tip}</InfoTip>}
+      </span>
+      <span className={`${mono ? 'font-mono' : ''} text-white/90 ${valueClass} flex-shrink-0`}>{value}</span>
     </div>
+  );
+}
+
+function InfoTip({ children, label }: { children: React.ReactNode; label: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="relative inline-flex items-center">
+      <button
+        type="button"
+        aria-label={`What is ${label}?`}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        className="text-white/25 hover:text-white/60 text-[11px] leading-none align-middle cursor-help"
+      >
+        &#9432;
+      </button>
+      {open && (
+        <span
+          role="tooltip"
+          className="absolute z-30 left-0 top-full mt-1 bg-black/95 border border-white/15 rounded-lg p-2 text-[10px] text-white/80 leading-snug w-56 shadow-xl pointer-events-none normal-case"
+        >
+          {children}
+        </span>
+      )}
+    </span>
   );
 }

@@ -34,7 +34,6 @@ const METRICS: { id: Metric; label: string; group: string }[] = [
   { id: 'wind', label: 'Wind', group: 'Primary' },
   { id: 'rain', label: 'Rain Rate', group: 'Primary' },
   { id: 'bar', label: 'Pressure', group: 'Primary' },
-  { id: 'solar', label: 'Solar / UV', group: 'Primary' },
   { id: 'storms', label: 'Storm Events', group: 'Derived' },
   { id: 'dewpoint', label: 'Dew / Wet Bulb', group: 'Derived' },
   { id: 'rainTotals', label: 'Rain Totals', group: 'Derived' },
@@ -226,15 +225,6 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
             { label: 'Absolute', color: '#a78bfa', points: readings.map((r) => ({ t: t(r), v: pC(r.bar_absolute) })) },
           ] as Series[],
           yUnit: ` ${pressU}`,
-          yDomain: undefined,
-        };
-      case 'solar':
-        return {
-          series: [
-            { label: 'Solar (W/m²)', color: '#fbbf24', points: readings.map((r) => ({ t: t(r), v: r.solar_rad })) },
-            { label: 'UV Index', color: '#f472b6', points: readings.map((r) => ({ t: t(r), v: r.uv_index })) },
-          ] as Series[],
-          yUnit: '',
           yDomain: undefined,
         };
       case 'dewpoint':

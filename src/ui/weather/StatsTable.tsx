@@ -42,8 +42,6 @@ function buildColumns(
     { id: 'rainfall_last_15_min_in', label: 'Rain (15m)', unit: rU, get: (r) => convertPrecip(r.rainfall_last_15_min_in, precU), fmt: (v) => v.toFixed(rDig) },
     { id: 'rainfall_day_in', label: 'Rain Today', unit: rU, get: (r) => convertPrecip(r.rainfall_day_in, precU), fmt: (v) => v.toFixed(rDig) },
     { id: 'bar_sea_level', label: 'Pressure', unit: pU, get: (r) => convertPressure(r.bar_sea_level, pressU), fmt: (v) => v.toFixed(pDig) },
-    { id: 'solar_rad', label: 'Solar', unit: 'W/m²', get: (r) => r.solar_rad, fmt: (v) => v.toFixed(0) },
-    { id: 'uv_index', label: 'UV', get: (r) => r.uv_index, fmt: (v) => v.toFixed(1) },
     { id: 'temp_in', label: 'Indoor T', unit: tU, get: (r) => convertTemp(r.temp_in, tempU), fmt: (v) => v.toFixed(1) },
     { id: 'hum_in', label: 'Indoor H', unit: '%', get: (r) => r.hum_in, fmt: (v) => v.toFixed(1) },
     { id: 'rssi_last', label: 'RSSI', unit: 'dBm', get: (r) => r.rssi_last, fmt: (v) => v.toFixed(0) },
@@ -334,8 +332,6 @@ export function StatsSummary({ readings }: { readings: WeatherReading[] }) {
       collect('Wind Avg', windLabel, (r) => convertWind(r.wind_speed_avg_last_10_min, windU)),
       collect('Wind Gust', windLabel, (r) => convertWind(r.wind_speed_hi_last_10_min, windU)),
       collect('Pressure', pressU, (r) => convertPressure(r.bar_sea_level, pressU)),
-      collect('Solar', 'W/m²', (r) => r.solar_rad),
-      collect('UV Index', '', (r) => r.uv_index),
       collect('Indoor Temp', `°${tempU}`, (r) => convertTemp(r.temp_in, tempU)),
       collect('Indoor Hum', '%', (r) => r.hum_in),
     ].filter((s) => s.values.length > 0);

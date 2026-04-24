@@ -7,8 +7,8 @@ interface Props {
 }
 
 // Canvas-based ambient background that reflects current conditions.
-// Rain / snow use particle systems; sunny has drifting clouds + sun glow;
-// clear night has twinkling stars + moon; thunderstorms flash.
+// Tuned for visibility — particles are bright/opaque enough to read through
+// the dark cards on top, instead of blending into the page background.
 // Respects prefers-reduced-motion by rendering a static frame.
 export default function WeatherBackground({ condition, windMph }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -21,19 +21,13 @@ export default function WeatherBackground({ condition, windMph }: Props) {
 
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
     const isMobile = window.matchMedia?.('(max-width: 640px)').matches ?? false;
-    // On mobile, cap DPR at 1.5x — full 3x on a 6.5" phone is 100M+ pixels
-    // to blit every frame, which will tank mid-range devices.
     const dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2);
-    const densityScale = isMobile ? 0.45 : 1;
+    const densityScale = isMobile ? 0.55 : 1;
 
     let raf = 0;
     let running = true;
     let paused = document.hidden;
 
-    // Sized to the *viewport*, not the scrollable page. The canvas is
-    // position:fixed so it follows the viewport as the user scrolls —
-    // otherwise on a long weather page we'd be redrawing thousands of
-    // off-screen particles every frame.
     const resize = () => {
       const w = window.innerWidth;
       const h = window.innerHeight;
@@ -47,133 +41,193 @@ export default function WeatherBackground({ condition, windMph }: Props) {
     window.addEventListener('resize', resize);
     window.addEventListener('orientationchange', resize);
 
-    // --- State depending on condition ---
     const w = () => canvas.clientWidth;
     const h = () => canvas.clientHeight;
 
     const wind = Math.max(-50, Math.min(50, windMph));
-    const windFactor = wind / 10; // horizontal particle drift coefficient
+    const windFactor = wind / 10;
 
     type Drop = { x: number; y: number; vy: number; vx: number; len: number; a: number };
+    type Splash = { x: number; y: number; r: number; a: number };
     type Flake = { x: number; y: number; vy: number; phase: number; size: number; a: number };
     type Star = { x: number; y: number; a: number; phase: number; speed: number };
-    type Cloud = { x: number; y: number; scale: number; speed: number; a: number };
+    type Cloud = { x: number; y: number; scale: number; speed: number; a: number; type: 'puffy' | 'wisp' };
     type Ray = { a: number; speed: number; phase: number };
     type Mist = { x: number; y: number; r: number; a: number; speed: number };
+    type Streak = { x: number; y: number; vx: number; len: number; a: number };
+    type Leaf = { x: number; y: number; vx: number; vy: number; rot: number; vrot: number; size: number; color: string };
 
     const rain: Drop[] = [];
+    const splashes: Splash[] = [];
     const flakes: Flake[] = [];
     const stars: Star[] = [];
     const clouds: Cloud[] = [];
     const rays: Ray[] = [];
     const mist: Mist[] = [];
+    const streaks: Streak[] = [];
+    const leaves: Leaf[] = [];
     let nextFlashAt = 0;
     let flashAlpha = 0;
+    let nextBoltAt = 0;
+    let bolt: { points: Array<[number, number]>; alpha: number } | null = null;
 
     const k = condition.key;
 
-    const seedParticles = () => {
+    const seed = () => {
       const W = w();
       const H = h();
-      rain.length = flakes.length = stars.length = clouds.length = rays.length = mist.length = 0;
+      rain.length = splashes.length = flakes.length = stars.length = clouds.length = 0;
+      rays.length = mist.length = streaks.length = leaves.length = 0;
 
+      // RAIN
       if (k === 'rain' || k === 'heavyRain' || k === 'drizzle' || k === 'thunderstorm') {
-        const base = k === 'drizzle' ? 90 : k === 'rain' ? 180 : 360;
+        const base = k === 'drizzle' ? 140 : k === 'rain' ? 280 : 460;
         const density = Math.round(base * densityScale);
+        const speedRange = k === 'drizzle' ? [400, 700] : k === 'heavyRain' || k === 'thunderstorm' ? [900, 1300] : [700, 1000];
         for (let i = 0; i < density; i++) {
           rain.push({
-            x: Math.random() * W,
+            x: Math.random() * (W + 200) - 100,
             y: Math.random() * H,
-            vy: 600 + Math.random() * 400,
-            vx: windFactor * 40 + (Math.random() - 0.5) * 40,
-            len: 8 + Math.random() * 14,
-            a: 0.2 + Math.random() * 0.4,
+            vy: speedRange[0] + Math.random() * (speedRange[1] - speedRange[0]),
+            vx: windFactor * 60 + (Math.random() - 0.5) * 30,
+            len: k === 'drizzle' ? 4 + Math.random() * 6 : 12 + Math.random() * 18,
+            a: k === 'drizzle' ? 0.45 + Math.random() * 0.25 : 0.55 + Math.random() * 0.35,
           });
         }
       }
+
+      // SNOW
       if (k === 'snow') {
-        for (let i = 0; i < Math.round(120 * densityScale); i++) {
+        for (let i = 0; i < Math.round(180 * densityScale); i++) {
           flakes.push({
             x: Math.random() * W,
             y: Math.random() * H,
-            vy: 20 + Math.random() * 40,
+            vy: 30 + Math.random() * 60,
             phase: Math.random() * Math.PI * 2,
-            size: 1.2 + Math.random() * 2.6,
-            a: 0.3 + Math.random() * 0.5,
+            size: 1.5 + Math.random() * 3.2,
+            a: 0.6 + Math.random() * 0.4,
           });
         }
       }
-      if (k === 'clear' || (!condition.isDay && k !== 'thunderstorm')) {
-        for (let i = 0; i < Math.round(140 * densityScale); i++) {
+
+      // STARS (clear night)
+      if (!condition.isDay && (k === 'clear' || k === 'partlyCloudy' || k === 'sunny')) {
+        for (let i = 0; i < Math.round(220 * densityScale); i++) {
           stars.push({
             x: Math.random() * W,
-            y: Math.random() * H * 0.8,
-            a: 0.3 + Math.random() * 0.7,
+            y: Math.random() * H * 0.85,
+            a: 0.5 + Math.random() * 0.5,
             phase: Math.random() * Math.PI * 2,
-            speed: 0.5 + Math.random() * 1.5,
+            speed: 0.6 + Math.random() * 1.8,
           });
         }
       }
-      if (k === 'sunny' || k === 'partlyCloudy' || k === 'cloudy' || k === 'hot' || k === 'windy') {
-        const count = k === 'cloudy' ? 7 : k === 'partlyCloudy' ? 4 : k === 'sunny' ? 2 : 3;
+
+      // CLOUDS
+      if (k === 'cloudy' || k === 'partlyCloudy' || k === 'sunny' || k === 'hot' || k === 'windy') {
+        const count = k === 'cloudy' ? 12 : k === 'partlyCloudy' ? 6 : k === 'windy' ? 4 : 3;
         for (let i = 0; i < count; i++) {
           clouds.push({
             x: Math.random() * W,
-            y: 20 + Math.random() * (H * 0.5),
-            scale: 0.8 + Math.random() * 1.8,
-            speed: (6 + Math.random() * 14) * (windFactor !== 0 ? Math.sign(windFactor) : 1),
-            a: 0.12 + Math.random() * 0.18,
+            y: 30 + Math.random() * (H * 0.55),
+            scale: 0.9 + Math.random() * 1.6,
+            speed: (10 + Math.random() * 18) * (windFactor !== 0 ? Math.sign(windFactor) : 1),
+            a: condition.isDay ? 0.35 + Math.random() * 0.25 : 0.18 + Math.random() * 0.15,
+            type: k === 'windy' ? 'wisp' : Math.random() > 0.6 ? 'wisp' : 'puffy',
           });
         }
       }
-      if (k === 'sunny' || k === 'hot') {
-        for (let i = 0; i < 10; i++) {
-          rays.push({ a: (i / 10) * Math.PI * 2, speed: 0.08 + Math.random() * 0.06, phase: Math.random() });
+
+      // SUN RAYS (sunny / hot day)
+      if (condition.isDay && (k === 'sunny' || k === 'hot')) {
+        for (let i = 0; i < 14; i++) {
+          rays.push({ a: (i / 14) * Math.PI * 2, speed: 0.06 + Math.random() * 0.05, phase: Math.random() });
         }
       }
+
+      // FOG
       if (k === 'fog') {
-        for (let i = 0; i < 14; i++) {
+        for (let i = 0; i < 20; i++) {
           mist.push({
             x: Math.random() * W,
-            y: H * 0.3 + Math.random() * H * 0.7,
-            r: 80 + Math.random() * 180,
-            a: 0.04 + Math.random() * 0.06,
-            speed: 4 + Math.random() * 8,
+            y: H * 0.2 + Math.random() * H * 0.8,
+            r: 120 + Math.random() * 240,
+            a: 0.10 + Math.random() * 0.10,
+            speed: 6 + Math.random() * 10,
+          });
+        }
+      }
+
+      // WINDY
+      if (k === 'windy') {
+        for (let i = 0; i < Math.round(80 * densityScale); i++) {
+          streaks.push({
+            x: Math.random() * W,
+            y: Math.random() * H,
+            vx: 500 + Math.random() * 600,
+            len: 40 + Math.random() * 90,
+            a: 0.18 + Math.random() * 0.22,
+          });
+        }
+        // A few drifting leaves for season hint
+        const leafColors = ['#fbbf24', '#f97316', '#a3a300', '#84cc16', '#eab308'];
+        for (let i = 0; i < Math.round(8 * densityScale); i++) {
+          leaves.push({
+            x: Math.random() * W,
+            y: Math.random() * H,
+            vx: 200 + Math.random() * 300,
+            vy: 30 + Math.random() * 60,
+            rot: Math.random() * Math.PI * 2,
+            vrot: (Math.random() - 0.5) * 4,
+            size: 6 + Math.random() * 6,
+            color: leafColors[Math.floor(Math.random() * leafColors.length)],
           });
         }
       }
     };
-    seedParticles();
+    seed();
 
-    const windyStreaks: { x: number; y: number; vx: number; len: number; a: number }[] = [];
-    if (k === 'windy') {
-      for (let i = 0; i < Math.round(50 * densityScale); i++) {
-        windyStreaks.push({
-          x: Math.random() * w(),
-          y: Math.random() * h(),
-          vx: 400 + Math.random() * 400,
-          len: 30 + Math.random() * 60,
-          a: 0.1 + Math.random() * 0.15,
-        });
-      }
-    }
-
-    // Sun pulse center (computed once)
     const sunX = () => w() * 0.78;
     const sunY = () => h() * 0.22;
 
     let prev = performance.now();
 
-    const drawCloud = (cx: number, cy: number, s: number, a: number) => {
+    const drawPuffyCloud = (cx: number, cy: number, s: number, a: number) => {
       ctx.globalAlpha = a;
-      ctx.fillStyle = condition.isDay ? '#ffffff' : '#cbd5e1';
+      ctx.fillStyle = condition.isDay ? '#ffffff' : '#94a3b8';
       ctx.beginPath();
-      ctx.ellipse(cx, cy, 45 * s, 18 * s, 0, 0, Math.PI * 2);
-      ctx.ellipse(cx - 25 * s, cy + 4 * s, 30 * s, 15 * s, 0, 0, Math.PI * 2);
-      ctx.ellipse(cx + 25 * s, cy + 2 * s, 35 * s, 16 * s, 0, 0, Math.PI * 2);
-      ctx.ellipse(cx - 8 * s, cy - 8 * s, 22 * s, 13 * s, 0, 0, Math.PI * 2);
+      ctx.ellipse(cx, cy, 50 * s, 22 * s, 0, 0, Math.PI * 2);
+      ctx.ellipse(cx - 28 * s, cy + 6 * s, 32 * s, 16 * s, 0, 0, Math.PI * 2);
+      ctx.ellipse(cx + 28 * s, cy + 4 * s, 38 * s, 18 * s, 0, 0, Math.PI * 2);
+      ctx.ellipse(cx - 10 * s, cy - 10 * s, 24 * s, 14 * s, 0, 0, Math.PI * 2);
+      ctx.ellipse(cx + 14 * s, cy - 8 * s, 22 * s, 12 * s, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 1;
+    };
+    const drawWispCloud = (cx: number, cy: number, s: number, a: number) => {
+      ctx.globalAlpha = a;
+      ctx.strokeStyle = condition.isDay ? '#ffffff' : '#cbd5e1';
+      ctx.lineWidth = 4 * s;
+      ctx.lineCap = 'round';
+      for (let i = -2; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.moveTo(cx - 60 * s, cy + i * 6 * s);
+        ctx.bezierCurveTo(cx - 20 * s, cy + i * 6 * s - 4 * s, cx + 20 * s, cy + i * 6 * s + 4 * s, cx + 60 * s, cy + i * 6 * s);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    };
+
+    const drawLightningBolt = (x: number, y: number) => {
+      // Pre-compute a jagged polyline
+      const pts: Array<[number, number]> = [[x, 0]];
+      let cy = 0;
+      const targetY = y;
+      while (cy < targetY) {
+        cy += 20 + Math.random() * 60;
+        pts.push([x + (Math.random() - 0.5) * 80, cy]);
+      }
+      bolt = { points: pts, alpha: 1 };
     };
 
     const frame = (t: number) => {
@@ -184,28 +238,27 @@ export default function WeatherBackground({ condition, windMph }: Props) {
       const H = h();
       ctx.clearRect(0, 0, W, H);
 
-      // Sun glow for day conditions
+      // Sun glow
       if (condition.isDay && (k === 'sunny' || k === 'hot' || k === 'partlyCloudy')) {
-        const grad = ctx.createRadialGradient(sunX(), sunY(), 0, sunX(), sunY(), 260);
-        grad.addColorStop(0, 'rgba(253, 224, 71, 0.35)');
-        grad.addColorStop(0.4, 'rgba(251, 191, 36, 0.15)');
+        const grad = ctx.createRadialGradient(sunX(), sunY(), 0, sunX(), sunY(), 320);
+        grad.addColorStop(0, 'rgba(253, 224, 71, 0.55)');
+        grad.addColorStop(0.4, 'rgba(251, 191, 36, 0.22)');
         grad.addColorStop(1, 'rgba(251, 191, 36, 0)');
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, W, H);
 
-        // Rotating rays
         if (k === 'sunny' || k === 'hot') {
           ctx.save();
           ctx.translate(sunX(), sunY());
           for (const ray of rays) {
             if (!reduced) ray.a += ray.speed * dt;
-            const pulse = 0.35 + 0.15 * Math.sin(t / 400 + ray.phase * 6);
+            const pulse = 0.5 + 0.3 * Math.sin(t / 350 + ray.phase * 6);
             ctx.rotate(ray.a);
-            ctx.fillStyle = `rgba(253, 224, 71, ${0.06 * pulse})`;
+            ctx.fillStyle = `rgba(253, 224, 71, ${0.12 * pulse})`;
             ctx.beginPath();
             ctx.moveTo(0, 0);
-            ctx.lineTo(400, -14);
-            ctx.lineTo(400, 14);
+            ctx.lineTo(500, -18);
+            ctx.lineTo(500, 18);
             ctx.closePath();
             ctx.fill();
             ctx.rotate(-ray.a);
@@ -213,72 +266,77 @@ export default function WeatherBackground({ condition, windMph }: Props) {
           ctx.restore();
         }
 
-        // Sun body
-        ctx.fillStyle = 'rgba(253, 224, 71, 0.9)';
+        ctx.fillStyle = 'rgba(253, 224, 71, 0.95)';
         ctx.beginPath();
-        ctx.arc(sunX(), sunY(), 30, 0, Math.PI * 2);
+        ctx.arc(sunX(), sunY(), 36, 0, Math.PI * 2);
         ctx.fill();
-      }
 
-      // Moon for night
-      if (!condition.isDay && (k === 'clear' || k === 'partlyCloudy' || k === 'cloudy')) {
-        const mx = W * 0.82;
-        const my = H * 0.2;
-        const grad = ctx.createRadialGradient(mx, my, 0, mx, my, 120);
-        grad.addColorStop(0, 'rgba(226, 232, 240, 0.25)');
-        grad.addColorStop(1, 'rgba(226, 232, 240, 0)');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, W, H);
-        ctx.fillStyle = 'rgba(241, 245, 249, 0.85)';
-        ctx.beginPath();
-        ctx.arc(mx, my, 22, 0, Math.PI * 2);
-        ctx.fill();
-        // Shadow crescent
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.4)';
-        ctx.beginPath();
-        ctx.arc(mx + 8, my, 22, 0, Math.PI * 2);
-        ctx.fill();
+        // Hot: heat shimmer near bottom
+        if (k === 'hot' && !reduced) {
+          for (let i = 0; i < 6; i++) {
+            const y = H - 20 - i * 8;
+            const offset = Math.sin(t / 200 + i) * 4;
+            ctx.fillStyle = `rgba(251, 191, 36, ${0.04 - i * 0.005})`;
+            ctx.fillRect(0, y + offset, W, 3);
+          }
+        }
       }
 
       // Stars
       for (const s of stars) {
         if (!reduced) s.phase += s.speed * dt;
-        const tw = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(s.phase));
+        const tw = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(s.phase));
         ctx.globalAlpha = s.a * tw;
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(s.x, s.y, 1.5, 1.5);
+        ctx.fillRect(s.x, s.y, 1.8, 1.8);
+        // Bigger glow on the brightest stars
+        if (s.a > 0.85) {
+          ctx.globalAlpha = s.a * tw * 0.3;
+          ctx.fillRect(s.x - 1, s.y - 1, 4, 4);
+        }
       }
       ctx.globalAlpha = 1;
 
       // Clouds
       for (const c of clouds) {
         if (!reduced) c.x += c.speed * dt;
-        if (c.x - 80 * c.scale > W) c.x = -80 * c.scale;
-        if (c.x + 80 * c.scale < 0) c.x = W + 80 * c.scale;
-        drawCloud(c.x, c.y, c.scale, c.a);
+        if (c.x - 90 * c.scale > W) c.x = -90 * c.scale;
+        if (c.x + 90 * c.scale < 0) c.x = W + 90 * c.scale;
+        if (c.type === 'wisp') drawWispCloud(c.x, c.y, c.scale, c.a);
+        else drawPuffyCloud(c.x, c.y, c.scale, c.a);
       }
 
-      // Mist (fog)
-      for (const m of mist) {
-        if (!reduced) m.x += m.speed * dt;
-        if (m.x - m.r > W) m.x = -m.r;
-        const grad = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r);
-        grad.addColorStop(0, `rgba(226, 232, 240, ${m.a})`);
-        grad.addColorStop(1, 'rgba(226, 232, 240, 0)');
-        ctx.fillStyle = grad;
-        ctx.fillRect(m.x - m.r, m.y - m.r, m.r * 2, m.r * 2);
+      // Fog (heavy diffuse mist)
+      if (k === 'fog') {
+        for (const m of mist) {
+          if (!reduced) m.x += m.speed * dt;
+          if (m.x - m.r > W) m.x = -m.r;
+          const grad = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r);
+          grad.addColorStop(0, `rgba(226, 232, 240, ${m.a})`);
+          grad.addColorStop(1, 'rgba(226, 232, 240, 0)');
+          ctx.fillStyle = grad;
+          ctx.fillRect(m.x - m.r, m.y - m.r, m.r * 2, m.r * 2);
+        }
+        // Diffuse foreground veil so it actually feels foggy
+        const veil = ctx.createLinearGradient(0, H * 0.4, 0, H);
+        veil.addColorStop(0, 'rgba(226, 232, 240, 0)');
+        veil.addColorStop(1, 'rgba(226, 232, 240, 0.18)');
+        ctx.fillStyle = veil;
+        ctx.fillRect(0, 0, W, H);
       }
 
-      // Rain
+      // Rain (with splashes near bottom)
       if (rain.length) {
-        ctx.strokeStyle = 'rgba(147, 197, 253, 0.5)';
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(186, 230, 253, 0.85)';
+        ctx.lineWidth = k === 'heavyRain' || k === 'thunderstorm' ? 1.5 : 1;
         for (const d of rain) {
           if (!reduced) {
             d.y += d.vy * dt;
             d.x += d.vx * dt;
           }
-          if (d.y > H) {
+          if (d.y > H - 4) {
+            // Splash
+            if (Math.random() < 0.3) splashes.push({ x: d.x, y: H - 6, r: 1, a: 0.6 });
             d.y = -20;
             d.x = Math.random() * (W + 200) - 100;
           }
@@ -291,16 +349,36 @@ export default function WeatherBackground({ condition, windMph }: Props) {
           ctx.stroke();
         }
         ctx.globalAlpha = 1;
+
+        // Splashes
+        ctx.strokeStyle = 'rgba(186, 230, 253, 0.7)';
+        ctx.lineWidth = 1;
+        for (let i = splashes.length - 1; i >= 0; i--) {
+          const s = splashes[i];
+          if (!reduced) {
+            s.r += dt * 60;
+            s.a -= dt * 1.8;
+          }
+          if (s.a <= 0) {
+            splashes.splice(i, 1);
+            continue;
+          }
+          ctx.globalAlpha = s.a;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, s.r, 0, Math.PI);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
       }
 
-      // Snow
+      // Snow (visible six-point flakes for the bigger ones)
       if (flakes.length) {
         ctx.fillStyle = '#f8fafc';
         for (const f of flakes) {
           if (!reduced) {
-            f.phase += dt * 0.8;
+            f.phase += dt * 0.9;
             f.y += f.vy * dt;
-            f.x += Math.sin(f.phase) * 15 * dt + windFactor * 4 * dt;
+            f.x += Math.sin(f.phase) * 18 * dt + windFactor * 6 * dt;
           }
           if (f.y > H) {
             f.y = -10;
@@ -309,39 +387,102 @@ export default function WeatherBackground({ condition, windMph }: Props) {
           if (f.x > W + 10) f.x = -10;
           if (f.x < -10) f.x = W + 10;
           ctx.globalAlpha = f.a;
-          ctx.beginPath();
-          ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
-          ctx.fill();
+          if (f.size > 2.5) {
+            // Six-point star
+            ctx.save();
+            ctx.translate(f.x, f.y);
+            ctx.strokeStyle = '#f8fafc';
+            ctx.lineWidth = 0.8;
+            for (let i = 0; i < 3; i++) {
+              ctx.rotate(Math.PI / 3);
+              ctx.beginPath();
+              ctx.moveTo(-f.size, 0);
+              ctx.lineTo(f.size, 0);
+              ctx.stroke();
+            }
+            ctx.restore();
+          } else {
+            ctx.beginPath();
+            ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
         ctx.globalAlpha = 1;
       }
 
       // Wind streaks
-      for (const s of windyStreaks) {
+      for (const s of streaks) {
         if (!reduced) s.x += s.vx * dt;
-        if (s.x > W + 60) {
-          s.x = -60;
+        if (s.x > W + 100) {
+          s.x = -100;
           s.y = Math.random() * H;
         }
         ctx.strokeStyle = `rgba(203, 213, 225, ${s.a})`;
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(s.x, s.y);
         ctx.lineTo(s.x - s.len, s.y);
         ctx.stroke();
       }
 
-      // Lightning flashes (thunderstorm)
+      // Wind-blown leaves
+      for (const lf of leaves) {
+        if (!reduced) {
+          lf.x += lf.vx * dt;
+          lf.y += lf.vy * dt + Math.sin(t / 300 + lf.rot) * 12 * dt;
+          lf.rot += lf.vrot * dt;
+        }
+        if (lf.x > W + 30) {
+          lf.x = -30;
+          lf.y = Math.random() * H;
+        }
+        if (lf.y > H + 20) lf.y = -20;
+        ctx.save();
+        ctx.translate(lf.x, lf.y);
+        ctx.rotate(lf.rot);
+        ctx.globalAlpha = 0.7;
+        ctx.fillStyle = lf.color;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, lf.size, lf.size * 0.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      ctx.globalAlpha = 1;
+
+      // Thunderstorm: occasional flash + lightning bolt
       if (k === 'thunderstorm') {
         if (!reduced && t > nextFlashAt) {
           flashAlpha = 0.5 + Math.random() * 0.4;
-          nextFlashAt = t + 2000 + Math.random() * 8000;
+          nextFlashAt = t + 3000 + Math.random() * 7000;
+          if (t > nextBoltAt) {
+            drawLightningBolt(W * (0.2 + Math.random() * 0.6), H * (0.3 + Math.random() * 0.5));
+            nextBoltAt = t + 4000 + Math.random() * 8000;
+          }
         }
         if (flashAlpha > 0) {
           ctx.fillStyle = `rgba(226, 232, 240, ${flashAlpha})`;
           ctx.fillRect(0, 0, W, H);
           flashAlpha -= dt * 4;
           if (flashAlpha < 0) flashAlpha = 0;
+        }
+        if (bolt) {
+          ctx.globalAlpha = bolt.alpha;
+          ctx.strokeStyle = '#fef9c3';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          for (let i = 0; i < bolt.points.length; i++) {
+            const [x, y] = bolt.points[i];
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+          // Glow
+          ctx.lineWidth = 8;
+          ctx.strokeStyle = `rgba(254, 249, 195, ${bolt.alpha * 0.3})`;
+          ctx.stroke();
+          bolt.alpha -= dt * 3;
+          if (bolt.alpha <= 0) bolt = null;
+          ctx.globalAlpha = 1;
         }
       }
 
@@ -350,8 +491,6 @@ export default function WeatherBackground({ condition, windMph }: Props) {
 
     raf = requestAnimationFrame(frame);
 
-    // Pause when the tab / screen is hidden. On mobile this is the big
-    // battery win — otherwise RAF keeps firing behind a locked screen.
     const onVis = () => {
       paused = document.hidden;
       if (!paused && !reduced && running) {
