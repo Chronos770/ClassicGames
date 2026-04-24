@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   forecastEmoji,
-  getAlerts,
   getForecast,
   getHourlyForecast,
   parseWindSpeed,
-  type NwsAlert,
   type NwsForecast,
   type NwsForecastPeriod,
 } from '../../lib/nwsService';
@@ -15,7 +13,6 @@ import LineChart from './LineChart';
 export default function ForecastSection({ station }: { station: WeatherStation | null }) {
   const [forecast, setForecast] = useState<NwsForecast | null>(null);
   const [hourly, setHourly] = useState<NwsForecast | null>(null);
-  const [alerts, setAlerts] = useState<NwsAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,13 +24,11 @@ export default function ForecastSection({ station }: { station: WeatherStation |
     Promise.all([
       getForecast(station.latitude, station.longitude),
       getHourlyForecast(station.latitude, station.longitude),
-      getAlerts(station.latitude, station.longitude),
     ])
-      .then(([f, h, a]) => {
+      .then(([f, h]) => {
         if (cancelled) return;
         setForecast(f);
         setHourly(h);
-        setAlerts(a);
       })
       .catch((e) => {
         if (cancelled) return;
@@ -65,7 +60,6 @@ export default function ForecastSection({ station }: { station: WeatherStation |
 
   return (
     <div className="space-y-5">
-      {alerts.length > 0 && <AlertsBanner alerts={alerts} />}
       {forecast && <CurrentPeriod period={forecast.properties.periods[0]} />}
       {hourly && <Next24Hours periods={hourly.properties.periods.slice(0, 24)} />}
       {forecast && <DailyGrid periods={forecast.properties.periods} />}
@@ -73,49 +67,6 @@ export default function ForecastSection({ station }: { station: WeatherStation |
         Forecast: National Weather Service (weather.gov)
         {forecast && ` · Updated ${new Date(forecast.properties.updateTime).toLocaleString()}`}
       </div>
-    </div>
-  );
-}
-
-function AlertsBanner({ alerts }: { alerts: NwsAlert[] }) {
-  const severityColor: Record<string, string> = {
-    Extreme: 'bg-red-500/20 border-red-500/40 text-red-200',
-    Severe: 'bg-orange-500/15 border-orange-500/30 text-orange-200',
-    Moderate: 'bg-amber-500/15 border-amber-500/30 text-amber-200',
-    Minor: 'bg-yellow-500/10 border-yellow-500/20 text-yellow-200',
-    Unknown: 'bg-white/10 border-white/20 text-white/80',
-  };
-
-  return (
-    <div className="space-y-2">
-      {alerts.map((a) => (
-        <details
-          key={a.id}
-          className={`rounded-xl border p-3 ${severityColor[a.properties.severity] ?? severityColor.Unknown}`}
-        >
-          <summary className="cursor-pointer flex items-start gap-2 list-none">
-            <span className="text-lg leading-none">&#9888;&#65039;</span>
-            <div className="flex-1">
-              <div className="font-semibold text-sm">
-                {a.properties.event}
-                <span className="text-xs font-normal opacity-75 ml-2">
-                  [{a.properties.severity} / {a.properties.urgency}]
-                </span>
-              </div>
-              <div className="text-xs opacity-80 mt-0.5">{a.properties.headline}</div>
-              <div className="text-[10px] opacity-60 mt-1">{a.properties.areaDesc}</div>
-            </div>
-          </summary>
-          <div className="mt-2 pt-2 border-t border-current/20 text-xs whitespace-pre-wrap opacity-90">
-            {a.properties.description}
-            {a.properties.instruction && (
-              <div className="mt-2 pt-2 border-t border-current/20">
-                <strong>Instruction:</strong> {a.properties.instruction}
-              </div>
-            )}
-          </div>
-        </details>
-      ))}
     </div>
   );
 }

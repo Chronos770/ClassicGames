@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useAuthStore } from '../stores/authStore';
 import { supabase } from '../lib/supabase';
 import {
+  discoverStations,
   getLatestReading,
   getStations,
   timeAgo,
@@ -17,6 +18,10 @@ import HistoryTab from './weather/HistoryTab';
 import RadarTab from './weather/RadarTab';
 import HealthTab from './weather/HealthTab';
 import { WeatherInstallButton, useWeatherManifest } from './weather/WeatherPwa';
+import WeatherAlertsBanner from './weather/WeatherAlertsBanner';
+import PrecipOutlook from './weather/PrecipOutlook';
+import UnitsToggle from './weather/UnitsToggle';
+import { classifyCondition } from '../lib/weatherCondition';
 
 type Tab = 'overview' | 'history' | 'radar' | 'health';
 
@@ -45,6 +50,7 @@ export default function WeatherPage() {
   const [tab, setTab] = useState<Tab>('overview');
   const [ingestBusy, setIngestBusy] = useState(false);
   const [ingestMsg, setIngestMsg] = useState<string | null>(null);
+  const [discoverBusy, setDiscoverBusy] = useState(false);
 
   // lastIngestTick is bumped whenever we receive a realtime event or manual refresh —
   // child tabs listen to this to re-fetch their data.
@@ -145,6 +151,27 @@ export default function WeatherPage() {
     return () => clearInterval(t);
   }, [stationId, loadLatest]);
 
+  const handleDiscover = async () => {
+    if (discoverBusy) return;
+    setDiscoverBusy(true);
+    setIngestMsg(null);
+    try {
+      const res = await discoverStations();
+      const list = await getStations();
+      setStations(list);
+      setIngestMsg(
+        res.new_count > 0
+          ? `Discovered ${res.new_count} new station${res.new_count === 1 ? '' : 's'} (${res.total} total)`
+          : `No new stations (${res.total} known)`,
+      );
+    } catch (e: any) {
+      setIngestMsg(`Discover error: ${String(e?.message ?? e).slice(0, 120)}`);
+    } finally {
+      setDiscoverBusy(false);
+      setTimeout(() => setIngestMsg(null), 5000);
+    }
+  };
+
   const handleRefresh = async () => {
     if (ingestBusy) return;
     setIngestBusy(true);
@@ -170,8 +197,13 @@ export default function WeatherPage() {
 
   if (!isAdmin) return null;
 
+  // Derive page background gradient from current reading's condition.
+  const condition = reading && station ? classifyCondition(reading, station.latitude, station.longitude) : null;
+  const bgClass = condition ? condition.pageBg : 'from-slate-950 via-slate-900 to-slate-950';
+
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8">
+    <div className={`min-h-screen bg-gradient-to-br ${bgClass} transition-all duration-[1500ms]`}>
+      <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
@@ -196,15 +228,10 @@ export default function WeatherPage() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {/* Realtime pill */}
-            <div className="flex items-center gap-1.5 text-[10px] text-white/40 border border-white/10 rounded-full px-2 py-1">
-              <span
-                className={`w-1.5 h-1.5 rounded-full ${realtimeOk ? 'bg-green-400 animate-pulse' : 'bg-white/30'}`}
-              />
-              {realtimeOk ? 'Live' : 'Polling'}
-              {reading && <span className="ml-1 text-white/50">· {timeAgo(reading.observed_at)}</span>}
-            </div>
+            <FreshnessPill reading={reading} realtimeOk={realtimeOk} lastIngestTick={lastIngestTick} />
+            <UnitsToggle />
             {stations.length > 1 && (
               <select
                 value={stationId ?? ''}
@@ -218,6 +245,15 @@ export default function WeatherPage() {
                 ))}
               </select>
             )}
+            <button
+              onClick={handleDiscover}
+              disabled={discoverBusy}
+              title="Pull station list from your WeatherLink account and add any new ones"
+              className="text-sm px-3 py-2 bg-white/5 hover:bg-white/10 text-white/70 rounded-lg transition-colors disabled:opacity-40 flex items-center gap-1.5 border border-white/10"
+            >
+              <span className={discoverBusy ? 'animate-spin inline-block' : 'inline-block'}>&#128225;</span>
+              {discoverBusy ? 'Discovering' : 'Discover'}
+            </button>
             <button
               onClick={handleRefresh}
               disabled={ingestBusy}
@@ -236,6 +272,10 @@ export default function WeatherPage() {
         )}
 
         <WeatherInstallButton />
+
+        {/* Alerts + precip outlook above the tabs so they're visible on every tab */}
+        <WeatherAlertsBanner station={station} tick={lastIngestTick} />
+        <PrecipOutlook station={station} tick={lastIngestTick} />
 
         {/* Tab bar */}
         <div className="flex gap-1 mb-5 overflow-x-auto pb-1">
@@ -264,7 +304,14 @@ export default function WeatherPage() {
           <div className="text-white/40 text-sm py-20 text-center">No stations configured.</div>
         ) : (
           <>
-            {tab === 'overview' && reading && <OverviewTab reading={reading} station={station} />}
+            {tab === 'overview' && reading && (
+              <OverviewTab
+                reading={reading}
+                station={station}
+                stationId={stationId}
+                tick={lastIngestTick}
+              />
+            )}
             {tab === 'history' && <HistoryTab stationId={stationId} lastIngestTick={lastIngestTick} />}
             {tab === 'radar' && <RadarTab station={station} />}
             {tab === 'health' && reading && (
@@ -273,6 +320,52 @@ export default function WeatherPage() {
           </>
         )}
       </motion.div>
+      </div>
+    </div>
+  );
+}
+
+function FreshnessPill({
+  reading,
+  realtimeOk,
+  lastIngestTick,
+}: {
+  reading: WeatherReading | null;
+  realtimeOk: boolean;
+  lastIngestTick: number;
+}) {
+  const [flash, setFlash] = useState(false);
+  const prevTick = useRef(lastIngestTick);
+  useEffect(() => {
+    if (lastIngestTick !== prevTick.current) {
+      prevTick.current = lastIngestTick;
+      setFlash(true);
+      const id = setTimeout(() => setFlash(false), 1200);
+      return () => clearTimeout(id);
+    }
+  }, [lastIngestTick]);
+  return (
+    <div
+      className={`flex items-center gap-1.5 text-[10px] text-white/40 border rounded-full px-2 py-1 transition-colors ${
+        flash ? 'border-green-400/60 bg-green-400/10' : 'border-white/10'
+      }`}
+    >
+      <span className="relative flex w-1.5 h-1.5">
+        {realtimeOk && (
+          <span
+            className={`absolute inline-flex w-full h-full rounded-full bg-green-400 ${
+              flash ? 'animate-ping' : 'animate-pulse'
+            }`}
+          />
+        )}
+        <span
+          className={`relative inline-flex w-1.5 h-1.5 rounded-full ${
+            realtimeOk ? 'bg-green-400' : 'bg-white/30'
+          }`}
+        />
+      </span>
+      {realtimeOk ? 'Live' : 'Polling'}
+      {reading && <span className="ml-1 text-white/50">· {timeAgo(reading.observed_at)}</span>}
     </div>
   );
 }

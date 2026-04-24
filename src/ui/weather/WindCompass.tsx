@@ -1,4 +1,5 @@
 import { compassFromDegrees } from '../../lib/weatherService';
+import { useUnitFormatters } from '../../lib/weatherUnits';
 
 interface Props {
   dirCurrent: number | null;
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export default function WindCompass({ dirCurrent, dirAvg, speed, gust, size = 180 }: Props) {
+  const { fmtWindNum, windUnitLabel, toWind } = useUnitFormatters();
   const cx = size / 2;
   const cy = size / 2;
   const r = size / 2 - 12;
@@ -63,33 +65,44 @@ export default function WindCompass({ dirCurrent, dirAvg, speed, gust, size = 18
         );
       })}
 
-      {/* average wind direction arc (wider, fainter) */}
+      {/* average wind direction arc (wider, fainter) — rotated via group so we
+          can animate the angle smoothly instead of recomputing the polygon. */}
       {dirAvg !== null && dirAvg !== undefined && (() => {
-        const tip = polar(dirAvg, r - 6);
-        const base1 = polar(dirAvg - 12, 14);
-        const base2 = polar(dirAvg + 12, 14);
+        const tip = polar(0, r - 6);
+        const base1 = polar(-12, 14);
+        const base2 = polar(12, 14);
         return (
-          <polygon
-            points={`${tip.x},${tip.y} ${base1.x},${base1.y} ${base2.x},${base2.y}`}
-            fill="rgba(96,165,250,0.35)"
-            stroke="rgba(96,165,250,0.5)"
-            strokeWidth="1"
-          />
+          <g
+            style={{ transformOrigin: `${cx}px ${cy}px`, transition: 'transform 800ms ease-out' }}
+            transform={`rotate(${dirAvg} ${cx} ${cy})`}
+          >
+            <polygon
+              points={`${tip.x},${tip.y} ${base1.x},${base1.y} ${base2.x},${base2.y}`}
+              fill="rgba(96,165,250,0.35)"
+              stroke="rgba(96,165,250,0.5)"
+              strokeWidth="1"
+            />
+          </g>
         );
       })()}
 
-      {/* current wind direction arrow */}
+      {/* current wind direction arrow (animated rotation) */}
       {dirCurrent !== null && dirCurrent !== undefined && (() => {
-        const tip = polar(dirCurrent, r - 6);
-        const base1 = polar(dirCurrent - 6, 20);
-        const base2 = polar(dirCurrent + 6, 20);
+        const tip = polar(0, r - 6);
+        const base1 = polar(-6, 20);
+        const base2 = polar(6, 20);
         return (
-          <polygon
-            points={`${tip.x},${tip.y} ${base1.x},${base1.y} ${base2.x},${base2.y}`}
-            fill="#fbbf24"
-            stroke="#f59e0b"
-            strokeWidth="1"
-          />
+          <g
+            style={{ transformOrigin: `${cx}px ${cy}px`, transition: 'transform 500ms ease-out' }}
+            transform={`rotate(${dirCurrent} ${cx} ${cy})`}
+          >
+            <polygon
+              points={`${tip.x},${tip.y} ${base1.x},${base1.y} ${base2.x},${base2.y}`}
+              fill="#fbbf24"
+              stroke="#f59e0b"
+              strokeWidth="1"
+            />
+          </g>
         );
       })()}
 
@@ -98,14 +111,14 @@ export default function WindCompass({ dirCurrent, dirAvg, speed, gust, size = 18
         {compassFromDegrees(dirCurrent)}
       </text>
       <text x={cx} y={cy + 8} textAnchor="middle" fill="white" fontSize="20" fontWeight="700">
-        {speed === null || speed === undefined ? '--' : speed.toFixed(1)}
+        {fmtWindNum(speed)}
       </text>
       <text x={cx} y={cy + 22} textAnchor="middle" fill="rgba(255,255,255,0.4)" fontSize="9">
-        mph
+        {windUnitLabel}
       </text>
       {gust !== null && gust !== undefined && gust > 0 && (
         <text x={cx} y={cy + 36} textAnchor="middle" fill="rgba(251,191,36,0.8)" fontSize="10">
-          gust {gust.toFixed(0)}
+          gust {(toWind(gust) ?? 0).toFixed(0)}
         </text>
       )}
     </svg>

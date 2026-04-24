@@ -1,0 +1,216 @@
+import type { WeatherReading } from './weatherService';
+import { getSunTimes } from './astronomy';
+
+export type ConditionKey =
+  | 'thunderstorm'
+  | 'heavyRain'
+  | 'rain'
+  | 'drizzle'
+  | 'snow'
+  | 'fog'
+  | 'windy'
+  | 'hot'
+  | 'cold'
+  | 'sunny'
+  | 'clear'
+  | 'partlyCloudy'
+  | 'cloudy'
+  | 'unknown';
+
+export interface Condition {
+  key: ConditionKey;
+  label: string;
+  emoji: string;
+  // Tailwind-ready gradient stops (4 colors: outer tint, mid, accent, transparent endpoint)
+  gradient: { from: string; via: string; to: string };
+  // Ambient background gradient css (for page-level bg)
+  pageBg: string;
+  isDay: boolean;
+}
+
+function gradient(from: string, via: string, to: string) {
+  return { from, via, to };
+}
+
+// Classify current conditions. Uses solar_rad + rain rate + wind +
+// sunrise/sunset as heuristic inputs.
+export function classifyCondition(
+  reading: WeatherReading,
+  lat: number | null,
+  lon: number | null,
+): Condition {
+  const now = new Date(reading.observed_at);
+  let isDay = true;
+  if (lat !== null && lon !== null) {
+    const st = getSunTimes(now, lat, lon);
+    if (st.sunrise && st.sunset) {
+      const t = now.getTime();
+      isDay = t >= st.sunrise.getTime() && t <= st.sunset.getTime();
+    }
+  } else {
+    const h = now.getHours();
+    isDay = h >= 6 && h <= 19;
+  }
+
+  const rate = reading.rain_rate_last_in ?? 0;
+  const rain15 = reading.rainfall_last_15_min_in ?? 0;
+  const rain60 = reading.rainfall_last_60_min_in ?? 0;
+  const wind = reading.wind_speed_avg_last_10_min ?? reading.wind_speed_last ?? 0;
+  const gust = reading.wind_speed_hi_last_10_min ?? 0;
+  const temp = reading.temp ?? 60;
+  const hum = reading.hum ?? 50;
+  const dew = reading.dew_point ?? 0;
+  const solar = reading.solar_rad;
+  const baro = reading.bar_sea_level ?? 30;
+
+  // Thunderstorm heuristic: heavy rain + low pressure + gusty winds.
+  if (rate > 0.5 || (rain15 > 0.15 && baro < 29.8 && gust > 25)) {
+    return {
+      key: 'thunderstorm',
+      label: 'Thunderstorm',
+      emoji: '\u{26C8}\u{FE0F}',
+      gradient: gradient('from-indigo-500/20', 'via-purple-500/10', 'to-transparent'),
+      pageBg: 'from-slate-900 via-indigo-950 to-slate-900',
+      isDay,
+    };
+  }
+
+  if (rate > 0.2 || rain15 > 0.1) {
+    return {
+      key: 'heavyRain',
+      label: 'Heavy Rain',
+      emoji: '\u{1F327}\u{FE0F}',
+      gradient: gradient('from-blue-600/20', 'via-slate-500/10', 'to-transparent'),
+      pageBg: 'from-slate-900 via-blue-950 to-slate-900',
+      isDay,
+    };
+  }
+
+  if (rate > 0.02 || rain60 > 0.05) {
+    return {
+      key: 'rain',
+      label: 'Rain',
+      emoji: '\u{1F327}\u{FE0F}',
+      gradient: gradient('from-blue-500/15', 'via-slate-500/10', 'to-transparent'),
+      pageBg: 'from-slate-900 via-blue-950/80 to-slate-900',
+      isDay,
+    };
+  }
+
+  if (rate > 0 || rain60 > 0.01) {
+    return {
+      key: 'drizzle',
+      label: 'Drizzle',
+      emoji: '\u{1F326}\u{FE0F}',
+      gradient: gradient('from-sky-500/15', 'via-slate-500/5', 'to-transparent'),
+      pageBg: 'from-slate-900 via-sky-950/60 to-slate-900',
+      isDay,
+    };
+  }
+
+  if (temp <= 32 && (rate > 0 || rain15 > 0)) {
+    return {
+      key: 'snow',
+      label: 'Snow',
+      emoji: '\u{2744}\u{FE0F}',
+      gradient: gradient('from-sky-300/15', 'via-slate-300/10', 'to-transparent'),
+      pageBg: 'from-slate-900 via-slate-800 to-slate-900',
+      isDay,
+    };
+  }
+
+  // Fog heuristic: near dew point, high humidity, low wind.
+  if (hum >= 95 && temp - dew <= 2 && wind < 3) {
+    return {
+      key: 'fog',
+      label: 'Fog',
+      emoji: '\u{1F32B}\u{FE0F}',
+      gradient: gradient('from-slate-400/15', 'via-slate-500/5', 'to-transparent'),
+      pageBg: 'from-slate-800 via-slate-700 to-slate-800',
+      isDay,
+    };
+  }
+
+  if (wind >= 20 || gust >= 35) {
+    return {
+      key: 'windy',
+      label: 'Windy',
+      emoji: '\u{1F4A8}',
+      gradient: gradient('from-teal-500/15', 'via-slate-500/5', 'to-transparent'),
+      pageBg: 'from-slate-900 via-teal-950/60 to-slate-900',
+      isDay,
+    };
+  }
+
+  if (isDay && temp >= 90) {
+    return {
+      key: 'hot',
+      label: 'Hot & Clear',
+      emoji: '\u{1F525}',
+      gradient: gradient('from-orange-500/20', 'via-amber-500/10', 'to-transparent'),
+      pageBg: 'from-orange-950 via-amber-950/80 to-slate-900',
+      isDay,
+    };
+  }
+  if (temp <= 20) {
+    return {
+      key: 'cold',
+      label: 'Frigid',
+      emoji: '\u{1F976}',
+      gradient: gradient('from-sky-400/15', 'via-indigo-500/10', 'to-transparent'),
+      pageBg: 'from-slate-900 via-sky-950 to-slate-900',
+      isDay,
+    };
+  }
+
+  // Cloud cover estimate via solar compared to clear-sky max.
+  // Rough clear-sky ceiling as function of time of day (watts/m²).
+  let cloudiness = 0;
+  if (isDay && solar !== null) {
+    const st = lat !== null && lon !== null ? getSunTimes(now, lat, lon) : null;
+    const frac = st?.dayFraction ?? 0.5;
+    const arc = Math.sin(frac * Math.PI); // 0..1..0 across day
+    const ceiling = Math.max(120, 950 * arc);
+    cloudiness = Math.max(0, Math.min(1, 1 - solar / ceiling));
+  }
+
+  if (!isDay) {
+    return {
+      key: 'clear',
+      label: 'Clear Night',
+      emoji: '\u{1F319}',
+      gradient: gradient('from-indigo-600/20', 'via-slate-600/10', 'to-transparent'),
+      pageBg: 'from-slate-950 via-indigo-950 to-slate-950',
+      isDay,
+    };
+  }
+
+  if (cloudiness < 0.2) {
+    return {
+      key: 'sunny',
+      label: 'Sunny',
+      emoji: '\u{2600}\u{FE0F}',
+      gradient: gradient('from-amber-400/20', 'via-sky-400/10', 'to-transparent'),
+      pageBg: 'from-sky-900 via-sky-950 to-slate-900',
+      isDay,
+    };
+  }
+  if (cloudiness < 0.55) {
+    return {
+      key: 'partlyCloudy',
+      label: 'Partly Cloudy',
+      emoji: '\u{26C5}',
+      gradient: gradient('from-sky-400/15', 'via-slate-400/10', 'to-transparent'),
+      pageBg: 'from-slate-800 via-sky-950/60 to-slate-900',
+      isDay,
+    };
+  }
+  return {
+    key: 'cloudy',
+    label: 'Cloudy',
+    emoji: '\u{2601}\u{FE0F}',
+    gradient: gradient('from-slate-400/15', 'via-slate-500/5', 'to-transparent'),
+    pageBg: 'from-slate-800 via-slate-900 to-slate-900',
+    isDay,
+  };
+}

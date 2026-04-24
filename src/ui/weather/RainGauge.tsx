@@ -1,3 +1,5 @@
+import { useUnitFormatters } from '../../lib/weatherUnits';
+
 interface Props {
   dayIn: number | null;
   monthIn: number | null;
@@ -8,19 +10,22 @@ interface Props {
 }
 
 export default function RainGauge({ dayIn, monthIn, yearIn, rateIn, storm, last24hIn }: Props) {
-  // Gauge max scales with actual rainfall (min 1")
-  const gaugeMax = Math.max(1, Math.ceil((dayIn ?? 0) * 2));
-  const pct = Math.min(1, (dayIn ?? 0) / gaugeMax);
+  const { fmtPrecip, fmtPrecipRate, precipUnit, toPrecip } = useUnitFormatters();
+  // Gauge max scales with actual rainfall in the active unit.
+  const dayConv = toPrecip(dayIn) ?? 0;
+  const minMax = precipUnit === 'in' ? 1 : 25;
+  const gaugeMax = Math.max(minMax, Math.ceil(dayConv * 2));
+  const pct = Math.min(1, dayConv / gaugeMax);
   const gaugeH = 180;
   const fillH = gaugeH * pct;
 
   const rows: [string, string][] = [
-    ['Today', dayIn !== null && dayIn !== undefined ? `${dayIn.toFixed(2)}"` : '--'],
-    ['24 hr', last24hIn !== null && last24hIn !== undefined ? `${last24hIn.toFixed(2)}"` : '--'],
-    ['Rate', rateIn !== null && rateIn !== undefined ? `${rateIn.toFixed(2)} "/hr` : '--'],
-    ['Storm', storm !== null && storm !== undefined ? `${storm.toFixed(2)}"` : '--'],
-    ['Month', monthIn !== null && monthIn !== undefined ? `${monthIn.toFixed(2)}"` : '--'],
-    ['Year', yearIn !== null && yearIn !== undefined ? `${yearIn.toFixed(2)}"` : '--'],
+    ['Today', fmtPrecip(dayIn)],
+    ['24 hr', fmtPrecip(last24hIn)],
+    ['Rate', fmtPrecipRate(rateIn)],
+    ['Storm', fmtPrecip(storm)],
+    ['Month', fmtPrecip(monthIn)],
+    ['Year', fmtPrecip(yearIn)],
   ];
 
   return (
@@ -54,6 +59,7 @@ export default function RainGauge({ dayIn, monthIn, yearIn, rateIn, storm, last2
               height={fillH}
               rx={8}
               fill="url(#rainFill)"
+              style={{ transition: 'y 600ms ease, height 600ms ease' }}
             />
           )}
           {/* tick marks */}

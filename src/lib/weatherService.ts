@@ -146,6 +146,23 @@ export async function triggerIngest(): Promise<{ ingested_at: string; results: I
   return data as { ingested_at: string; results: IngestResult[] };
 }
 
+export interface DiscoveredStation extends WeatherStation {
+  new: boolean;
+}
+
+export interface DiscoverResult {
+  discovered_at: string;
+  total: number;
+  new_count: number;
+  stations: DiscoveredStation[];
+}
+
+export async function discoverStations(): Promise<DiscoverResult> {
+  const { data, error } = await supabase.functions.invoke('discover-weather-stations', { body: {} });
+  if (error) throw error;
+  return data as DiscoverResult;
+}
+
 // Helpers for display
 export function fmtTemp(f: number | null, digits = 1): string {
   return f === null || f === undefined ? '--' : `${f.toFixed(digits)}°F`;
