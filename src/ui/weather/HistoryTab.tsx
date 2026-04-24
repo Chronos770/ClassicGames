@@ -3,6 +3,13 @@ import LineChart, { type Series } from './LineChart';
 import StormsList from './StormsList';
 import StatsTable, { StatsSummary } from './StatsTable';
 import { getReadingsRange, type WeatherReading } from '../../lib/weatherService';
+import {
+  convertPrecip,
+  convertPressure,
+  convertTemp,
+  convertWind,
+  useWeatherUnitsStore,
+} from '../../lib/weatherUnits';
 
 type View = 'chart' | 'table' | 'summary';
 
@@ -40,7 +47,10 @@ const METRICS: { id: Metric; label: string; group: string }[] = [
 // otherwise be far too many rows for an inline SVG chart.
 const MAX_POINTS = 2000;
 
-// Downsample by averaging buckets of N consecutive rows.
+// Downsample by bucketing consecutive rows. Most metrics are averaged, but
+// cumulative-counter fields (which reset at day/month/year boundaries) are
+// *sampled* — we take the last value in the bucket so the chart preserves the
+// step-up/reset pattern instead of smearing it into a meaningless mean.
 function downsample(rows: WeatherReading[], maxPoints: number): WeatherReading[] {
   if (rows.length <= maxPoints) return rows;
   const bucketSize = Math.ceil(rows.length / maxPoints);
@@ -50,6 +60,13 @@ function downsample(rows: WeatherReading[], maxPoints: number): WeatherReading[]
     const avg = (k: keyof WeatherReading): number | null => {
       const vals = slice.map((r) => r[k]).filter((v) => typeof v === 'number') as number[];
       return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+    };
+    const last = (k: keyof WeatherReading): number | null => {
+      for (let j = slice.length - 1; j >= 0; j--) {
+        const v = slice[j][k];
+        if (typeof v === 'number' && Number.isFinite(v)) return v;
+      }
+      return null;
     };
     const mid = slice[Math.floor(slice.length / 2)];
     out.push({
@@ -66,9 +83,10 @@ function downsample(rows: WeatherReading[], maxPoints: number): WeatherReading[]
       wind_speed_avg_last_10_min: avg('wind_speed_avg_last_10_min'),
       wind_speed_hi_last_10_min: avg('wind_speed_hi_last_10_min'),
       rain_rate_last_in: avg('rain_rate_last_in'),
-      rainfall_day_in: avg('rainfall_day_in'),
-      rainfall_month_in: avg('rainfall_month_in'),
-      rainfall_year_in: avg('rainfall_year_in'),
+      // Cumulative counters — sample rather than average.
+      rainfall_day_in: last('rainfall_day_in'),
+      rainfall_month_in: last('rainfall_month_in'),
+      rainfall_year_in: last('rainfall_year_in'),
       bar_sea_level: avg('bar_sea_level'),
       bar_absolute: avg('bar_absolute'),
       solar_rad: avg('solar_rad'),
@@ -76,7 +94,7 @@ function downsample(rows: WeatherReading[], maxPoints: number): WeatherReading[]
       temp_in: avg('temp_in'),
       hum_in: avg('hum_in'),
       rssi_last: avg('rssi_last'),
-      reception_day: avg('reception_day'),
+      reception_day: last('reception_day'),
       trans_battery_volt: avg('trans_battery_volt'),
       battery_percent: avg('battery_percent'),
     });
@@ -126,18 +144,30 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
       .finally(() => setLoading(false));
   }, [stationId, preset, customStart, customEnd, lastIngestTick]);
 
+  const tempU = useWeatherUnitsStore((s) => s.temp);
+  const windU = useWeatherUnitsStore((s) => s.wind);
+  const pressU = useWeatherUnitsStore((s) => s.pressure);
+  const precU = useWeatherUnitsStore((s) => s.precip);
+  const windLabel = windU === 'ms' ? ' m/s' : ` ${windU}`;
+  const precLabel = precU === 'in' ? '"' : ' mm';
+  const rateLabel = precU === 'in' ? '"/hr' : ' mm/hr';
+
   const { series, yUnit, yDomain } = useMemo(() => {
     const t = (r: WeatherReading) => new Date(r.observed_at).getTime();
+    const tC = (v: number | null) => convertTemp(v, tempU);
+    const wC = (v: number | null) => convertWind(v, windU);
+    const pC = (v: number | null) => convertPressure(v, pressU);
+    const rC = (v: number | null) => convertPrecip(v, precU);
     switch (metric) {
       case 'temp':
         return {
           series: [
-            { label: 'Outdoor', color: '#fbbf24', points: readings.map((r) => ({ t: t(r), v: r.temp })) },
-            { label: 'Dew Point', color: '#60a5fa', points: readings.map((r) => ({ t: t(r), v: r.dew_point })) },
-            { label: 'Feels Like', color: '#f472b6', points: readings.map((r) => ({ t: t(r), v: r.thw_index ?? r.heat_index ?? r.wind_chill })) },
-            { label: 'Indoor', color: '#a78bfa', points: readings.map((r) => ({ t: t(r), v: r.temp_in })) },
+            { label: 'Outdoor', color: '#fbbf24', points: readings.map((r) => ({ t: t(r), v: tC(r.temp) })) },
+            { label: 'Dew Point', color: '#60a5fa', points: readings.map((r) => ({ t: t(r), v: tC(r.dew_point) })) },
+            { label: 'Feels Like', color: '#f472b6', points: readings.map((r) => ({ t: t(r), v: tC(r.thw_index ?? r.heat_index ?? r.wind_chill) })) },
+            { label: 'Indoor', color: '#a78bfa', points: readings.map((r) => ({ t: t(r), v: tC(r.temp_in) })) },
           ] as Series[],
-          yUnit: '°F',
+          yUnit: `°${tempU}`,
           yDomain: undefined,
         };
       case 'hum':
@@ -152,53 +182,50 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
       case 'wind':
         return {
           series: [
-            { label: 'Avg (10m)', color: '#60a5fa', points: readings.map((r) => ({ t: t(r), v: r.wind_speed_avg_last_10_min })) },
-            { label: 'Gust (10m)', color: '#f87171', points: readings.map((r) => ({ t: t(r), v: r.wind_speed_hi_last_10_min })) },
-            { label: 'Current', color: '#fbbf24', points: readings.map((r) => ({ t: t(r), v: r.wind_speed_last })) },
+            { label: 'Avg (10m)', color: '#60a5fa', points: readings.map((r) => ({ t: t(r), v: wC(r.wind_speed_avg_last_10_min) })) },
+            { label: 'Gust (10m)', color: '#f87171', points: readings.map((r) => ({ t: t(r), v: wC(r.wind_speed_hi_last_10_min) })) },
+            { label: 'Current', color: '#fbbf24', points: readings.map((r) => ({ t: t(r), v: wC(r.wind_speed_last) })) },
           ] as Series[],
-          yUnit: ' mph',
+          yUnit: windLabel,
           yDomain: undefined,
         };
       case 'rain':
         return {
           series: [
             {
-              label: 'Rate ("/hr)',
+              label: `Rate (${rateLabel})`,
               color: '#60a5fa',
-              // Historical rows only have rain_rate_hi_in (per-period peak);
-              // current-ingest rows have both rain_rate_last_in and the hi
-              // variant — fall through to whichever is available.
               points: readings.map((r) => ({
                 t: t(r),
-                v: r.rain_rate_last_in ?? r.rain_rate_hi_in,
+                v: rC(r.rain_rate_last_in ?? r.rain_rate_hi_in),
               })),
             },
             {
               label: 'Period Rainfall',
               color: '#3b82f6',
-              points: readings.map((r) => ({ t: t(r), v: r.rainfall_last_15_min_in })),
+              points: readings.map((r) => ({ t: t(r), v: rC(r.rainfall_last_15_min_in) })),
             },
           ] as Series[],
-          yUnit: '"',
+          yUnit: precLabel,
           yDomain: undefined,
         };
       case 'rainTotals':
         return {
           series: [
-            { label: 'Day Total', color: '#3b82f6', points: readings.map((r) => ({ t: t(r), v: r.rainfall_day_in })) },
-            { label: 'Month Total', color: '#60a5fa', points: readings.map((r) => ({ t: t(r), v: r.rainfall_month_in })) },
-            { label: 'Year Total', color: '#93c5fd', points: readings.map((r) => ({ t: t(r), v: r.rainfall_year_in })) },
+            { label: 'Day Total', color: '#3b82f6', points: readings.map((r) => ({ t: t(r), v: rC(r.rainfall_day_in) })) },
+            { label: 'Month Total', color: '#60a5fa', points: readings.map((r) => ({ t: t(r), v: rC(r.rainfall_month_in) })) },
+            { label: 'Year Total', color: '#93c5fd', points: readings.map((r) => ({ t: t(r), v: rC(r.rainfall_year_in) })) },
           ] as Series[],
-          yUnit: '"',
+          yUnit: precLabel,
           yDomain: undefined,
         };
       case 'bar':
         return {
           series: [
-            { label: 'Sea Level', color: '#c084fc', points: readings.map((r) => ({ t: t(r), v: r.bar_sea_level })) },
-            { label: 'Absolute', color: '#a78bfa', points: readings.map((r) => ({ t: t(r), v: r.bar_absolute })) },
+            { label: 'Sea Level', color: '#c084fc', points: readings.map((r) => ({ t: t(r), v: pC(r.bar_sea_level) })) },
+            { label: 'Absolute', color: '#a78bfa', points: readings.map((r) => ({ t: t(r), v: pC(r.bar_absolute) })) },
           ] as Series[],
-          yUnit: '',
+          yUnit: ` ${pressU}`,
           yDomain: undefined,
         };
       case 'solar':
@@ -213,17 +240,17 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
       case 'dewpoint':
         return {
           series: [
-            { label: 'Dew Point', color: '#60a5fa', points: readings.map((r) => ({ t: t(r), v: r.dew_point })) },
-            { label: 'Wet Bulb', color: '#34d399', points: readings.map((r) => ({ t: t(r), v: r.wet_bulb })) },
+            { label: 'Dew Point', color: '#60a5fa', points: readings.map((r) => ({ t: t(r), v: tC(r.dew_point) })) },
+            { label: 'Wet Bulb', color: '#34d399', points: readings.map((r) => ({ t: t(r), v: tC(r.wet_bulb) })) },
           ] as Series[],
-          yUnit: '°F',
+          yUnit: `°${tempU}`,
           yDomain: undefined,
         };
       case 'indoor':
         return {
           series: [
-            { label: 'Temp Out', color: '#fbbf24', points: readings.map((r) => ({ t: t(r), v: r.temp })) },
-            { label: 'Temp In', color: '#f472b6', points: readings.map((r) => ({ t: t(r), v: r.temp_in })) },
+            { label: 'Temp Out', color: '#fbbf24', points: readings.map((r) => ({ t: t(r), v: tC(r.temp) })) },
+            { label: 'Temp In', color: '#f472b6', points: readings.map((r) => ({ t: t(r), v: tC(r.temp_in) })) },
             { label: 'Hum Out', color: '#34d399', points: readings.map((r) => ({ t: t(r), v: r.hum })) },
             { label: 'Hum In', color: '#a78bfa', points: readings.map((r) => ({ t: t(r), v: r.hum_in })) },
           ] as Series[],
@@ -252,7 +279,7 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
       default:
         return { series: [] as Series[], yUnit: '', yDomain: undefined };
     }
-  }, [readings, metric]);
+  }, [readings, metric, tempU, windU, pressU, precU, windLabel, precLabel, rateLabel]);
 
   const grouped = useMemo(() => {
     const byGroup: Record<string, typeof METRICS> = {};

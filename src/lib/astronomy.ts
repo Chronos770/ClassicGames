@@ -72,8 +72,6 @@ export function getSunTimes(date: Date, lat: number, lon: number): SunTimes {
   const ds = approxTransit(0, lw, n);
   const M = solarMeanAnomaly(ds);
   const L = eclipticLongitude(M);
-  const dec = Math.asin(Math.sin(DEG * -0.833) * 0); // placeholder, overwritten
-  void dec;
 
   const c = sunCoords(ds);
   const Jnoon = solarTransitJ(ds, M, L);

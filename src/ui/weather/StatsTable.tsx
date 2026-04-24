@@ -1,5 +1,12 @@
 import { useMemo, useState } from 'react';
 import { compassFromDegrees, type WeatherReading } from '../../lib/weatherService';
+import {
+  convertPrecip,
+  convertPressure,
+  convertTemp,
+  convertWind,
+  useWeatherUnitsStore,
+} from '../../lib/weatherUnits';
 
 interface Column {
   id: string;
@@ -10,25 +17,39 @@ interface Column {
   fmt?: (v: number) => string;
 }
 
-const ALL_COLUMNS: Column[] = [
-  { id: 'observed_at', label: 'Time', width: '160px', get: (r) => r.observed_at },
-  { id: 'temp', label: 'Temp', unit: '°F', get: (r) => r.temp, fmt: (v) => v.toFixed(1) },
-  { id: 'hum', label: 'Hum', unit: '%', get: (r) => r.hum, fmt: (v) => v.toFixed(1) },
-  { id: 'dew_point', label: 'Dew Pt', unit: '°F', get: (r) => r.dew_point, fmt: (v) => v.toFixed(1) },
-  { id: 'wind_speed_avg_last_10_min', label: 'Wind Avg', unit: 'mph', get: (r) => r.wind_speed_avg_last_10_min, fmt: (v) => v.toFixed(1) },
-  { id: 'wind_speed_hi_last_10_min', label: 'Gust', unit: 'mph', get: (r) => r.wind_speed_hi_last_10_min, fmt: (v) => v.toFixed(1) },
-  { id: 'wind_dir_last', label: 'Wind Dir', get: (r) => r.wind_dir_last, fmt: (v) => `${compassFromDegrees(v)} ${Math.round(v)}°` },
-  { id: 'rain_rate_hi_in', label: 'Rain Rate', unit: '"/hr', get: (r) => r.rain_rate_hi_in ?? r.rain_rate_last_in, fmt: (v) => v.toFixed(2) },
-  { id: 'rainfall_last_15_min_in', label: 'Rain (15m)', unit: '"', get: (r) => r.rainfall_last_15_min_in, fmt: (v) => v.toFixed(2) },
-  { id: 'rainfall_day_in', label: 'Rain Today', unit: '"', get: (r) => r.rainfall_day_in, fmt: (v) => v.toFixed(2) },
-  { id: 'bar_sea_level', label: 'Pressure', unit: 'inHg', get: (r) => r.bar_sea_level, fmt: (v) => v.toFixed(3) },
-  { id: 'solar_rad', label: 'Solar', unit: 'W/m²', get: (r) => r.solar_rad, fmt: (v) => v.toFixed(0) },
-  { id: 'uv_index', label: 'UV', get: (r) => r.uv_index, fmt: (v) => v.toFixed(1) },
-  { id: 'temp_in', label: 'Indoor T', unit: '°F', get: (r) => r.temp_in, fmt: (v) => v.toFixed(1) },
-  { id: 'hum_in', label: 'Indoor H', unit: '%', get: (r) => r.hum_in, fmt: (v) => v.toFixed(1) },
-  { id: 'rssi_last', label: 'RSSI', unit: 'dBm', get: (r) => r.rssi_last, fmt: (v) => v.toFixed(0) },
-  { id: 'reception_day', label: 'Recept', unit: '%', get: (r) => r.reception_day, fmt: (v) => v.toFixed(0) },
-];
+function buildColumns(
+  tempU: 'F' | 'C',
+  windU: 'mph' | 'kph' | 'kt' | 'ms',
+  pressU: 'inHg' | 'hPa' | 'mb',
+  precU: 'in' | 'mm',
+): Column[] {
+  const tU = `°${tempU}`;
+  const wU = windU === 'ms' ? 'm/s' : windU;
+  const pU = pressU;
+  const rU = precU === 'in' ? '"' : 'mm';
+  const rateU = precU === 'in' ? '"/hr' : 'mm/hr';
+  const pDig = pressU === 'inHg' ? 3 : 1;
+  const rDig = precU === 'in' ? 2 : 1;
+  return [
+    { id: 'observed_at', label: 'Time', width: '160px', get: (r) => r.observed_at },
+    { id: 'temp', label: 'Temp', unit: tU, get: (r) => convertTemp(r.temp, tempU), fmt: (v) => v.toFixed(1) },
+    { id: 'hum', label: 'Hum', unit: '%', get: (r) => r.hum, fmt: (v) => v.toFixed(1) },
+    { id: 'dew_point', label: 'Dew Pt', unit: tU, get: (r) => convertTemp(r.dew_point, tempU), fmt: (v) => v.toFixed(1) },
+    { id: 'wind_speed_avg_last_10_min', label: 'Wind Avg', unit: wU, get: (r) => convertWind(r.wind_speed_avg_last_10_min, windU), fmt: (v) => v.toFixed(1) },
+    { id: 'wind_speed_hi_last_10_min', label: 'Gust', unit: wU, get: (r) => convertWind(r.wind_speed_hi_last_10_min, windU), fmt: (v) => v.toFixed(1) },
+    { id: 'wind_dir_last', label: 'Wind Dir', get: (r) => r.wind_dir_last, fmt: (v) => `${compassFromDegrees(v)} ${Math.round(v)}°` },
+    { id: 'rain_rate_hi_in', label: 'Rain Rate', unit: rateU, get: (r) => convertPrecip(r.rain_rate_hi_in ?? r.rain_rate_last_in, precU), fmt: (v) => v.toFixed(rDig) },
+    { id: 'rainfall_last_15_min_in', label: 'Rain (15m)', unit: rU, get: (r) => convertPrecip(r.rainfall_last_15_min_in, precU), fmt: (v) => v.toFixed(rDig) },
+    { id: 'rainfall_day_in', label: 'Rain Today', unit: rU, get: (r) => convertPrecip(r.rainfall_day_in, precU), fmt: (v) => v.toFixed(rDig) },
+    { id: 'bar_sea_level', label: 'Pressure', unit: pU, get: (r) => convertPressure(r.bar_sea_level, pressU), fmt: (v) => v.toFixed(pDig) },
+    { id: 'solar_rad', label: 'Solar', unit: 'W/m²', get: (r) => r.solar_rad, fmt: (v) => v.toFixed(0) },
+    { id: 'uv_index', label: 'UV', get: (r) => r.uv_index, fmt: (v) => v.toFixed(1) },
+    { id: 'temp_in', label: 'Indoor T', unit: tU, get: (r) => convertTemp(r.temp_in, tempU), fmt: (v) => v.toFixed(1) },
+    { id: 'hum_in', label: 'Indoor H', unit: '%', get: (r) => r.hum_in, fmt: (v) => v.toFixed(1) },
+    { id: 'rssi_last', label: 'RSSI', unit: 'dBm', get: (r) => r.rssi_last, fmt: (v) => v.toFixed(0) },
+    { id: 'reception_day', label: 'Recept', unit: '%', get: (r) => r.reception_day, fmt: (v) => v.toFixed(0) },
+  ];
+}
 
 const DEFAULT_COLUMNS = ['observed_at', 'temp', 'hum', 'dew_point', 'wind_speed_avg_last_10_min', 'wind_speed_hi_last_10_min', 'wind_dir_last', 'rainfall_last_15_min_in', 'bar_sea_level'];
 
@@ -41,6 +62,12 @@ export default function StatsTable({ readings }: { readings: WeatherReading[] })
   const [columnPickerOpen, setColumnPickerOpen] = useState(false);
   const [pageSize, setPageSize] = useState<number>(50);
   const [page, setPage] = useState(0);
+
+  const tempU = useWeatherUnitsStore((s) => s.temp);
+  const windU = useWeatherUnitsStore((s) => s.wind);
+  const pressU = useWeatherUnitsStore((s) => s.pressure);
+  const precU = useWeatherUnitsStore((s) => s.precip);
+  const ALL_COLUMNS = useMemo(() => buildColumns(tempU, windU, pressU, precU), [tempU, windU, pressU, precU]);
 
   const sorted = useMemo(() => {
     const col = ALL_COLUMNS.find((c) => c.id === sortCol);
@@ -60,7 +87,7 @@ export default function StatsTable({ readings }: { readings: WeatherReading[] })
       return sortDir === 'asc' ? as.localeCompare(bs) : bs.localeCompare(as);
     });
     return arr;
-  }, [readings, sortCol, sortDir]);
+  }, [readings, sortCol, sortDir, ALL_COLUMNS]);
 
   const paged = useMemo(() => {
     if (pageSize >= sorted.length) return sorted;
@@ -280,46 +307,68 @@ interface StatRow {
 }
 
 export function StatsSummary({ readings }: { readings: WeatherReading[] }) {
+  const tempU = useWeatherUnitsStore((s) => s.temp);
+  const windU = useWeatherUnitsStore((s) => s.wind);
+  const pressU = useWeatherUnitsStore((s) => s.pressure);
+  const precU = useWeatherUnitsStore((s) => s.precip);
+  const windLabel = windU === 'ms' ? 'm/s' : windU;
+  const precLabel = precU === 'in' ? '"' : 'mm';
+
   const stats = useMemo(() => {
-    const collect = (label: string, unit: string, get: (r: WeatherReading) => number | null): StatRow => ({
+    const collect = (
+      label: string,
+      unit: string,
+      get: (r: WeatherReading) => number | null,
+    ): StatRow => ({
       label,
       unit,
-      values: readings.map(get).filter((v): v is number => v !== null && Number.isFinite(v)),
+      values: readings
+        .map(get)
+        .filter((v): v is number => v !== null && Number.isFinite(v)),
     });
 
     return [
-      collect('Temperature', '°F', (r) => r.temp),
+      collect('Temperature', `°${tempU}`, (r) => convertTemp(r.temp, tempU)),
       collect('Humidity', '%', (r) => r.hum),
-      collect('Dew Point', '°F', (r) => r.dew_point),
-      collect('Wind Avg', 'mph', (r) => r.wind_speed_avg_last_10_min),
-      collect('Wind Gust', 'mph', (r) => r.wind_speed_hi_last_10_min),
-      collect('Pressure', 'inHg', (r) => r.bar_sea_level),
+      collect('Dew Point', `°${tempU}`, (r) => convertTemp(r.dew_point, tempU)),
+      collect('Wind Avg', windLabel, (r) => convertWind(r.wind_speed_avg_last_10_min, windU)),
+      collect('Wind Gust', windLabel, (r) => convertWind(r.wind_speed_hi_last_10_min, windU)),
+      collect('Pressure', pressU, (r) => convertPressure(r.bar_sea_level, pressU)),
       collect('Solar', 'W/m²', (r) => r.solar_rad),
       collect('UV Index', '', (r) => r.uv_index),
-      collect('Indoor Temp', '°F', (r) => r.temp_in),
+      collect('Indoor Temp', `°${tempU}`, (r) => convertTemp(r.temp_in, tempU)),
       collect('Indoor Hum', '%', (r) => r.hum_in),
     ].filter((s) => s.values.length > 0);
-  }, [readings]);
+  }, [readings, tempU, windU, pressU, windLabel]);
 
   const totalRain = useMemo(() => {
-    // `rainfall_last_15_min_in` is a rolling window reported on every reading,
-    // so summing it across samples double-counts overlapping windows. The
-    // console instead tracks `rainfall_day_in` as a cumulative counter that
-    // resets at midnight, so for each calendar day take the max observed and
-    // sum those daily totals.
-    const byDay = new Map<string, number>();
-    for (const r of readings) {
-      const v = r.rainfall_day_in;
-      if (v === null || v === undefined || !Number.isFinite(v)) continue;
-      const d = new Date(r.observed_at);
-      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-      const cur = byDay.get(key) ?? 0;
-      if (v > cur) byDay.set(key, v);
-    }
+    // Compute the window's rainfall by differencing consecutive samples of the
+    // console's own cumulative `rainfall_year_in` counter — this matches the
+    // console's year-total exactly. Year rollovers (Dec 31 → Jan 1) reset the
+    // counter to 0; we detect that by seeing the value drop and start a new
+    // segment. Missed ingest windows naturally self-correct at the next
+    // reading because we always diff against the previous sample.
+    const sorted = [...readings].sort(
+      (a, b) => new Date(a.observed_at).getTime() - new Date(b.observed_at).getTime(),
+    );
     let total = 0;
-    for (const v of byDay.values()) total += v;
-    return { total, days: byDay.size };
-  }, [readings]);
+    let prev: number | null = null;
+    const seenDays = new Set<string>();
+    for (const r of sorted) {
+      const v = r.rainfall_year_in;
+      if (v !== null && Number.isFinite(v)) {
+        if (prev !== null) {
+          if (v >= prev) total += v - prev;
+          else total += v; // year rollover — accept post-reset amount as lower bound
+        }
+        prev = v;
+      }
+      const d = new Date(r.observed_at);
+      seenDays.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`);
+    }
+    const converted = convertPrecip(total, precU) ?? 0;
+    return { total: converted, days: seenDays.size };
+  }, [readings, precU]);
 
   if (readings.length === 0) return null;
 
@@ -359,7 +408,7 @@ export function StatsSummary({ readings }: { readings: WeatherReading[] }) {
               );
             })}
             <tr className="border-b border-white/5 bg-blue-500/5">
-              <td className="px-3 py-1.5 text-white/80">Total Rainfall <span className="text-white/30">(in)</span></td>
+              <td className="px-3 py-1.5 text-white/80">Total Rainfall <span className="text-white/30">({precLabel})</span></td>
               <td className="px-3 py-1.5 text-right text-white/30">—</td>
               <td className="px-3 py-1.5 text-right text-white/30">—</td>
               <td className="px-3 py-1.5 text-right text-white/30">—</td>
