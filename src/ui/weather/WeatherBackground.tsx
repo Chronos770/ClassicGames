@@ -20,16 +20,23 @@ export default function WeatherBackground({ condition, windMph }: Props) {
     if (!ctx) return;
 
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    const isMobile = window.matchMedia?.('(max-width: 640px)').matches ?? false;
+    // On mobile, cap DPR at 1.5x — full 3x on a 6.5" phone is 100M+ pixels
+    // to blit every frame, which will tank mid-range devices.
+    const dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2);
+    const densityScale = isMobile ? 0.45 : 1;
 
     let raf = 0;
     let running = true;
+    let paused = document.hidden;
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Sized to the *viewport*, not the scrollable page. The canvas is
+    // position:fixed so it follows the viewport as the user scrolls —
+    // otherwise on a long weather page we'd be redrawing thousands of
+    // off-screen particles every frame.
     const resize = () => {
-      const parent = canvas.parentElement;
-      if (!parent) return;
-      const w = parent.clientWidth;
-      const h = parent.clientHeight;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
       canvas.width = w * dpr;
       canvas.height = h * dpr;
       canvas.style.width = `${w}px`;
@@ -37,8 +44,8 @@ export default function WeatherBackground({ condition, windMph }: Props) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     resize();
-    const ro = new ResizeObserver(resize);
-    if (canvas.parentElement) ro.observe(canvas.parentElement);
+    window.addEventListener('resize', resize);
+    window.addEventListener('orientationchange', resize);
 
     // --- State depending on condition ---
     const w = () => canvas.clientWidth;
@@ -71,7 +78,8 @@ export default function WeatherBackground({ condition, windMph }: Props) {
       rain.length = flakes.length = stars.length = clouds.length = rays.length = mist.length = 0;
 
       if (k === 'rain' || k === 'heavyRain' || k === 'drizzle' || k === 'thunderstorm') {
-        const density = k === 'drizzle' ? 90 : k === 'rain' ? 180 : 360;
+        const base = k === 'drizzle' ? 90 : k === 'rain' ? 180 : 360;
+        const density = Math.round(base * densityScale);
         for (let i = 0; i < density; i++) {
           rain.push({
             x: Math.random() * W,
@@ -84,7 +92,7 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         }
       }
       if (k === 'snow') {
-        for (let i = 0; i < 120; i++) {
+        for (let i = 0; i < Math.round(120 * densityScale); i++) {
           flakes.push({
             x: Math.random() * W,
             y: Math.random() * H,
@@ -96,7 +104,7 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         }
       }
       if (k === 'clear' || (!condition.isDay && k !== 'thunderstorm')) {
-        for (let i = 0; i < 140; i++) {
+        for (let i = 0; i < Math.round(140 * densityScale); i++) {
           stars.push({
             x: Math.random() * W,
             y: Math.random() * H * 0.8,
@@ -139,7 +147,7 @@ export default function WeatherBackground({ condition, windMph }: Props) {
 
     const windyStreaks: { x: number; y: number; vx: number; len: number; a: number }[] = [];
     if (k === 'windy') {
-      for (let i = 0; i < 50; i++) {
+      for (let i = 0; i < Math.round(50 * densityScale); i++) {
         windyStreaks.push({
           x: Math.random() * w(),
           y: Math.random() * h(),
@@ -169,7 +177,7 @@ export default function WeatherBackground({ condition, windMph }: Props) {
     };
 
     const frame = (t: number) => {
-      if (!running) return;
+      if (!running || paused) return;
       const dt = Math.min(0.05, (t - prev) / 1000);
       prev = t;
       const W = w();
@@ -342,17 +350,31 @@ export default function WeatherBackground({ condition, windMph }: Props) {
 
     raf = requestAnimationFrame(frame);
 
+    // Pause when the tab / screen is hidden. On mobile this is the big
+    // battery win — otherwise RAF keeps firing behind a locked screen.
+    const onVis = () => {
+      paused = document.hidden;
+      if (!paused && !reduced && running) {
+        prev = performance.now();
+        raf = requestAnimationFrame(frame);
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+
     return () => {
       running = false;
       cancelAnimationFrame(raf);
-      ro.disconnect();
+      window.removeEventListener('resize', resize);
+      window.removeEventListener('orientationchange', resize);
+      document.removeEventListener('visibilitychange', onVis);
     };
   }, [condition.key, condition.isDay, windMph]);
 
   return (
     <canvas
       ref={canvasRef}
-      className="absolute inset-0 w-full h-full pointer-events-none"
+      className="fixed inset-0 pointer-events-none z-0"
+      style={{ width: '100vw', height: '100vh' }}
       aria-hidden
     />
   );
