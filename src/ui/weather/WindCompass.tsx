@@ -77,46 +77,39 @@ export default function WindCompass({ dirCurrent, dirAvg, speed, gust, size = 18
         );
       })}
 
-      {/* Average wind direction — wider, faint blue wedge. Tip stops inside
-          the ring so the cardinal labels stay clean. */}
+      {/* Average wind direction — wider, faint blue wedge. Vertices are
+          computed already-rotated rather than relying on the SVG transform
+          attribute. Mixing SVG `transform="rotate(angle cx cy)"` with CSS
+          `transform-origin` + `transition: transform` renders inconsistently
+          on Android Chrome (the polygon ends up in the lower-left of the
+          compass instead of pointing in the wind direction). Direct vertex
+          math is bulletproof at the cost of losing the smooth tween. */}
       {dirAvg !== null && dirAvg !== undefined && (() => {
-        const tipR = r - 6;
-        const tip = polar(0, tipR);
-        const base1 = polar(-10, 12);
-        const base2 = polar(10, 12);
+        const tip = polar(dirAvg, r - 6);
+        const base1 = polar(dirAvg - 10, 12);
+        const base2 = polar(dirAvg + 10, 12);
         return (
-          <g
-            style={{ transformOrigin: `${cx}px ${cy}px`, transition: 'transform 800ms ease-out' }}
-            transform={`rotate(${dirAvg} ${cx} ${cy})`}
-          >
-            <polygon
-              points={`${tip.x},${tip.y} ${base1.x},${base1.y} ${base2.x},${base2.y}`}
-              fill="rgba(96,165,250,0.35)"
-              stroke="rgba(96,165,250,0.5)"
-              strokeWidth="1"
-            />
-          </g>
+          <polygon
+            points={`${tip.x},${tip.y} ${base1.x},${base1.y} ${base2.x},${base2.y}`}
+            fill="rgba(96,165,250,0.35)"
+            stroke="rgba(96,165,250,0.5)"
+            strokeWidth="1"
+          />
         );
       })()}
 
       {/* Current wind direction — sharper amber arrow, slightly shorter than avg. */}
       {dirCurrent !== null && dirCurrent !== undefined && (() => {
-        const tipR = r - 10;
-        const tip = polar(0, tipR);
-        const base1 = polar(-5, 16);
-        const base2 = polar(5, 16);
+        const tip = polar(dirCurrent, r - 10);
+        const base1 = polar(dirCurrent - 5, 16);
+        const base2 = polar(dirCurrent + 5, 16);
         return (
-          <g
-            style={{ transformOrigin: `${cx}px ${cy}px`, transition: 'transform 500ms ease-out' }}
-            transform={`rotate(${dirCurrent} ${cx} ${cy})`}
-          >
-            <polygon
-              points={`${tip.x},${tip.y} ${base1.x},${base1.y} ${base2.x},${base2.y}`}
-              fill="#fbbf24"
-              stroke="#f59e0b"
-              strokeWidth="1"
-            />
-          </g>
+          <polygon
+            points={`${tip.x},${tip.y} ${base1.x},${base1.y} ${base2.x},${base2.y}`}
+            fill="#fbbf24"
+            stroke="#f59e0b"
+            strokeWidth="1"
+          />
         );
       })()}
 
