@@ -88,6 +88,27 @@ export function forecastEmoji(shortForecast: string, isDaytime = true): string {
   return isDaytime ? '☀️' : '🌙';
 }
 
+// Maps an NWS short-forecast string to a ConditionKey so the same animated
+// icon component used in the hero can render forecast periods.
+export function forecastConditionKey(
+  shortForecast: string,
+  isDaytime = true,
+): 'thunderstorm' | 'heavyRain' | 'rain' | 'drizzle' | 'snow' | 'fog' | 'windy' | 'hot' | 'cold' | 'sunny' | 'clear' | 'partlyCloudy' | 'cloudy' | 'unknown' {
+  const s = shortForecast.toLowerCase();
+  if (/thunder/.test(s)) return 'thunderstorm';
+  if (/\b(hail|sleet|freezing|wintry)\b/.test(s)) return 'snow';
+  if (/snow|flurr|blizzard/.test(s)) return 'snow';
+  if (/\bheavy\s+rain\b|downpour/.test(s)) return 'heavyRain';
+  if (/drizzle/.test(s)) return 'drizzle';
+  if (/\b(rain|shower)\b/.test(s)) return 'rain';
+  if (/fog|haze|mist/.test(s)) return 'fog';
+  if (/\bwind/.test(s)) return 'windy';
+  if (/partly/.test(s)) return 'partlyCloudy';
+  if (/mostly\s+cloud|\b(cloud|overcast)\b/.test(s)) return 'cloudy';
+  if (/\b(sunny|clear|fair)\b/.test(s)) return isDaytime ? 'sunny' : 'clear';
+  return 'unknown';
+}
+
 export function parseWindSpeed(ws: string): number | null {
   const m = ws.match(/(\d+)(?:\s*to\s*(\d+))?/);
   if (!m) return null;

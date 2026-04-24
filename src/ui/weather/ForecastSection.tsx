@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import {
-  forecastEmoji,
+  forecastConditionKey,
   parseWindSpeed,
   type NwsForecastPeriod,
 } from '../../lib/nwsService';
 import { useNwsForecast, useNwsHourly } from '../../lib/nwsCache';
 import type { WeatherStation } from '../../lib/weatherService';
 import LineChart from './LineChart';
+import AnimatedWeatherIcon from './AnimatedWeatherIcon';
 
 export default function ForecastSection({
   station,
@@ -60,8 +61,12 @@ function CurrentPeriod({ period }: { period: NwsForecastPeriod }) {
       <div className="flex items-start justify-between gap-4 mb-2">
         <div>
           <div className="text-xs uppercase tracking-wide text-white/40 mb-1">{period.name}</div>
-          <div className="flex items-baseline gap-3">
-            <span className="text-4xl">{forecastEmoji(period.shortForecast, period.isDaytime)}</span>
+          <div className="flex items-center gap-3">
+            <AnimatedWeatherIcon
+              conditionKey={forecastConditionKey(period.shortForecast, period.isDaytime)}
+              isDay={period.isDaytime}
+              size={72}
+            />
             <span className="text-5xl font-display font-bold text-white tabular-nums">
               {period.temperature}°{period.temperatureUnit}
             </span>
@@ -168,7 +173,13 @@ function Next24Hours({ periods }: { periods: NwsForecastPeriod[] }) {
                   <div className="text-[10px] text-white/50">
                     {hour.toLocaleTimeString([], { hour: 'numeric' })}
                   </div>
-                  <div className="text-xl my-1">{forecastEmoji(p.shortForecast, p.isDaytime)}</div>
+                  <div className="my-1">
+                    <AnimatedWeatherIcon
+                      conditionKey={forecastConditionKey(p.shortForecast, p.isDaytime)}
+                      isDay={p.isDaytime}
+                      size={36}
+                    />
+                  </div>
                   <div className="text-sm font-semibold text-white tabular-nums">
                     {p.temperature}°
                   </div>
@@ -196,8 +207,12 @@ function Next24Hours({ periods }: { periods: NwsForecastPeriod[] }) {
                 <div className="w-16 sm:w-20 text-xs text-white/50 tabular-nums flex-shrink-0">
                   {hour.toLocaleTimeString([], { hour: 'numeric', hour12: true })}
                 </div>
-                <div className="text-xl w-7 text-center flex-shrink-0">
-                  {forecastEmoji(p.shortForecast, p.isDaytime)}
+                <div className="w-8 flex-shrink-0 flex justify-center">
+                  <AnimatedWeatherIcon
+                    conditionKey={forecastConditionKey(p.shortForecast, p.isDaytime)}
+                    isDay={p.isDaytime}
+                    size={30}
+                  />
                 </div>
                 <div className="w-12 text-base font-semibold text-white tabular-nums flex-shrink-0">
                   {p.temperature}°
@@ -275,7 +290,12 @@ function DailyGrid({ periods }: { periods: NwsForecastPeriod[] }) {
           return (
             <details key={d.key} className="bg-white/5 rounded-lg border border-white/5 overflow-hidden">
               <summary className="cursor-pointer list-none flex items-center gap-3 p-3 hover:bg-white/5 transition-colors">
-                <span className="text-2xl">{forecastEmoji(primary.shortForecast, primary.isDaytime)}</span>
+                <AnimatedWeatherIcon
+                  conditionKey={forecastConditionKey(primary.shortForecast, primary.isDaytime)}
+                  isDay={primary.isDaytime}
+                  size={40}
+                />
+
                 <div className="flex-1 min-w-0">
                   <div className="text-sm text-white font-medium">{d.day?.name ?? d.night?.name}</div>
                   <div className="text-xs text-white/50 truncate">{primary.shortForecast}</div>

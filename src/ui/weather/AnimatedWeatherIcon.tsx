@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { ConditionKey } from '../../lib/weatherCondition';
 
 interface Props {
@@ -6,21 +7,37 @@ interface Props {
   size?: number;
 }
 
-// Crisp SVG weather icon animated with CSS. Used next to the hero temperature.
+const STYLE_ID = 'wx-animated-icon-styles';
+let injected = false;
+function ensureStyles() {
+  if (injected || typeof document === 'undefined') return;
+  if (document.getElementById(STYLE_ID)) {
+    injected = true;
+    return;
+  }
+  const el = document.createElement('style');
+  el.id = STYLE_ID;
+  el.textContent = styles;
+  document.head.appendChild(el);
+  injected = true;
+}
+
+// Crisp SVG weather icon animated with CSS. Used next to the hero temperature
+// and throughout the forecast. Styles are injected once on the document.
 export default function AnimatedWeatherIcon({ conditionKey, isDay, size = 96 }: Props) {
+  useEffect(() => {
+    ensureStyles();
+  }, []);
   return (
-    <>
-      <style>{styles}</style>
-      <svg
-        width={size}
-        height={size}
-        viewBox="0 0 100 100"
-        aria-hidden
-        className="wx-icon flex-shrink-0"
-      >
-        {renderIcon(conditionKey, isDay)}
-      </svg>
-    </>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      aria-hidden
+      className="wx-icon flex-shrink-0"
+    >
+      {renderIcon(conditionKey, isDay)}
+    </svg>
   );
 }
 
