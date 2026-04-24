@@ -225,11 +225,6 @@ function ConditionsGrid({
           value={fmt.fmtTemp(reading.thw_index)}
         />
         <DataRow
-          label="THSW Index"
-          tip="THW plus solar radiation. Adds the heating effect of being in direct sun. Requires a solar sensor."
-          value={fmt.fmtTemp(reading.thsw_index)}
-        />
-        <DataRow
           label="Wet Bulb"
           tip="Coolest temp you can achieve by evaporation — what a wet thermometer would read. Used for swamp coolers, athletic heat safety."
           value={fmt.fmtTemp(reading.wet_bulb)}
