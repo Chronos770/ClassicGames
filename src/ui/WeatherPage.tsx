@@ -21,6 +21,7 @@ import { WeatherInstallButton, useWeatherManifest } from './weather/WeatherPwa';
 import WeatherAlertsBanner from './weather/WeatherAlertsBanner';
 import PrecipOutlook from './weather/PrecipOutlook';
 import UnitsToggle from './weather/UnitsToggle';
+import WeatherBackground from './weather/WeatherBackground';
 import { classifyCondition } from '../lib/weatherCondition';
 
 type Tab = 'overview' | 'history' | 'radar' | 'health';
@@ -201,9 +202,14 @@ export default function WeatherPage() {
   const condition = reading && station ? classifyCondition(reading, station.latitude, station.longitude) : null;
   const bgClass = condition ? condition.pageBg : 'from-slate-950 via-slate-900 to-slate-950';
 
+  const windForBg = reading?.wind_speed_avg_last_10_min ?? reading?.wind_speed_last ?? 0;
+
   return (
-    <div className={`min-h-screen bg-gradient-to-br ${bgClass} transition-all duration-[1500ms]`}>
-      <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8">
+    <div className={`relative min-h-screen bg-gradient-to-br ${bgClass} transition-all duration-[1500ms] overflow-hidden`}>
+      {condition && (
+        <WeatherBackground condition={condition} windMph={windForBg ?? 0} />
+      )}
+      <div className="relative max-w-7xl mx-auto px-4 py-6 sm:py-8">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
