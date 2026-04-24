@@ -82,18 +82,21 @@ export async function deleteRemoteStation(id: string): Promise<void> {
   if (error) throw error;
 }
 
-// Best-effort URL normalizer — accepts either a full WeatherLink URL or just a
-// station ID and produces an embed-safe URL when possible.
+// WeatherLink offers two shareable URLs per station:
+//   1. "Station URL" / Bulletin — weatherlink.com/bulletin/<token>. Always
+//      generated when the station is public; whether it iframes depends on
+//      WeatherLink's X-Frame-Options on that page.
+//   2. "Station Embed" — generated via the wrench icon → Device → Station
+//      Embed dialog on weatherlink.com. This is the URL designed for iframe
+//      embedding.
+// We just pass through whatever the user pastes; trying to "transform"
+// between the two formats was speculation on my part. If the URL doesn't
+// iframe, the card shows a graceful fallback with an "open in new tab" link.
 export function normalizeEmbedUrl(input: string): string | null {
   const s = input.trim();
   if (!s) return null;
-  // Already an embeddable URL
-  if (s.includes('weatherlink.com/embeddablePage/')) return s;
-  // Bulletin pattern — try to convert to embed page
-  const bulletinMatch = s.match(/weatherlink\.com\/bulletin\/([a-f0-9-]+)/i);
-  if (bulletinMatch) return `https://www.weatherlink.com/embeddablePage/show/${bulletinMatch[1]}/signature`;
-  // Bare token / id
-  if (/^[a-f0-9-]{8,}$/i.test(s)) return `https://www.weatherlink.com/embeddablePage/show/${s}/signature`;
-  // Anything else, return as-is and let the iframe try
+  // If they pasted just a token, default-prefix to the bulletin URL — most
+  // common case and at minimum opens in a new tab as a sane fallback.
+  if (/^[a-f0-9-]{20,}$/i.test(s)) return `https://www.weatherlink.com/bulletin/${s}`;
   return s;
 }
