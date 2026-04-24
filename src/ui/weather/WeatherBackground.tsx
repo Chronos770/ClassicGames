@@ -512,7 +512,7 @@ export default function WeatherBackground({ condition, windMph }: Props) {
   return (
     <canvas
       ref={canvasRef}
-      className="fixed inset-0 pointer-events-none -z-10"
+      className="fixed inset-0 pointer-events-none z-0"
       style={{ width: '100vw', height: '100vh' }}
       aria-hidden
     />

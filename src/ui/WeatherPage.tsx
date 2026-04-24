@@ -4,7 +4,6 @@ import { motion } from 'framer-motion';
 import { useAuthStore } from '../stores/authStore';
 import { supabase } from '../lib/supabase';
 import {
-  discoverStations,
   getLatestReading,
   getStations,
   timeAgo,
@@ -53,7 +52,6 @@ export default function WeatherPage() {
   const [tab, setTab] = useState<Tab>('overview');
   const [ingestBusy, setIngestBusy] = useState(false);
   const [ingestMsg, setIngestMsg] = useState<string | null>(null);
-  const [discoverBusy, setDiscoverBusy] = useState(false);
 
   // lastIngestTick is bumped whenever we receive a realtime event or manual refresh —
   // child tabs listen to this to re-fetch their data.
@@ -154,26 +152,6 @@ export default function WeatherPage() {
     return () => clearInterval(t);
   }, [stationId, loadLatest]);
 
-  const handleDiscover = async () => {
-    if (discoverBusy) return;
-    setDiscoverBusy(true);
-    setIngestMsg(null);
-    try {
-      const res = await discoverStations();
-      const list = await getStations();
-      setStations(list);
-      setIngestMsg(
-        res.new_count > 0
-          ? `Discovered ${res.new_count} new station${res.new_count === 1 ? '' : 's'} (${res.total} total)`
-          : `No new stations (${res.total} known)`,
-      );
-    } catch (e: any) {
-      setIngestMsg(`Discover error: ${String(e?.message ?? e).slice(0, 120)}`);
-    } finally {
-      setDiscoverBusy(false);
-      setTimeout(() => setIngestMsg(null), 5000);
-    }
-  };
 
   const handleRefresh = async () => {
     if (ingestBusy) return;
@@ -253,15 +231,6 @@ export default function WeatherPage() {
                 ))}
               </select>
             )}
-            <button
-              onClick={handleDiscover}
-              disabled={discoverBusy}
-              title="Pull station list from your WeatherLink account and add any new ones"
-              className="text-sm px-3 py-2 bg-white/5 hover:bg-white/10 text-white/70 rounded-lg transition-colors disabled:opacity-40 flex items-center gap-1.5 border border-white/10"
-            >
-              <span className={discoverBusy ? 'animate-spin inline-block' : 'inline-block'}>&#128225;</span>
-              {discoverBusy ? 'Discovering' : 'Discover'}
-            </button>
             <button
               onClick={handleRefresh}
               disabled={ingestBusy}
