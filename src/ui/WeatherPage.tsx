@@ -209,7 +209,7 @@ export default function WeatherPage() {
       {condition && (
         <WeatherBackground condition={condition} windMph={windForBg ?? 0} />
       )}
-      <div className="relative max-w-7xl mx-auto px-4 py-6 sm:py-8">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 py-6 sm:py-8">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
