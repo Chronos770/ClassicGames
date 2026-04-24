@@ -258,6 +258,7 @@ function ConditionsGrid({
       </Card>
 
       <Card title="Wind">
+        <WindFromToHeader dir={reading.wind_dir_last} speed={reading.wind_speed_last} />
         <div className="flex justify-center py-2">
           <WindCompass
             dirCurrent={reading.wind_dir_last}
@@ -381,6 +382,25 @@ function BarometerExplainer({
           <span className="text-white/40"> — {trend.meaning}</span>
         </div>
       )}
+    </div>
+  );
+}
+
+function WindFromToHeader({ dir, speed }: { dir: number | null; speed: number | null }) {
+  if (dir === null || dir === undefined || (speed !== null && speed < 0.5)) {
+    return (
+      <div className="text-center text-sm text-white/60 mb-1">Calm</div>
+    );
+  }
+  const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+  const idx = Math.round((dir % 360) / 22.5) % 16;
+  const from = dirs[idx];
+  const to = dirs[(idx + 8) % 16];
+  return (
+    <div className="text-center text-sm text-white/80 mb-1">
+      from <span className="text-sky-300 font-semibold">{from}</span>
+      <span className="text-white/40 mx-1.5">to</span>
+      <span className="text-white/80 font-semibold">{to}</span>
     </div>
   );
 }

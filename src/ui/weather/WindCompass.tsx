@@ -1,4 +1,3 @@
-import { compassFromDegrees } from '../../lib/weatherService';
 import { useUnitFormatters } from '../../lib/weatherUnits';
 
 interface Props {
@@ -9,19 +8,17 @@ interface Props {
   size?: number;
 }
 
-// Simple WeatherLink-console style compass. One ring, 8 cardinal labels
-// around the edge, one small marker at the direction wind is coming FROM,
-// and a single-line horizontal readout in the middle: DIR  SPEED  unit.
+// Clean compass: ring, 8 cardinal labels, one marker sitting OUTSIDE the
+// ring pointing inward to the direction wind is FROM, and just the speed
+// in the middle (the cardinal direction is shown above the compass in the
+// card header instead).
 export default function WindCompass({ dirCurrent, speed, size = 240 }: Props) {
   const { fmtWindNum, windUnitLabel } = useUnitFormatters();
 
-  // Draw in a fixed 240 viewBox and let the SVG scale to the element's
-  // `size` prop. All measurements below are in those 240 units regardless
-  // of rendered size, so the layout never breaks at smaller sizes.
   const V = 240;
   const cx = V / 2;
   const cy = V / 2;
-  const r = V / 2 - 20;
+  const r = V / 2 - 24; // leave a bit more headroom for the outside marker
 
   const polar = (deg: number, radius: number) => {
     const rad = ((deg - 90) * Math.PI) / 180;
@@ -40,14 +37,13 @@ export default function WindCompass({ dirCurrent, speed, size = 240 }: Props) {
   ];
 
   const speedStr = fmtWindNum(speed, 0);
-  const dirStr = compassFromDegrees(dirCurrent);
 
   return (
     <svg
       width={size}
       height={size}
       viewBox={`0 0 ${V} ${V}`}
-      className="max-w-full h-auto"
+      className="max-w-full h-auto overflow-visible"
       style={{ maxWidth: size }}
     >
       {/* Single ring */}
@@ -79,11 +75,12 @@ export default function WindCompass({ dirCurrent, speed, size = 240 }: Props) {
         );
       })}
 
-      {/* Single marker on the ring — points where wind is FROM */}
+      {/* Single marker OUTSIDE the ring, tip pointing inward toward the
+          direction wind is coming FROM. */}
       {dirCurrent !== null && dirCurrent !== undefined && (() => {
-        const tip = polar(dirCurrent, r - 2);
-        const base1 = polar(dirCurrent - 5, r - 18);
-        const base2 = polar(dirCurrent + 5, r - 18);
+        const tip = polar(dirCurrent, r + 3);       // nearly touching ring
+        const base1 = polar(dirCurrent - 5, r + 16); // outer base, slight spread
+        const base2 = polar(dirCurrent + 5, r + 16);
         return (
           <polygon
             points={`${tip.x},${tip.y} ${base1.x},${base1.y} ${base2.x},${base2.y}`}
@@ -92,20 +89,19 @@ export default function WindCompass({ dirCurrent, speed, size = 240 }: Props) {
         );
       })()}
 
-      {/* Horizontal center readout: DIR  SPEED  UNIT */}
+      {/* Center readout — speed + unit only, no cardinal letters. */}
       <text
         x={cx}
         y={cy}
         textAnchor="middle"
         dominantBaseline="central"
         fontWeight="700"
-        fontSize={34}
+        fontSize={42}
         fill="#93c5fd"
         className="tabular-nums"
       >
-        <tspan>{dirStr === '--' ? '' : dirStr}</tspan>
-        <tspan dx={10}>{speedStr}</tspan>
-        <tspan dx={8} fontSize={15} fontWeight="500">
+        <tspan>{speedStr}</tspan>
+        <tspan dx={8} fontSize={17} fontWeight="500">
           {windUnitLabel}
         </tspan>
       </text>
