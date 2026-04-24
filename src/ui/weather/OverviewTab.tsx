@@ -18,6 +18,7 @@ import SolarDayArc from './SolarDayArc';
 import WindRose from './WindRose';
 import ETContextCard from './ETContextCard';
 import DegreeDayChart from './DegreeDayChart';
+import AnimatedWeatherIcon from './AnimatedWeatherIcon';
 
 interface Props {
   reading: WeatherReading;
@@ -143,10 +144,10 @@ function HeroBanner({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-white/50 mb-1">
-            <span className="text-xl leading-none">{condition.emoji}</span>
             <span>{condition.label}</span>
           </div>
-          <div className="flex items-baseline gap-3 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
+            <AnimatedWeatherIcon conditionKey={condition.key} isDay={condition.isDay} size={96} />
             <span className="text-6xl sm:text-7xl font-display font-bold text-white tabular-nums leading-none">
               {fmt.fmtTempNum(reading.temp)}
             </span>
