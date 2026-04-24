@@ -1,9 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import {
-  forecastEmoji,
-  getHourlyForecast,
-  type NwsForecastPeriod,
-} from '../../lib/nwsService';
+import { useMemo } from 'react';
+import { type NwsForecastPeriod } from '../../lib/nwsService';
+import { useNwsHourly } from '../../lib/nwsCache';
 import type { WeatherStation } from '../../lib/weatherService';
 
 interface Props {
@@ -128,40 +125,18 @@ function toneFor(kind: Kind): { bg: string; border: string; accent: string } {
 }
 
 export default function PrecipOutlook({ station, tick }: Props) {
-  const [periods, setPeriods] = useState<NwsForecastPeriod[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!station || station.latitude === null || station.longitude === null) {
-      setPeriods(null);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    getHourlyForecast(station.latitude, station.longitude)
-      .then((f) => {
-        if (!cancelled) setPeriods(f.properties.periods.slice(0, 48));
-      })
-      .catch((e) => {
-        if (!cancelled) setError(String(e?.message ?? e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [station?.latitude, station?.longitude, tick]);
+  const hourly = useNwsHourly(station?.latitude ?? null, station?.longitude ?? null, tick);
+  const periods: NwsForecastPeriod[] | null = hourly.data
+    ? hourly.data.properties.periods.slice(0, 48)
+    : null;
 
   const windows = useMemo(() => {
     if (!periods) return [];
     return buildWindows(periods, new Date()).slice(0, 3);
   }, [periods]);
 
-  if (loading && !periods) return null;
-  if (error) return null;
+  if (hourly.loading && !periods) return null;
+  if (hourly.error) return null;
   if (!periods || windows.length === 0) return null;
 
   return (

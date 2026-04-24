@@ -1,52 +1,35 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   forecastEmoji,
-  getForecast,
-  getHourlyForecast,
   parseWindSpeed,
-  type NwsForecast,
   type NwsForecastPeriod,
 } from '../../lib/nwsService';
+import { useNwsForecast, useNwsHourly } from '../../lib/nwsCache';
 import type { WeatherStation } from '../../lib/weatherService';
 import LineChart from './LineChart';
 
-export default function ForecastSection({ station }: { station: WeatherStation | null }) {
-  const [forecast, setForecast] = useState<NwsForecast | null>(null);
-  const [hourly, setHourly] = useState<NwsForecast | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export default function ForecastSection({
+  station,
+  tick = 0,
+}: {
+  station: WeatherStation | null;
+  tick?: number;
+}) {
+  const lat = station?.latitude ?? null;
+  const lon = station?.longitude ?? null;
+  const forecastQ = useNwsForecast(lat, lon, tick);
+  const hourlyQ = useNwsHourly(lat, lon, tick);
 
-  useEffect(() => {
-    if (!station || station.latitude === null || station.longitude === null) return;
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    Promise.all([
-      getForecast(station.latitude, station.longitude),
-      getHourlyForecast(station.latitude, station.longitude),
-    ])
-      .then(([f, h]) => {
-        if (cancelled) return;
-        setForecast(f);
-        setHourly(h);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(String(e?.message ?? e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [station?.latitude, station?.longitude]);
+  const forecast = forecastQ.data;
+  const hourly = hourlyQ.data;
+  const loading = forecastQ.loading || hourlyQ.loading;
+  const error = forecastQ.error ?? hourlyQ.error;
 
-  if (!station || station.latitude === null || station.longitude === null) {
+  if (!station || lat === null || lon === null) {
     return <div className="text-white/30 text-sm py-8 text-center">Station location missing; forecast unavailable.</div>;
   }
 
-  if (loading) {
+  if (loading && !forecast && !hourly) {
     return <div className="text-white/30 text-sm py-8 text-center">Loading forecast from National Weather Service...</div>;
   }
 

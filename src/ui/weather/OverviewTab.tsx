@@ -71,7 +71,7 @@ export default function OverviewTab({ reading, station, stationId, tick }: Props
       </div>
       <div className="mt-6">
         <h2 className="text-sm text-white/60 mb-3 uppercase tracking-wide font-semibold">Forecast</h2>
-        <ForecastSection station={station} />
+        <ForecastSection station={station} tick={tick} />
       </div>
     </>
   );

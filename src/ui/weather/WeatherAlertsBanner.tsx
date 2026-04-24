@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { getAlerts, type NwsAlert } from '../../lib/nwsService';
+import { useState } from 'react';
+import { useNwsAlerts } from '../../lib/nwsCache';
 import type { WeatherStation } from '../../lib/weatherService';
 
 interface Props {
@@ -41,7 +41,11 @@ const SEVERITY_STYLE: Record<string, { bg: string; border: string; text: string;
 };
 
 export default function WeatherAlertsBanner({ station, tick }: Props) {
-  const [alerts, setAlerts] = useState<NwsAlert[]>([]);
+  const { data: alerts } = useNwsAlerts(
+    station?.latitude ?? null,
+    station?.longitude ?? null,
+    tick,
+  );
   const [dismissed, setDismissed] = useState<Set<string>>(() => {
     try {
       const raw = localStorage.getItem('weather-alerts-dismissed');
@@ -51,24 +55,6 @@ export default function WeatherAlertsBanner({ station, tick }: Props) {
       return new Set();
     }
   });
-
-  useEffect(() => {
-    if (!station || station.latitude === null || station.longitude === null) {
-      setAlerts([]);
-      return;
-    }
-    let cancelled = false;
-    getAlerts(station.latitude, station.longitude)
-      .then((a) => {
-        if (!cancelled) setAlerts(a);
-      })
-      .catch(() => {
-        if (!cancelled) setAlerts([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [station?.latitude, station?.longitude, tick]);
 
   const dismiss = (id: string) => {
     const next = new Set(dismissed);
@@ -81,7 +67,7 @@ export default function WeatherAlertsBanner({ station, tick }: Props) {
     }
   };
 
-  const active = alerts.filter((a) => !dismissed.has(a.id));
+  const active = (alerts ?? []).filter((a) => !dismissed.has(a.id));
   if (active.length === 0) return null;
 
   return (
