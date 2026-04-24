@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import LineChart, { type Series } from './LineChart';
 import StormsList from './StormsList';
+import StatsTable, { StatsSummary } from './StatsTable';
 import { getReadingsRange, type WeatherReading } from '../../lib/weatherService';
+
+type View = 'chart' | 'table' | 'summary';
 
 type Preset = '24h' | '7d' | '30d' | '90d' | '1y' | 'all' | 'custom';
 type Metric =
@@ -84,10 +87,14 @@ function downsample(rows: WeatherReading[], maxPoints: number): WeatherReading[]
 export default function HistoryTab({ stationId, lastIngestTick }: { stationId: number; lastIngestTick: number }) {
   const [preset, setPreset] = useState<Preset>('7d');
   const [metric, setMetric] = useState<Metric>('temp');
+  const [view, setView] = useState<View>('chart');
   const [customStart, setCustomStart] = useState<string>(new Date(Date.now() - 14 * 86400_000).toISOString().slice(0, 10));
   const [customEnd, setCustomEnd] = useState<string>(new Date().toISOString().slice(0, 10));
 
+  // For table/summary view we want raw rows (un-downsampled). For chart view
+  // we keep the downsampled readings to keep SVG perf reasonable.
   const [readings, setReadings] = useState<WeatherReading[]>([]);
+  const [rawReadings, setRawReadings] = useState<WeatherReading[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalRows, setTotalRows] = useState(0);
 
@@ -108,10 +115,12 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
     getReadingsRange(stationId, from.toISOString(), to.toISOString())
       .then((data) => {
         setTotalRows(data.length);
+        setRawReadings(data);
         setReadings(downsample(data, MAX_POINTS));
       })
       .catch(() => {
         setReadings([]);
+        setRawReadings([]);
         setTotalRows(0);
       })
       .finally(() => setLoading(false));
@@ -268,7 +277,7 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
   return (
     <div className="space-y-4">
       <div className="bg-white/5 rounded-xl border border-white/10 p-4">
-        {/* Preset + custom range */}
+        {/* Preset + custom range + view toggle */}
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <div className="flex gap-1 border border-white/10 rounded-lg p-0.5 flex-wrap">
             {PRESETS.map((p) => (
@@ -303,36 +312,52 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
               />
             </div>
           )}
+          <div className="flex-1" />
+          <div className="flex gap-1 border border-white/10 rounded-lg p-0.5">
+            {(['chart', 'table', 'summary'] as View[]).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={`text-xs px-2.5 py-1 rounded transition-colors capitalize ${
+                  view === v ? 'bg-amber-500/20 text-amber-400 font-medium' : 'text-white/50 hover:text-white/80'
+                }`}
+              >
+                {v === 'chart' ? '📈 Chart' : v === 'table' ? '🗂 Table' : '📊 Summary'}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Metric tabs grouped */}
-        <div className="flex flex-wrap gap-3 mb-4">
-          {Object.entries(grouped).map(([group, items]) => (
-            <div key={group} className="flex flex-col gap-1">
-              <div className="text-[10px] uppercase tracking-wider text-white/30 font-semibold">{group}</div>
-              <div className="flex flex-wrap gap-1">
-                {items.map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() => setMetric(m.id)}
-                    className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${
-                      metric === m.id
-                        ? 'bg-amber-500/20 text-amber-400 font-medium'
-                        : 'text-white/50 hover:text-white/80 hover:bg-white/5'
-                    }`}
-                  >
-                    {m.label}
-                  </button>
-                ))}
+        {/* Metric tabs (only for chart view) */}
+        {view === 'chart' && (
+          <div className="flex flex-wrap gap-3 mb-4">
+            {Object.entries(grouped).map(([group, items]) => (
+              <div key={group} className="flex flex-col gap-1">
+                <div className="text-[10px] uppercase tracking-wider text-white/30 font-semibold">{group}</div>
+                <div className="flex flex-wrap gap-1">
+                  {items.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => setMetric(m.id)}
+                      className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${
+                        metric === m.id
+                          ? 'bg-amber-500/20 text-amber-400 font-medium'
+                          : 'text-white/50 hover:text-white/80 hover:bg-white/5'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
-        <div className="text-xs text-white/40 mb-1 flex items-center justify-between">
+        <div className="text-xs text-white/40 mb-3 flex items-center justify-between">
           <span>
             {totalRows.toLocaleString()} readings
-            {totalRows > readings.length && ` · downsampled to ${readings.length.toLocaleString()}`}
+            {view === 'chart' && totalRows > readings.length && ` · downsampled to ${readings.length.toLocaleString()}`}
           </span>
           <span>
             {new Date(fromIso).toLocaleDateString()} — {new Date(toIso).toLocaleDateString()}
@@ -341,14 +366,20 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
 
         {loading ? (
           <div className="h-[260px] flex items-center justify-center text-white/30 text-sm">Loading...</div>
-        ) : metric === 'storms' ? (
-          <StormsList stationId={stationId} fromIso={fromIso} toIso={toIso} lastIngestTick={lastIngestTick} />
-        ) : !hasData ? (
-          <div className="h-[260px] flex items-center justify-center text-white/30 text-sm">
-            No data for this range yet.
-          </div>
+        ) : view === 'chart' ? (
+          metric === 'storms' ? (
+            <StormsList stationId={stationId} fromIso={fromIso} toIso={toIso} lastIngestTick={lastIngestTick} />
+          ) : !hasData ? (
+            <div className="h-[260px] flex items-center justify-center text-white/30 text-sm">
+              No data for this range yet.
+            </div>
+          ) : (
+            <LineChart series={series} yUnit={yUnit} yDomain={yDomain} height={260} />
+          )
+        ) : view === 'table' ? (
+          <StatsTable readings={rawReadings} />
         ) : (
-          <LineChart series={series} yUnit={yUnit} yDomain={yDomain} height={260} />
+          <StatsSummary readings={rawReadings} />
         )}
       </div>
     </div>
