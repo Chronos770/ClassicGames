@@ -54,3 +54,55 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 });
+
+// ── Web Push handlers ─────────────────────────────────────────────
+// The push-send edge function delivers a JSON body shaped like:
+//   { title, body, url, tag, kind }
+// We display it as a system notification; clicking it focuses the open
+// /weather tab if any, otherwise opens it.
+
+self.addEventListener('push', (event) => {
+  let payload = { title: 'Weather alert', body: '', url: '/weather', tag: 'weather' };
+  try {
+    if (event.data) {
+      const json = event.data.json();
+      payload = { ...payload, ...json };
+    }
+  } catch {
+    // ignore — keep defaults
+  }
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      tag: payload.tag,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      data: { url: payload.url, kind: payload.kind },
+      // Keep severe alerts persistent until the user interacts.
+      requireInteraction: payload.kind === 'severe_alerts',
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event.notification?.data?.url || '/weather';
+  event.waitUntil(
+    (async () => {
+      const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      for (const c of all) {
+        try {
+          const u = new URL(c.url);
+          if (u.pathname.startsWith('/weather')) {
+            c.focus();
+            c.navigate(url);
+            return;
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      await self.clients.openWindow(url);
+    })(),
+  );
+});

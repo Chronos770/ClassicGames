@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import LineChart from './LineChart';
+import PushSettings from './PushSettings';
 import {
   getReadingsRange,
   timeAgo,
@@ -239,6 +240,12 @@ export default function HealthTab({
       <div className="bg-white/5 rounded-xl border border-white/10 p-4">
         <div className="text-xs uppercase tracking-wide text-white/40 mb-3 font-semibold">Console Battery %</div>
         <LineChart series={consoleBatterySeries} height={160} yDomain={[0, 100]} yUnit="%" />
+      </div>
+
+      {/* Notifications settings */}
+      <div className="pt-4 mt-4 border-t border-white/5">
+        <h2 className="text-base font-display font-semibold text-white mb-3">Notifications</h2>
+        <PushSettings />
       </div>
     </div>
   );
