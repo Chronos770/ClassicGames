@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   addNewsSource,
   deleteNewsSource,
@@ -44,8 +44,12 @@ export default function NewsTab({ tick }: Props) {
       const list = await listNewsSources();
       setSources(list);
       if (list.length > 0) {
+        // Pull a few more per channel so an active uploader can dominate the
+        // top of the feed without being capped artificially.
         const vids = await fetchNewsVideos(
           list.map((s) => ({ id: s.id, kind: s.kind, handle: s.handle, label: s.label })),
+          5,
+          50,
         );
         setVideos(vids);
       } else {
@@ -99,20 +103,6 @@ export default function NewsTab({ tick }: Props) {
       setBusy(false);
     }
   };
-
-  const groupedByChannel = useMemo(() => {
-    const map = new Map<string, { source: NewsSource; videos: NewsVideo[] }>();
-    for (const s of sources) {
-      map.set(s.id, { source: s, videos: [] });
-    }
-    for (const v of videos) {
-      const id = v.source.id;
-      if (id && map.has(id)) {
-        map.get(id)!.videos.push(v);
-      }
-    }
-    return [...map.values()];
-  }, [sources, videos]);
 
   return (
     <div className="space-y-4">
@@ -188,6 +178,41 @@ export default function NewsTab({ tick }: Props) {
         </div>
       )}
 
+      {/* Channel chips — manage subscribed channels without dominating the feed */}
+      {sources.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] uppercase tracking-wide text-white/40 font-semibold mr-1">
+            Channels
+          </span>
+          {sources.map((s) => (
+            <div
+              key={s.id}
+              className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-full pl-2 pr-1 py-0.5 text-xs"
+            >
+              <a
+                href={`https://www.youtube.com/${s.handle}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-white/70 hover:text-white"
+                title={s.handle}
+              >
+                {s.label || s.handle}
+              </a>
+              {s.user_id !== null && (
+                <button
+                  onClick={() => handleDelete(s)}
+                  className="text-white/30 hover:text-red-300 transition-colors w-5 h-5 flex items-center justify-center rounded-full hover:bg-red-500/10"
+                  title={`Remove ${s.handle}`}
+                  aria-label={`Remove ${s.handle}`}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       {loading && videos.length === 0 ? (
         <div className="text-white/40 text-sm py-12 text-center">Loading latest videos…</div>
       ) : sources.length === 0 ? (
@@ -195,46 +220,16 @@ export default function NewsTab({ tick }: Props) {
           <div className="text-white/60 text-base mb-1">No channels yet</div>
           <div className="text-xs text-white/40">Add a YouTube channel above to see the latest videos.</div>
         </div>
+      ) : videos.length === 0 ? (
+        <div className="bg-white/5 rounded-xl border border-white/10 p-6 text-center text-sm text-white/40 italic">
+          No videos returned yet. Check back in a minute.
+        </div>
       ) : (
-        <div className="space-y-6">
-          {groupedByChannel.map(({ source, videos: vids }) => (
-            <div key={source.id} className="space-y-3">
-              <div className="flex items-baseline justify-between gap-3">
-                <div className="text-sm uppercase tracking-wide text-white/60 font-semibold">
-                  {source.label || vids[0]?.channelTitle || source.handle}
-                </div>
-                <div className="flex items-center gap-2">
-                  <a
-                    href={`https://www.youtube.com/${source.handle}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[11px] text-white/40 hover:text-white/70"
-                  >
-                    {source.handle} ↗
-                  </a>
-                  {source.user_id !== null && (
-                    <button
-                      onClick={() => handleDelete(source)}
-                      className="text-[11px] text-white/30 hover:text-red-300 transition-colors px-1.5"
-                      title="Remove channel"
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
-              </div>
-              {vids.length === 0 ? (
-                <div className="bg-white/5 rounded-xl border border-white/10 p-4 text-xs text-white/40 italic">
-                  No videos returned for this channel yet.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {vids.map((v) => (
-                    <VideoCard key={v.videoId} video={v} />
-                  ))}
-                </div>
-              )}
-            </div>
+        // Single chronological grid — newest at top regardless of channel.
+        // The proxy already returns videos sorted by publishedAt desc.
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {videos.map((v) => (
+            <VideoCard key={v.videoId} video={v} />
           ))}
         </div>
       )}

@@ -33,15 +33,25 @@ async function resolveHandleToChannelId(handle: string): Promise<string | null> 
 
   try {
     const res = await fetch(`https://www.youtube.com/${cleaned}`, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ClassicGamesWeather/1.0)' },
+      // Use a real-looking UA — YouTube serves a stripped page to non-browser
+      // UAs which sometimes lacks the canonical link / itemprop tags.
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+      },
+      redirect: 'follow',
     });
     if (!res.ok) return null;
     const html = await res.text();
-    // Several places in the HTML carry the channel ID; try the most common.
+    // IMPORTANT: try the page's *authoritative* channel id sources first.
+    // "channelId":"UCxxx" appears all over the HTML — including in the
+    // sidebar recommendations — so naively matching the first occurrence
+    // can return a totally different (related) channel. The canonical link
+    // and meta itemprop tags always reflect the page's own channel.
     const m =
-      html.match(/"channelId":"(UC[\w-]{10,})"/) ??
+      html.match(/<link rel="canonical" href="https:\/\/www\.youtube\.com\/channel\/(UC[\w-]{10,})"/) ??
       html.match(/<meta itemprop="identifier" content="(UC[\w-]{10,})"/) ??
-      html.match(/<link rel="canonical" href="https:\/\/www\.youtube\.com\/channel\/(UC[\w-]{10,})"/);
+      html.match(/"externalId":"(UC[\w-]{10,})"/) ??
+      html.match(/"channelId":"(UC[\w-]{10,})"/);
     if (m) {
       handleCache.set(cleaned, m[1]);
       return m[1];
