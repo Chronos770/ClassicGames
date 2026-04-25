@@ -45,7 +45,7 @@ export default function PushSettings() {
 
   const flash = (m: string) => {
     setMsg(m);
-    setTimeout(() => setMsg(null), 3500);
+    setTimeout(() => setMsg(null), 8000);
   };
 
   const handleEnable = async () => {
@@ -75,9 +75,23 @@ export default function PushSettings() {
 
   const handleTest = async () => {
     setBusy(true);
+    // Re-check OS-level permission first — Android sometimes silently revokes
+    // notification permission for an installed PWA without changing the push
+    // subscription, so the server send "succeeds" but nothing ever fires.
+    if (typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
+      setBusy(false);
+      flash(`Permission is "${Notification.permission}". Re-enable notifications in browser/OS settings.`);
+      return;
+    }
     const r = await sendTestNotification();
     setBusy(false);
-    flash(r.ok ? 'Test sent — check your phone.' : `Test failed: ${r.error}`);
+    if (r.ok) {
+      flash(
+        `Sent — ${r.sent} push${r.sent === 1 ? '' : 'es'} delivered. If nothing appears, check the OS notification settings for this app.`,
+      );
+    } else {
+      flash(`Test failed: ${r.error}`);
+    }
   };
 
   const togglePref = async (key: keyof PushPreferences, value: boolean | number | null) => {

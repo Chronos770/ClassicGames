@@ -188,11 +188,19 @@ export async function savePreferences(prefs: Partial<PushPreferences>): Promise<
 
 // Sends a one-off "test" notification to your own subscriptions through
 // push-send, so you can confirm everything is wired up without waiting for
-// the cron.
-export async function sendTestNotification(): Promise<{ ok: boolean; error?: string }> {
+// the cron. Returns the raw counts from push-send so the caller can show a
+// useful message (success vs "function returned 0 sent" vs network error).
+export async function sendTestNotification(): Promise<{
+  ok: boolean;
+  error?: string;
+  sent?: number;
+  removed?: number;
+  skipped?: number;
+  users_reached?: number;
+}> {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return { ok: false, error: 'Not signed in' };
-  const { error } = await supabase.functions.invoke('push-send', {
+  const { data, error } = await supabase.functions.invoke('push-send', {
     body: {
       user_ids: [userData.user.id],
       alert_kind: 'test',
@@ -201,8 +209,33 @@ export async function sendTestNotification(): Promise<{ ok: boolean; error?: str
       body: 'Push notifications are working.',
       url: '/weather',
       tag: 'test',
+      bypass_quiet_hours: true,
     },
   });
-  if (error) return { ok: false, error: error.message };
-  return { ok: true };
+  if (error) {
+    // Try to read the function's response body, which often has the real
+    // reason inside a 4xx/5xx — supabase-js stuffs it on `error.context`.
+    const ctx = (error as any).context;
+    let serverMsg = '';
+    try {
+      if (ctx?.json) serverMsg = JSON.stringify(await ctx.json());
+      else if (ctx?.text) serverMsg = await ctx.text();
+    } catch {
+      /* ignore */
+    }
+    return { ok: false, error: serverMsg ? `${error.message}: ${serverMsg}` : error.message };
+  }
+  // eslint-disable-next-line no-console
+  console.log('[push-send response]', data);
+  const sent = data?.sent ?? 0;
+  const removed = data?.removed ?? 0;
+  const skipped = data?.skipped ?? 0;
+  const users_reached = data?.users_reached ?? 0;
+  if (sent === 0) {
+    let why = data?.reason || 'function returned sent=0';
+    if (removed > 0) why = 'subscription was stale and was removed — re-enable notifications';
+    else if (skipped > 0) why = 'all targets skipped (preferences or quiet hours)';
+    return { ok: false, error: why, sent, removed, skipped, users_reached };
+  }
+  return { ok: true, sent, removed, skipped, users_reached };
 }
