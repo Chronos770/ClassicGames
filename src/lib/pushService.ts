@@ -1,8 +1,13 @@
 import { supabase } from './supabase';
 
-// VAPID public key (URL-safe base64). Set in Vite env so it's bundled.
-// The matching private key lives only on the Supabase edge function.
-export const VAPID_PUBLIC_KEY = (import.meta as any).env?.VITE_VAPID_PUBLIC_KEY ?? '';
+// VAPID public key (URL-safe base64). The matching private key lives only on
+// the Supabase edge function (push-send) as a Supabase secret. The public key
+// is, by definition, public — it's safe to ship in the bundle. Hardcoded as
+// a fallback so it Just Works without requiring a Vite env var on Vercel
+// (matches the existing pattern for the Supabase URL/anon key in supabase.ts).
+const VAPID_FALLBACK = 'BHk3LKXZRt_sHYHG4GhZYBAA3iQ1zfKtJMdZTk12iBN3RWpXjtg_bOMCBfXghj5asI7Ncnx_Q2YMFqMULP20pIo';
+export const VAPID_PUBLIC_KEY =
+  (import.meta as any).env?.VITE_VAPID_PUBLIC_KEY || VAPID_FALLBACK;
 
 export interface PushPreferences {
   rain_incoming: boolean;
