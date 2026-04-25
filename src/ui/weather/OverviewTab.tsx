@@ -337,18 +337,6 @@ function ConditionsGrid({
       </Card>
 
       <ETContextCard stationId={stationId} reading={reading} tick={tick} />
-
-      <Card title="ISS Signal">
-        <DataRow label="RSSI" value={reading.rssi_last !== null ? `${reading.rssi_last} dBm` : '--'} mono />
-        <DataRow label="Reception (day)" value={reading.reception_day !== null ? `${reading.reception_day}%` : '--'} mono />
-        <DataRow label="Trans Battery" value={reading.trans_battery_volt !== null ? `${reading.trans_battery_volt.toFixed(2)} V` : '--'} mono />
-        <DataRow
-          label="Battery Flag"
-          value={reading.trans_battery_flag === 0 ? 'OK' : reading.trans_battery_flag !== null ? `Low (${reading.trans_battery_flag})` : '--'}
-          valueClass={reading.trans_battery_flag === 0 ? 'text-green-400' : reading.trans_battery_flag ? 'text-red-400' : ''}
-          mono
-        />
-      </Card>
     </div>
   );
 }
