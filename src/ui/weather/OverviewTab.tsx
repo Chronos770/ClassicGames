@@ -42,18 +42,39 @@ export default function OverviewTab({ reading, station, stationId, tick }: Props
         reading.rain_storm_current_in > 0 &&
         reading.rain_storm_current_start_at && <ActiveStormCard reading={reading} />}
       <ConditionsGrid reading={reading} recentRows={recent.rows} stationId={stationId} tick={tick} />
-      {station?.latitude !== null && station?.longitude !== null && station && (
-        <div className="mt-4">
-          <SunArc lat={station.latitude!} lon={station.longitude!} now={new Date(reading.observed_at)} />
-        </div>
-      )}
+
+      {/* Sun + Moon side by side */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 mt-4">
-        <WindRose rows={history30d.rows.filter((r) => {
-          const age = Date.now() - new Date(r.observed_at).getTime();
-          return age <= 24 * 3600_000;
-        })} />
+        {station?.latitude !== null && station?.longitude !== null && station ? (
+          <SunArc lat={station.latitude!} lon={station.longitude!} now={new Date(reading.observed_at)} />
+        ) : (
+          <div />
+        )}
         <MoonCard now={new Date(reading.observed_at)} />
       </div>
+
+      {/* Wind direction components together: live compass + 24h wind rose */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 mt-4">
+        <Card title="Wind">
+          <WindFromToHeader dir={reading.wind_dir_last} speed={reading.wind_speed_last} />
+          <div className="flex justify-center py-2">
+            <WindCompass
+              dirCurrent={reading.wind_dir_last}
+              dirAvg={reading.wind_dir_scalar_avg_last_10_min}
+              speed={reading.wind_speed_last}
+              gust={reading.wind_speed_hi_last_10_min}
+              size={240}
+            />
+          </div>
+        </Card>
+        <WindRose
+          rows={history30d.rows.filter((r) => {
+            const age = Date.now() - new Date(r.observed_at).getTime();
+            return age <= 24 * 3600_000;
+          })}
+        />
+      </div>
+
       <div className="mt-6">
         <h2 className="text-sm text-white/60 mb-3 uppercase tracking-wide font-semibold">Forecast</h2>
         <ForecastSection station={station} tick={tick} />
@@ -254,19 +275,6 @@ function ConditionsGrid({
               mono
             />
           </div>
-        </div>
-      </Card>
-
-      <Card title="Wind">
-        <WindFromToHeader dir={reading.wind_dir_last} speed={reading.wind_speed_last} />
-        <div className="flex justify-center py-2">
-          <WindCompass
-            dirCurrent={reading.wind_dir_last}
-            dirAvg={reading.wind_dir_scalar_avg_last_10_min}
-            speed={reading.wind_speed_last}
-            gust={reading.wind_speed_hi_last_10_min}
-            size={240}
-          />
         </div>
       </Card>
 
