@@ -276,10 +276,17 @@ function DailyGrid({
   periods: NwsForecastPeriod[];
   hourly: NwsForecastPeriod[];
 }) {
-  // Pair up day/night periods
+  // Pair up day/night periods. Skip the "Tonight" period (today's night)
+  // entirely — covered above by hourly + tomorrow banner already, and a
+  // standalone Tonight row clutters the 7-day list.
+  const todayKey = new Date().toDateString();
+  const filtered = periods.filter(
+    (p) =>
+      !(new Date(p.startTime).toDateString() === todayKey && !p.isDaytime),
+  );
   const days: { day?: NwsForecastPeriod; night?: NwsForecastPeriod; key: string }[] = [];
   let current: { day?: NwsForecastPeriod; night?: NwsForecastPeriod; key: string } | null = null;
-  for (const p of periods) {
+  for (const p of filtered) {
     const dateKey = new Date(p.startTime).toDateString();
     if (!current || current.key !== dateKey) {
       if (current) days.push(current);
@@ -294,7 +301,9 @@ function DailyGrid({
     <div className="bg-white/5 rounded-xl border border-white/10 p-4">
       <div className="text-xs uppercase tracking-wide text-white/40 mb-3 font-semibold">7-Day Forecast</div>
       <div className="space-y-2">
-        {days.map((d) => {
+        {days
+          .filter((d) => d.day || d.night)
+          .map((d) => {
           const primary = d.day ?? d.night!;
           const hiPeriod = d.day ?? null;
           const loPeriod = d.night ?? null;
