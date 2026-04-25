@@ -137,6 +137,7 @@ export default function LineChart({
   }
 
   return (
+    <div className="w-full">
     <div
       ref={(el) => {
         if (el && el.clientWidth !== width) setWidth(el.clientWidth);
@@ -233,41 +234,45 @@ export default function LineChart({
         </div>
       )}
 
-      {/* Legend — tap any series to toggle visibility. Sized as proper
-          tap targets so it works on mobile without zooming. */}
-      {series.length > 1 && (
-        <div className="flex flex-wrap gap-2 mt-2 px-1">
-          {series.map((s) => {
-            const isHidden = hidden.has(s.label);
-            return (
-              <button
-                key={s.label}
-                type="button"
-                onClick={() => {
-                  setHidden((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(s.label)) next.delete(s.label);
-                    else next.add(s.label);
-                    return next;
-                  });
-                }}
-                title={isHidden ? `Show ${s.label}` : `Hide ${s.label}`}
-                className={`flex items-center gap-2 text-xs cursor-pointer select-none transition-all rounded-full px-3 py-1.5 border ${
-                  isHidden
-                    ? 'opacity-50 line-through border-white/10 bg-white/0'
-                    : 'opacity-100 border-white/15 bg-white/5 hover:bg-white/10'
-                }`}
-              >
-                <span
-                  className="w-3 h-3 rounded-full flex-shrink-0"
-                  style={{ background: isHidden ? 'rgba(255,255,255,0.25)' : s.color }}
-                />
-                <span className={isHidden ? 'text-white/50' : 'text-white/85'}>{s.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
+    </div>
+
+    {/* Legend — sits OUTSIDE the height-locked chart container so its
+        rounded-pill buttons take their own row in the parent flow
+        instead of overflowing onto whatever follows the chart. Tap any
+        series to toggle visibility. */}
+    {series.length > 1 && (
+      <div className="flex flex-wrap gap-2 mt-3 px-1">
+        {series.map((s) => {
+          const isHidden = hidden.has(s.label);
+          return (
+            <button
+              key={s.label}
+              type="button"
+              onClick={() => {
+                setHidden((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(s.label)) next.delete(s.label);
+                  else next.add(s.label);
+                  return next;
+                });
+              }}
+              title={isHidden ? `Show ${s.label}` : `Hide ${s.label}`}
+              className={`flex items-center gap-2 text-xs cursor-pointer select-none transition-all rounded-full px-3 py-1.5 border ${
+                isHidden
+                  ? 'opacity-50 line-through border-white/10 bg-white/0'
+                  : 'opacity-100 border-white/15 bg-white/5 hover:bg-white/10'
+              }`}
+            >
+              <span
+                className="w-3 h-3 rounded-full flex-shrink-0"
+                style={{ background: isHidden ? 'rgba(255,255,255,0.25)' : s.color }}
+              />
+              <span className={isHidden ? 'text-white/50' : 'text-white/85'}>{s.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    )}
     </div>
   );
 }
