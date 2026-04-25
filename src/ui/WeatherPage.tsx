@@ -17,6 +17,7 @@ import HistoryTab from './weather/HistoryTab';
 import RadarTab from './weather/RadarTab';
 import HealthTab from './weather/HealthTab';
 import ForecastTab from './weather/ForecastTab';
+import NewsTab from './weather/NewsTab';
 import { WeatherInstallButton, useWeatherManifest } from './weather/WeatherPwa';
 import WeatherAlertsBanner from './weather/WeatherAlertsBanner';
 import TomorrowBanner from './weather/TomorrowBanner';
@@ -24,13 +25,14 @@ import UnitsToggle from './weather/UnitsToggle';
 import WeatherBackground from './weather/WeatherBackground';
 import { classifyCondition } from '../lib/weatherCondition';
 
-type Tab = 'overview' | 'forecast' | 'history' | 'radar' | 'health';
+type Tab = 'overview' | 'forecast' | 'history' | 'radar' | 'news' | 'health';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'overview', label: 'Overview', icon: '\u{1F4CA}' },
   { id: 'forecast', label: 'Forecast', icon: '\u{1F324}\u{FE0F}' },
   { id: 'history', label: 'History', icon: '\u{1F4C8}' },
   { id: 'radar', label: 'Radar', icon: '\u{1F4E1}' },
+  { id: 'news', label: 'News', icon: '\u{1F4F0}' },
   { id: 'health', label: 'Station', icon: '\u{1F4CD}' },
 ];
 
@@ -294,6 +296,7 @@ export default function WeatherPage() {
             )}
             {tab === 'history' && <HistoryTab stationId={stationId} lastIngestTick={lastIngestTick} />}
             {tab === 'radar' && <RadarTab station={station} />}
+            {tab === 'news' && <NewsTab tick={lastIngestTick} />}
             {tab === 'health' && reading && (
               <HealthTab reading={reading} station={station} stationId={stationId} lastIngestTick={lastIngestTick} />
             )}

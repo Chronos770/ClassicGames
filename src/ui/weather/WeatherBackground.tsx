@@ -244,11 +244,13 @@ export default function WeatherBackground({ condition, windMph }: Props) {
       const H = h();
       ctx.clearRect(0, 0, W, H);
 
-      // Sun glow — kept subtle so the page content remains the focus.
+      // Sun glow — pulled WAY down because translucent card backgrounds
+      // (bg-white/5) bleed-through anything bright on the canvas behind
+      // them, making it look like the sun "overlays" the content.
       if (condition.isDay && (k === 'sunny' || k === 'hot' || k === 'partlyCloudy')) {
-        const grad = ctx.createRadialGradient(sunX(), sunY(), 0, sunX(), sunY(), 220);
-        grad.addColorStop(0, 'rgba(253, 224, 71, 0.18)');
-        grad.addColorStop(0.4, 'rgba(251, 191, 36, 0.07)');
+        const grad = ctx.createRadialGradient(sunX(), sunY(), 0, sunX(), sunY(), 130);
+        grad.addColorStop(0, 'rgba(253, 224, 71, 0.08)');
+        grad.addColorStop(0.5, 'rgba(251, 191, 36, 0.025)');
         grad.addColorStop(1, 'rgba(251, 191, 36, 0)');
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, W, H);
@@ -260,11 +262,11 @@ export default function WeatherBackground({ condition, windMph }: Props) {
             ray.a += ray.speed * dt;
             const pulse = 0.5 + 0.2 * Math.sin(t / 400 + ray.phase * 6);
             ctx.rotate(ray.a);
-            ctx.fillStyle = `rgba(253, 224, 71, ${0.04 * pulse})`;
+            ctx.fillStyle = `rgba(253, 224, 71, ${0.018 * pulse})`;
             ctx.beginPath();
             ctx.moveTo(0, 0);
-            ctx.lineTo(280, -10);
-            ctx.lineTo(280, 10);
+            ctx.lineTo(170, -7);
+            ctx.lineTo(170, 7);
             ctx.closePath();
             ctx.fill();
             ctx.rotate(-ray.a);
@@ -272,9 +274,9 @@ export default function WeatherBackground({ condition, windMph }: Props) {
           ctx.restore();
         }
 
-        ctx.fillStyle = 'rgba(253, 224, 71, 0.7)';
+        ctx.fillStyle = 'rgba(253, 224, 71, 0.5)';
         ctx.beginPath();
-        ctx.arc(sunX(), sunY(), 22, 0, Math.PI * 2);
+        ctx.arc(sunX(), sunY(), 16, 0, Math.PI * 2);
         ctx.fill();
 
         // Hot: heat shimmer near bottom
