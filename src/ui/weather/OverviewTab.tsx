@@ -10,7 +10,6 @@ import { classifyCondition } from '../../lib/weatherCondition';
 import { useRecentReadings, extremes, trendPerHour, todaysRows } from '../../lib/weatherTrends';
 import WindCompass from './WindCompass';
 import RainGauge from './RainGauge';
-import ForecastSection from './ForecastSection';
 import ActiveStormCard from './ActiveStormCard';
 import PressureSparkline from './PressureSparkline';
 import SunArc from './SunArc';
@@ -75,10 +74,6 @@ export default function OverviewTab({ reading, station, stationId, tick }: Props
         />
       </div>
 
-      <div className="mt-6">
-        <h2 className="text-sm text-white/60 mb-3 uppercase tracking-wide font-semibold">Forecast</h2>
-        <ForecastSection station={station} tick={tick} />
-      </div>
     </>
   );
 }

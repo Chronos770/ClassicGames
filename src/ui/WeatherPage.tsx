@@ -16,6 +16,7 @@ import OverviewTab from './weather/OverviewTab';
 import HistoryTab from './weather/HistoryTab';
 import RadarTab from './weather/RadarTab';
 import HealthTab from './weather/HealthTab';
+import ForecastTab from './weather/ForecastTab';
 import { WeatherInstallButton, useWeatherManifest } from './weather/WeatherPwa';
 import WeatherAlertsBanner from './weather/WeatherAlertsBanner';
 import TomorrowBanner from './weather/TomorrowBanner';
@@ -23,10 +24,11 @@ import UnitsToggle from './weather/UnitsToggle';
 import WeatherBackground from './weather/WeatherBackground';
 import { classifyCondition } from '../lib/weatherCondition';
 
-type Tab = 'overview' | 'history' | 'radar' | 'health';
+type Tab = 'overview' | 'forecast' | 'history' | 'radar' | 'health';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'overview', label: 'Overview', icon: '\u{1F4CA}' },
+  { id: 'forecast', label: 'Forecast', icon: '\u{1F324}\u{FE0F}' },
   { id: 'history', label: 'History', icon: '\u{1F4C8}' },
   { id: 'radar', label: 'Radar', icon: '\u{1F4E1}' },
   { id: 'health', label: 'Station', icon: '\u{1F4CD}' },
@@ -250,7 +252,7 @@ export default function WeatherPage() {
 
         {/* Alerts + precip outlook above the tabs so they're visible on every tab */}
         <WeatherAlertsBanner station={station} tick={lastIngestTick} />
-        <TomorrowBanner station={station} tick={lastIngestTick} />
+        <TomorrowBanner station={station} tick={lastIngestTick} onOpen={() => setTab('forecast')} />
 
         {/* Tab bar */}
         <div className="flex gap-1 mb-5 overflow-x-auto pb-1">
@@ -286,6 +288,9 @@ export default function WeatherPage() {
                 stationId={stationId}
                 tick={lastIngestTick}
               />
+            )}
+            {tab === 'forecast' && (
+              <ForecastTab station={station} tick={lastIngestTick} onBack={() => setTab('overview')} />
             )}
             {tab === 'history' && <HistoryTab stationId={stationId} lastIngestTick={lastIngestTick} />}
             {tab === 'radar' && <RadarTab station={station} />}
