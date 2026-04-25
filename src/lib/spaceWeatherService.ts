@@ -113,6 +113,75 @@ export function kpDescription(kp: number | null): { label: string; tone: string 
   return { label: 'Extreme storm (G5)', tone: 'text-fuchsia-400' };
 }
 
+// Plain-English label for any NOAA scale value (G/S/R, 0-5).
+export function scaleLabel(v: number): { label: string; tone: string } {
+  if (v <= 0) return { label: 'All clear', tone: 'text-emerald-300' };
+  if (v === 1) return { label: 'Minor', tone: 'text-yellow-300' };
+  if (v === 2) return { label: 'Moderate', tone: 'text-amber-300' };
+  if (v === 3) return { label: 'Strong', tone: 'text-orange-300' };
+  if (v === 4) return { label: 'Severe', tone: 'text-red-300' };
+  return { label: 'Extreme', tone: 'text-fuchsia-300' };
+}
+
+// Plain-English flare activity label from raw X-ray flux.
+export function flareActivity(flux: number | null): { label: string; tone: string } {
+  if (flux === null || !Number.isFinite(flux) || flux <= 0)
+    return { label: 'No data', tone: 'text-white/50' };
+  if (flux < 1e-6) return { label: 'Quiet sun', tone: 'text-emerald-300' };
+  if (flux < 1e-5) return { label: 'Mild flare activity', tone: 'text-amber-300' };
+  if (flux < 1e-4) return { label: 'Moderate flare — possible radio impact', tone: 'text-red-300' };
+  return { label: 'Major flare in progress!', tone: 'text-fuchsia-300' };
+}
+
+// Plain-English solar-wind summary based on speed + Bz.
+export function solarWindActivity(
+  speed: number | null,
+  bz: number | null,
+): { label: string; tone: string } {
+  if (speed === null || !Number.isFinite(speed)) return { label: 'No data', tone: 'text-white/50' };
+  const fast = speed > 600;
+  const veryFast = speed > 800;
+  const stronglyNeg = bz !== null && bz < -10;
+  const slightlyNeg = bz !== null && bz < -5;
+  if (veryFast || (fast && stronglyNeg))
+    return { label: 'CME impact — strong aurora driver', tone: 'text-fuchsia-300' };
+  if (fast && slightlyNeg) return { label: 'Fast & aurora-friendly', tone: 'text-amber-300' };
+  if (fast) return { label: 'Fast wind', tone: 'text-amber-300' };
+  if (stronglyNeg) return { label: 'Aurora-friendly magnetism', tone: 'text-amber-300' };
+  if (speed < 350) return { label: 'Calm wind', tone: 'text-emerald-300' };
+  return { label: 'Normal', tone: 'text-emerald-300' };
+}
+
+// Plain-English sunspot activity from sunspot number.
+export function sunspotActivity(ssn: number | null): { label: string; tone: string } {
+  if (ssn === null || !Number.isFinite(ssn)) return { label: 'No data', tone: 'text-white/50' };
+  if (ssn === 0) return { label: 'No sunspots', tone: 'text-emerald-300' };
+  if (ssn < 50) return { label: 'Low activity', tone: 'text-emerald-300' };
+  if (ssn < 100) return { label: 'Moderate activity', tone: 'text-amber-300' };
+  if (ssn < 150) return { label: 'High activity', tone: 'text-orange-300' };
+  return { label: 'Very active sun', tone: 'text-red-300' };
+}
+
+// Try to derive a friendly title for an SWPC alert from its message body.
+// The message starts with metadata then has a SUMMARY: line — we extract it
+// when present, else fall back to a code-prefix lookup.
+export function alertSummary(productId: string, message: string): string {
+  const sumMatch = message.match(/SUMMARY:\s*(.+)/i);
+  if (sumMatch) return sumMatch[1].trim();
+  const code = productId.toUpperCase();
+  if (code.startsWith('ALTPC')) return 'Proton (radiation) alert';
+  if (code.startsWith('ALTK')) return 'Geomagnetic Kp alert';
+  if (code.startsWith('ALTEF')) return 'High-energy electron alert';
+  if (code.startsWith('ALTXM') || code.startsWith('ALTX')) return 'X-ray flare alert';
+  if (code.startsWith('ALTTP')) return 'Type-II radio sweep alert';
+  if (code.startsWith('WARK')) return 'Kp warning';
+  if (code.startsWith('WATA')) return 'Geomagnetic storm watch';
+  if (code.startsWith('SUMK')) return 'Kp summary';
+  if (code.startsWith('SUM')) return 'Event summary';
+  if (code.startsWith('FOR')) return 'Forecast update';
+  return code;
+}
+
 // Rough aurora visibility verdict for a given latitude. Kp roughly maps to
 // the equatorward edge of visible aurora (degrees magnetic latitude). This
 // is an approximation suitable for "is it worth looking outside?" decisions,

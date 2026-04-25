@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  alertSummary,
   auroraVisible,
   fetchSpaceWeather,
+  flareActivity,
   flareClass,
   kpDescription,
+  scaleLabel,
+  solarWindActivity,
+  sunspotActivity,
   SDO_IMAGES,
   type SpaceWeatherSnapshot,
 } from '../../lib/spaceWeatherService';
@@ -123,23 +128,31 @@ function NoaaScalesCard({ scales }: { scales: { G: number; S: number; R: number 
     :           'text-fuchsia-300 border-fuchsia-500/30 bg-fuchsia-500/10';
   return (
     <div className="bg-white/5 rounded-xl border border-white/10 p-4">
-      <CardHeader title="Storm watch right now">
-        Three NOAA scales: storms, radiation, and radio blackouts. 0 means quiet, 5 means
-        extreme. Tap any card for the full explanation.
+      <CardHeader title="Is anything unusual happening?">
+        Three NOAA scales for storms (G), radiation (S), and radio blackouts (R). Tap any
+        card for the full explanation.
       </CardHeader>
       <div className="grid grid-cols-3 gap-3">
-        {items.map((it) => (
-          <details key={it.letter} className={`rounded-xl border p-3 ${colorFor(it.value)}`}>
-            <summary className="cursor-pointer list-none text-center">
-              <div className="text-3xl font-display font-bold">
-                {it.letter}
-                {it.value}
-              </div>
-              <div className="text-[10px] uppercase tracking-wide opacity-80 mt-1">{it.label}</div>
-            </summary>
-            <div className="text-[11px] opacity-85 mt-2 leading-relaxed">{it.explain}</div>
-          </details>
-        ))}
+        {items.map((it) => {
+          const status = scaleLabel(it.value);
+          return (
+            <details key={it.letter} className={`rounded-xl border p-3 ${colorFor(it.value)}`}>
+              <summary className="cursor-pointer list-none text-center">
+                <div className={`text-base font-display font-semibold leading-tight ${status.tone}`}>
+                  {status.label}
+                </div>
+                <div className="text-[10px] uppercase tracking-wide opacity-70 mt-1">
+                  {it.label}
+                </div>
+                <div className="text-[10px] uppercase tracking-wide opacity-50 mt-0.5 font-mono">
+                  {it.letter}
+                  {it.value}
+                </div>
+              </summary>
+              <div className="text-[11px] opacity-85 mt-2 leading-relaxed">{it.explain}</div>
+            </details>
+          );
+        })}
       </div>
     </div>
   );
@@ -158,11 +171,11 @@ function KpCard({ data, station }: { data: SpaceWeatherSnapshot; station: Weathe
         Drives aurora visibility; at the high end can also cause GPS errors and power-grid
         stress.
       </CardHeader>
-      <div className="flex items-baseline gap-3">
-        <span className="text-4xl font-display font-bold text-white tabular-nums">
-          {kp === null ? '—' : kp.toFixed(1)}
+      <div className="flex items-baseline gap-3 flex-wrap">
+        <span className={`text-3xl font-display font-bold ${desc.tone}`}>{desc.label}</span>
+        <span className="text-xs text-white/40 font-mono">
+          Kp {kp === null ? '—' : kp.toFixed(1)}
         </span>
-        <span className={`text-sm font-semibold ${desc.tone}`}>{desc.label}</span>
       </div>
       <div className="mt-3 h-2 bg-white/5 rounded-full overflow-hidden">
         <div
@@ -237,13 +250,13 @@ function FlareCard({ data }: { data: SpaceWeatherSnapshot }) {
         is 10× stronger. C-class is mild, M is moderate (sometimes brief radio blackouts),
         X is severe.
       </CardHeader>
-      <div className="flex items-baseline gap-3">
-        <span className="text-4xl font-display font-bold tabular-nums">
-          <span className={tone}>{cls.letter}</span>
-          <span className="text-white">{cls.magnitude}</span>
+      <div className="flex items-baseline gap-3 flex-wrap">
+        <span className={`text-3xl font-display font-bold ${flareActivity(data.xray.latest_flux).tone}`}>
+          {flareActivity(data.xray.latest_flux).label}
         </span>
-        <span className="text-xs text-white/50">
-          {data.xray.latest_flux !== null ? `${data.xray.latest_flux.toExponential(2)} W/m²` : ''}
+        <span className="text-xs text-white/40 font-mono">
+          Class <span className={tone}>{cls.letter}</span>
+          {cls.magnitude}
         </span>
       </div>
       <div className="mt-2">
@@ -282,6 +295,14 @@ function SolarWindCard({ data }: { data: SpaceWeatherSnapshot }) {
         <strong className="text-white/75">Speed</strong> over ~600 km/s usually means a
         coronal-mass-ejection (CME) is hitting.
       </CardHeader>
+      {(() => {
+        const a = solarWindActivity(l.speed, l.bz);
+        return (
+          <div className={`text-2xl font-display font-bold mb-3 ${a.tone}`}>
+            {a.label}
+          </div>
+        );
+      })()}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Stat label="Speed" sub="how fast" value={l.speed === null ? '—' : `${Math.round(l.speed)}`} unit="km/s" tone={
           l.speed === null ? 'text-white/50' :
@@ -378,6 +399,12 @@ function SunspotsCard({ data }: { data: SpaceWeatherSnapshot }) {
         Dark spots on the Sun where flares and solar storms come from. More spots and more
         active groups generally means a more energetic Sun.
       </CardHeader>
+      {(() => {
+        const a = sunspotActivity(typeof ssn === 'number' ? ssn : ssn !== null ? Number(ssn) : null);
+        return (
+          <div className={`text-2xl font-display font-bold mb-3 ${a.tone}`}>{a.label}</div>
+        );
+      })()}
       <div className="grid grid-cols-2 gap-3">
         <Stat
           label="Spots today"
@@ -477,18 +504,21 @@ function SunImageCard({ imgIndex, setImgIndex }: { imgIndex: number; setImgIndex
 function AlertsCard({ alerts }: { alerts: { issued: string; product_id: string; message: string }[] }) {
   return (
     <div className="bg-white/5 rounded-xl border border-white/10 p-4">
-      <CardHeader title="Recent space weather alerts">
+      <CardHeader title="What NOAA is warning about">
         Official advisories from NOAA's Space Weather Prediction Center, last 36 hours. Tap
         any item below to read the full text.
       </CardHeader>
       <div className="space-y-2">
         {alerts.map((a, i) => (
           <details key={i} className="bg-white/5 rounded-lg border border-white/5 overflow-hidden">
-            <summary className="cursor-pointer list-none flex items-center gap-2 p-3 hover:bg-white/5 transition-colors">
-              <span className="text-xs font-mono text-amber-300">{a.product_id}</span>
-              <span className="text-[10px] text-white/40">
+            <summary className="cursor-pointer list-none flex items-baseline gap-2 p-3 hover:bg-white/5 transition-colors flex-wrap">
+              <span className="text-sm text-white font-medium flex-1 min-w-0">
+                {alertSummary(a.product_id, a.message)}
+              </span>
+              <span className="text-[10px] text-white/40 font-mono">
                 {new Date(a.issued + 'Z').toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
               </span>
+              <span className="text-[10px] text-white/30 font-mono">{a.product_id}</span>
             </summary>
             <div className="px-3 pb-3 pt-1 text-xs text-white/65 whitespace-pre-wrap leading-relaxed font-mono">
               {a.message}
