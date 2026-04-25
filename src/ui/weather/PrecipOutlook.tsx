@@ -68,10 +68,11 @@ function eventLabel(kinds: Set<Kind>): string {
   return 'Precipitation';
 }
 
-// Walk hourly periods and group any contiguous run with prob >= 15% into a
-// single event, regardless of whether the kind switches mid-event (e.g.,
-// showers → showers+thunder → showers). Adjacent periods within 30 min are
-// considered contiguous.
+// Walk hourly periods and group any contiguous run of likely precip into a
+// single event. We use a low entry threshold (>= 15%) just to detect the
+// envelope of an event, but the event is only *kept* if its peak chance
+// exceeds 50% (filtered later in the component). Adjacent periods within
+// 30 min are treated as contiguous.
 function buildEvents(periods: NwsForecastPeriod[]): Event[] {
   const out: Event[] = [];
   let cur: Event | null = null;
@@ -186,7 +187,11 @@ export default function PrecipOutlook({ station, tick }: Props) {
 
   const events = useMemo(() => {
     if (!periods) return [];
-    return buildEvents(periods).slice(0, 3);
+    // Only surface events whose peak chance is "likely" (>= 50%). Anything
+    // lower is too noisy to put at the top of the page on every visit.
+    return buildEvents(periods)
+      .filter((e) => e.peakProb >= 50)
+      .slice(0, 3);
   }, [periods]);
 
   if (hourly.loading && !periods) return null;

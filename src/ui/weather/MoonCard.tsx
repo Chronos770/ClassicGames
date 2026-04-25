@@ -1,5 +1,28 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { getMoonPhase, moonIllumination, moonPhaseName } from '../../lib/astronomy';
+
+// Inject moon CSS once. Same pattern as AnimatedWeatherIcon — also avoids
+// the prefers-reduced-motion override so Brave / iOS-Low-Power-Mode still
+// see the gentle glow / drift.
+const MOON_STYLE_ID = 'wx-moon-styles';
+const MOON_STYLES = `
+@keyframes wx-moon-glow { 0%,100% { opacity: 0.45; } 50% { opacity: 0.85; } }
+@keyframes wx-moon-bob  { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+@keyframes wx-moon-shimmer { 0%,100% { opacity: 0.10; } 50% { opacity: 0.22; } }
+.wx-moon-disk  { animation: wx-moon-bob 6s ease-in-out infinite; transform-origin: center; }
+.wx-moon-glow  { animation: wx-moon-glow 4s ease-in-out infinite; transform-origin: center; }
+.wx-moon-craters { animation: wx-moon-shimmer 5s ease-in-out infinite; }
+`;
+let moonInjected = false;
+function ensureMoonStyles() {
+  if (moonInjected || typeof document === 'undefined') return;
+  if (document.getElementById(MOON_STYLE_ID)) { moonInjected = true; return; }
+  const el = document.createElement('style');
+  el.id = MOON_STYLE_ID;
+  el.textContent = MOON_STYLES;
+  document.head.appendChild(el);
+  moonInjected = true;
+}
 
 interface Props {
   now?: Date;
@@ -43,6 +66,7 @@ function moonShadowPath(phase: number, cx: number, cy: number, r: number): strin
 }
 
 export default function MoonCard({ now }: Props) {
+  useEffect(() => { ensureMoonStyles(); }, []);
   const data = useMemo(() => {
     const t = now ?? new Date();
     const phase = getMoonPhase(t);
@@ -108,27 +132,23 @@ export default function MoonCard({ now }: Props) {
             </filter>
           </defs>
 
-          {/* Soft glow */}
-          <circle cx={cx} cy={cy} r={r + 2} fill="rgba(254,243,199,0.08)" />
+          {/* Soft pulsing aura */}
+          <circle className="wx-moon-glow" cx={cx} cy={cy} r={r + 6} fill="rgba(254,243,199,0.18)" />
 
-          {/* Lit moon disk */}
-          <circle cx={cx} cy={cy} r={r} fill="url(#moonLit)" filter="url(#moonGlow)" />
-
-          {/* Subtle craters (decorative) */}
-          <g opacity="0.18" fill="#71717a">
-            <circle cx={cx - r * 0.25} cy={cy - r * 0.15} r={r * 0.12} />
-            <circle cx={cx + r * 0.18} cy={cy + r * 0.22} r={r * 0.08} />
-            <circle cx={cx - r * 0.05} cy={cy + r * 0.35} r={r * 0.06} />
-            <circle cx={cx + r * 0.32} cy={cy - r * 0.28} r={r * 0.05} />
+          {/* The moon itself, gently bobbing */}
+          <g className="wx-moon-disk">
+            <circle cx={cx} cy={cy} r={r} fill="url(#moonLit)" filter="url(#moonGlow)" />
+            <g className="wx-moon-craters" fill="#71717a">
+              <circle cx={cx - r * 0.25} cy={cy - r * 0.15} r={r * 0.12} />
+              <circle cx={cx + r * 0.18} cy={cy + r * 0.22} r={r * 0.08} />
+              <circle cx={cx - r * 0.05} cy={cy + r * 0.35} r={r * 0.06} />
+              <circle cx={cx + r * 0.32} cy={cy - r * 0.28} r={r * 0.05} />
+            </g>
+            {shadow && (
+              <path d={shadow} fill="url(#moonShadow)" stroke="rgba(0,0,0,0.4)" strokeWidth="0.5" />
+            )}
+            <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
           </g>
-
-          {/* Shadow overlay */}
-          {shadow && (
-            <path d={shadow} fill="url(#moonShadow)" stroke="rgba(0,0,0,0.4)" strokeWidth="0.5" />
-          )}
-
-          {/* Outline */}
-          <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
         </svg>
 
         {/* Stats */}

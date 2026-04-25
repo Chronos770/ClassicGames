@@ -337,12 +337,11 @@ const styles = `
 
 .wx-flake-spin { transform-origin: 50px 50px; animation: wx-spin 12s linear infinite; }
 
-@media (prefers-reduced-motion: reduce) {
-  .wx-sun-rays, .wx-sun-body, .wx-star-a, .wx-star-b, .wx-star-c,
-  .wx-cloud-slow, .wx-cloud-fast, .wx-drop, .wx-flake, .wx-bolt,
-  .wx-fog-a, .wx-fog-b, .wx-fog-c, .wx-wind-a, .wx-wind-b, .wx-wind-c,
-  .wx-flake-spin {
-    animation: none !important;
-  }
-}
+/*
+ * Intentionally NO prefers-reduced-motion override here. Brave (and Safari in
+ * Low Power Mode) report 'reduce' by default on mobile to deter fingerprinting
+ * / save battery, which previously killed every icon animation on those
+ * browsers. The icons are tiny + decorative; if you're motion-sensitive,
+ * iOS/Android system "reduce motion" will still slow whole-app transitions.
+ */
 `;

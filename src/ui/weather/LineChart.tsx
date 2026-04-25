@@ -24,18 +24,21 @@ export default function LineChart({
   formatX,
 }: Props) {
   const [hoverX, setHoverX] = useState<number | null>(null);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
   const PAD_L = 44;
   const PAD_R = 12;
   const PAD_T = 12;
   const PAD_B = 28;
   const [width, setWidth] = useState(800);
 
+  const visibleSeries = useMemo(() => series.filter((s) => !hidden.has(s.label)), [series, hidden]);
+
   const { minT, maxT, minY, maxY } = useMemo(() => {
     let minT = Infinity;
     let maxT = -Infinity;
     let minY = Infinity;
     let maxY = -Infinity;
-    for (const s of series) {
+    for (const s of visibleSeries) {
       for (const p of s.points) {
         if (p.t < minT) minT = p.t;
         if (p.t > maxT) maxT = p.t;
@@ -66,7 +69,7 @@ export default function LineChart({
       maxT = Date.now();
     }
     return { minT, maxT, minY, maxY };
-  }, [series, yDomain]);
+  }, [visibleSeries, yDomain]);
 
   const xScale = (t: number) => PAD_L + ((t - minT) / (maxT - minT || 1)) * (width - PAD_L - PAD_R);
   const yScale = (v: number) => PAD_T + (1 - (v - minY) / (maxY - minY || 1)) * (height - PAD_T - PAD_B);
@@ -94,11 +97,11 @@ export default function LineChart({
   const fmtY = formatY ?? ((v: number) => `${v.toFixed(1)}${yUnit}`);
   const fmtX = formatX ?? defaultFmtX;
 
-  // Find closest point per series to hoverX
+  // Find closest point per series to hoverX (only for visible series)
   const hoverPoints = useMemo(() => {
     if (hoverX === null) return null;
     const tAtHover = minT + ((hoverX - PAD_L) / (width - PAD_L - PAD_R)) * (maxT - minT);
-    return series.map((s) => {
+    return visibleSeries.map((s) => {
       let closest: { t: number; v: number | null } | null = null;
       let minDiff = Infinity;
       for (const p of s.points) {
@@ -110,7 +113,7 @@ export default function LineChart({
       }
       return { label: s.label, color: s.color, point: closest };
     });
-  }, [hoverX, series, minT, maxT, width]);
+  }, [hoverX, visibleSeries, minT, maxT, width]);
 
   // Build smooth path for each series
   function buildPath(points: { t: number; v: number | null }[]): string {
@@ -177,10 +180,10 @@ export default function LineChart({
             {fmtX(t)}
           </text>
         ))}
-        {/* Series */}
-        {series.map((s, i) => (
+        {/* Series (only the visible ones) */}
+        {visibleSeries.map((s, i) => (
           <path
-            key={i}
+            key={`${s.label}-${i}`}
             d={buildPath(s.points)}
             fill="none"
             stroke={s.color}
@@ -230,15 +233,36 @@ export default function LineChart({
         </div>
       )}
 
-      {/* Legend */}
+      {/* Legend — click any series to toggle visibility */}
       {series.length > 1 && (
-        <div className="flex flex-wrap gap-3 mt-1 px-2">
-          {series.map((s) => (
-            <div key={s.label} className="flex items-center gap-1.5 text-[10px] text-white/50">
-              <span className="w-3 h-0.5" style={{ background: s.color }} />
-              {s.label}
-            </div>
-          ))}
+        <div className="flex flex-wrap gap-x-3 gap-y-1.5 mt-1 px-2">
+          {series.map((s) => {
+            const isHidden = hidden.has(s.label);
+            return (
+              <button
+                key={s.label}
+                type="button"
+                onClick={() => {
+                  setHidden((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(s.label)) next.delete(s.label);
+                    else next.add(s.label);
+                    return next;
+                  });
+                }}
+                title={isHidden ? `Show ${s.label}` : `Hide ${s.label}`}
+                className={`flex items-center gap-1.5 text-[10px] cursor-pointer select-none transition-opacity ${
+                  isHidden ? 'opacity-40 line-through' : 'opacity-100 hover:opacity-80'
+                }`}
+              >
+                <span
+                  className="w-3 h-0.5 rounded-sm"
+                  style={{ background: isHidden ? 'rgba(255,255,255,0.3)' : s.color }}
+                />
+                <span className={isHidden ? 'text-white/40' : 'text-white/70'}>{s.label}</span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

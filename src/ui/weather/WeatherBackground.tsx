@@ -282,10 +282,12 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         }
       }
 
-      // Stars
+      // Stars — always twinkle (subtle), independent of reduced-motion since
+      // the effect is tiny and nice. Twinkle amplitude is intentionally light:
+      // brightness varies between ~0.7 and 1.0 of base alpha.
       for (const s of stars) {
-        if (!reduced) s.phase += s.speed * dt;
-        const tw = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(s.phase));
+        s.phase += s.speed * dt * 0.35;
+        const tw = 0.7 + 0.3 * (0.5 + 0.5 * Math.sin(s.phase));
         ctx.globalAlpha = s.a * tw;
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(s.x, s.y, 1.8, 1.8);
