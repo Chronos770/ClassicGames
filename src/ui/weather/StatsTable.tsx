@@ -204,7 +204,7 @@ export default function StatsTable({ readings }: { readings: WeatherReading[] })
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto bg-white/5 rounded-xl border border-white/10">
+      <div className="overflow-x-auto bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10">
         <table className="w-full text-xs tabular-nums">
           <thead>
             <tr className="border-b border-white/10 bg-black/20">
@@ -386,7 +386,7 @@ export function StatsSummary({ readings }: { readings: WeatherReading[] }) {
   if (readings.length === 0) return null;
 
   return (
-    <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+    <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 overflow-hidden">
       <div className="px-3 py-2 border-b border-white/10 bg-black/20 text-[10px] uppercase tracking-wide text-white/50 font-semibold">
         Summary &middot; {readings.length.toLocaleString()} readings
       </div>

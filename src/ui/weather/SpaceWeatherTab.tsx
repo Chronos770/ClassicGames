@@ -127,7 +127,7 @@ function NoaaScalesCard({ scales }: { scales: { G: number; S: number; R: number 
     : v === 4 ? 'text-red-300 border-red-500/30 bg-red-500/10'
     :           'text-fuchsia-300 border-fuchsia-500/30 bg-fuchsia-500/10';
   return (
-    <div className="bg-white/5 rounded-xl border border-white/10 p-4">
+    <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
       <CardHeader title="Is anything unusual happening?">
         Three NOAA scales for storms (G), radiation (S), and radio blackouts (R). Tap any
         card for the full explanation.
@@ -165,7 +165,7 @@ function KpCard({ data, station }: { data: SpaceWeatherSnapshot; station: Weathe
   const pct = kp === null ? 0 : Math.min(1, kp / max);
 
   return (
-    <div className="bg-white/5 rounded-xl border border-white/10 p-4">
+    <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
       <CardHeader title="How shaken-up Earth's magnetism is">
         Known as the <span className="font-mono text-white/70">Kp index</span> (0–9 scale).
         Drives aurora visibility; at the high end can also cause GPS errors and power-grid
@@ -243,7 +243,7 @@ function FlareCard({ data }: { data: SpaceWeatherSnapshot }) {
     : 'text-white/60';
 
   return (
-    <div className="bg-white/5 rounded-xl border border-white/10 p-4">
+    <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
       <CardHeader title="Solar flare strength">
         Bursts of X-rays from the Sun (called{' '}
         <span className="font-mono text-white/70">X-ray flux</span>). Classes A–X, each step
@@ -285,7 +285,7 @@ function SolarWindCard({ data }: { data: SpaceWeatherSnapshot }) {
   const l = data.solar_wind.latest;
   const bzTone = l.bz === null ? 'text-white/50' : l.bz < -10 ? 'text-fuchsia-300' : l.bz < -5 ? 'text-amber-300' : l.bz < 0 ? 'text-emerald-300' : 'text-white/70';
   return (
-    <div className="bg-white/5 rounded-xl border border-white/10 p-4">
+    <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
       <CardHeader title="Wind from the Sun">
         Stream of particles flowing past Earth (the{' '}
         <span className="font-mono text-white/70">solar wind</span>, measured by DSCOVR a
@@ -394,7 +394,7 @@ function SunspotsCard({ data }: { data: SpaceWeatherSnapshot }) {
   const ssn = (data.sunspots.latest as any)?.SSN ?? (data.sunspots.latest as any)?.ssn ?? null;
   const f10 = (data.sunspots.latest as any)?.f10 ?? (data.sunspots.latest as any)?.flux_10cm ?? null;
   return (
-    <div className="bg-white/5 rounded-xl border border-white/10 p-4">
+    <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
       <CardHeader title="How busy the Sun's surface is">
         Dark spots on the Sun where flares and solar storms come from. More spots and more
         active groups generally means a more energetic Sun.
@@ -446,7 +446,7 @@ function AuroraCard({ data, station }: { data: SpaceWeatherSnapshot; station: We
     : 'Unlikely';
 
   return (
-    <div className="bg-white/5 rounded-xl border border-white/10 p-4">
+    <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
       <CardHeader title="Northern lights tonight">
         Whether the aurora's likely to be visible from your station's latitude, based on
         the current Kp value. At your latitude ({lat !== null ? `${lat.toFixed(1)}°` : '?'}),
@@ -462,7 +462,7 @@ function AuroraCard({ data, station }: { data: SpaceWeatherSnapshot; station: We
 function SunImageCard({ imgIndex, setImgIndex }: { imgIndex: number; setImgIndex: (n: number) => void }) {
   const img = SDO_IMAGES[imgIndex];
   return (
-    <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+    <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 overflow-hidden">
       <div className="px-4 pt-4 pb-2 flex items-baseline justify-between gap-2 flex-wrap">
         <div>
           <div className="text-xs uppercase tracking-wide text-white/40 font-semibold">
@@ -503,14 +503,14 @@ function SunImageCard({ imgIndex, setImgIndex }: { imgIndex: number; setImgIndex
 
 function AlertsCard({ alerts }: { alerts: { issued: string; product_id: string; message: string }[] }) {
   return (
-    <div className="bg-white/5 rounded-xl border border-white/10 p-4">
+    <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
       <CardHeader title="What NOAA is warning about">
         Official advisories from NOAA's Space Weather Prediction Center, last 36 hours. Tap
         any item below to read the full text.
       </CardHeader>
       <div className="space-y-2">
         {alerts.map((a, i) => (
-          <details key={i} className="bg-white/5 rounded-lg border border-white/5 overflow-hidden">
+          <details key={i} className="bg-slate-900/60 backdrop-blur-sm rounded-lg border border-white/5 overflow-hidden">
             <summary className="cursor-pointer list-none flex items-baseline gap-2 p-3 hover:bg-white/5 transition-colors flex-wrap">
               <span className="text-sm text-white font-medium flex-1 min-w-0">
                 {alertSummary(a.product_id, a.message)}
@@ -532,7 +532,7 @@ function AlertsCard({ alerts }: { alerts: { issued: string; product_id: string; 
 
 function ThreeDayCard({ lines }: { lines: string[] }) {
   return (
-    <div className="bg-white/5 rounded-xl border border-white/10 p-4">
+    <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
       <CardHeader title="Next 3 days">
         Highlights from NOAA's 3-day space-weather forecast discussion.
       </CardHeader>

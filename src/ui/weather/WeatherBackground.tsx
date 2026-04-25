@@ -129,17 +129,18 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         }
       }
 
-      // CLOUDS
-      if (k === 'cloudy' || k === 'partlyCloudy' || k === 'sunny' || k === 'hot' || k === 'windy') {
-        const count = k === 'cloudy' ? 12 : k === 'partlyCloudy' ? 6 : k === 'windy' ? 4 : 3;
+      // CLOUDS — only conditions that should actually show clouds. Sunny,
+      // hot, windy, fog, and clear no longer spawn random clouds.
+      if (k === 'cloudy' || k === 'partlyCloudy') {
+        const count = k === 'cloudy' ? 12 : 5;
         for (let i = 0; i < count; i++) {
           clouds.push({
             x: Math.random() * W,
             y: 30 + Math.random() * (H * 0.55),
             scale: 0.9 + Math.random() * 1.6,
             speed: (10 + Math.random() * 18) * (windFactor !== 0 ? Math.sign(windFactor) : 1),
-            a: condition.isDay ? 0.18 + Math.random() * 0.15 : 0.1 + Math.random() * 0.1,
-            type: k === 'windy' ? 'wisp' : Math.random() > 0.6 ? 'wisp' : 'puffy',
+            a: condition.isDay ? 0.20 + Math.random() * 0.15 : 0.10 + Math.random() * 0.10,
+            type: Math.random() > 0.6 ? 'wisp' : 'puffy',
           });
         }
       }

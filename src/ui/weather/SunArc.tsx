@@ -59,7 +59,7 @@ export default function SunArc({ lat, lon, now }: Props) {
   })();
 
   return (
-    <div className="bg-white/5 rounded-xl border border-white/10 p-4">
+    <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
       <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
         <div className="text-xs uppercase tracking-wide text-white/40 font-semibold">
           {isNight ? 'Tomorrow’s Sun' : 'Sun Path'}

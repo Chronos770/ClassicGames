@@ -139,7 +139,7 @@ export default function StormsList({
       {storms.map((s) => {
         const pct = (s.total_in / maxTotal) * 100;
         return (
-          <div key={s.start_at} className="bg-white/5 rounded-lg border border-white/10 p-3">
+          <div key={s.start_at} className="bg-slate-900/60 backdrop-blur-sm rounded-lg border border-white/10 p-3">
             <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
               <div className="flex items-center gap-2">
                 {s.ongoing && (

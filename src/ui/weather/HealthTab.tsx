@@ -176,7 +176,7 @@ export default function HealthTab({
       </div>
 
       {/* Console info */}
-      <div className="bg-white/5 rounded-xl border border-white/10 p-4">
+      <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
         <div className="text-xs uppercase tracking-wide text-white/40 mb-3 font-semibold">Console</div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
           <KV k="Battery %" v={reading.battery_percent !== null ? `${reading.battery_percent}%` : '--'} />
@@ -209,7 +209,7 @@ export default function HealthTab({
       </div>
 
       {/* Signal chart */}
-      <div className="bg-white/5 rounded-xl border border-white/10 p-4">
+      <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
         <div className="flex items-baseline justify-between mb-3">
           <div className="text-xs uppercase tracking-wide text-white/40 font-semibold">Radio Signal (RSSI)</div>
           {rssiMin !== null && rssiMax !== null && (
@@ -222,7 +222,7 @@ export default function HealthTab({
       </div>
 
       {/* Reception chart */}
-      <div className="bg-white/5 rounded-xl border border-white/10 p-4">
+      <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
         <div className="flex items-baseline justify-between mb-3">
           <div className="text-xs uppercase tracking-wide text-white/40 font-semibold">Packet Reception</div>
           {receptionAvg !== null && <div className="text-[10px] text-white/40">avg {receptionAvg.toFixed(1)}%</div>}
@@ -231,13 +231,13 @@ export default function HealthTab({
       </div>
 
       {/* Transmitter battery */}
-      <div className="bg-white/5 rounded-xl border border-white/10 p-4">
+      <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
         <div className="text-xs uppercase tracking-wide text-white/40 mb-3 font-semibold">Transmitter Battery Voltage</div>
         <LineChart series={batterySeries} height={160} yUnit=" V" />
       </div>
 
       {/* Console battery */}
-      <div className="bg-white/5 rounded-xl border border-white/10 p-4">
+      <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
         <div className="text-xs uppercase tracking-wide text-white/40 mb-3 font-semibold">Console Battery %</div>
         <LineChart series={consoleBatterySeries} height={160} yDomain={[0, 100]} yUnit="%" />
       </div>
@@ -269,7 +269,7 @@ function HealthCard({
     neutral: 'text-white/50',
   };
   return (
-    <div className="bg-white/5 rounded-xl border border-white/10 p-3">
+    <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-3">
       <div className="text-[10px] uppercase tracking-wide text-white/40 mb-1">{label}</div>
       <div className="text-lg font-mono text-white tabular-nums">{value}</div>
       <div className={`text-xs ${toneClass[tone]}`}>{sub}</div>
