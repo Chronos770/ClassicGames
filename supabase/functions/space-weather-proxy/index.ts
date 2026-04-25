@@ -21,11 +21,13 @@ const SWPC = 'https://services.swpc.noaa.gov';
 
 // SWPC "products" endpoints return [["col1","col2",...], [val,val,...], ...]
 // — a header row followed by rows. Convert to array of objects.
-function tabularToObjects(arr: any[]): Record<string, any>[] {
+function tabularToObjects(arr: any): Record<string, any>[] {
   if (!Array.isArray(arr) || arr.length < 2) return [];
   const [headers, ...rows] = arr;
-  return rows.map((row: any[]) => {
+  if (!Array.isArray(headers)) return [];
+  return rows.map((row: any) => {
     const obj: Record<string, any> = {};
+    if (!Array.isArray(row)) return obj;
     headers.forEach((h: string, i: number) => (obj[h] = row[i]));
     return obj;
   });
@@ -61,8 +63,29 @@ function tail<T>(arr: T[], n: number): T[] {
   return arr.slice(Math.max(0, arr.length - n));
 }
 
+// Coerce anything to an array so .filter / .map don't throw if NOAA returns
+// an unexpected shape (object, scalar, etc).
+function asArray<T = any>(v: any): T[] {
+  return Array.isArray(v) ? v : [];
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  try {
+    return await handle();
+  } catch (err) {
+    return new Response(
+      JSON.stringify({
+        error: String(err),
+        stack: err instanceof Error ? err.stack : null,
+      }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  }
+});
+
+async function handle(): Promise<Response> {
 
   // Fire all SWPC requests in parallel.
   const [
@@ -119,15 +142,15 @@ Deno.serve(async (req) => {
   // Returns array of { time_tag, satellite, flux, observed_flux, energy }
   // with energy '0.1-0.8nm' (long) and '0.05-0.4nm' (short). Long is the
   // standard for flare classification.
-  const xrayLong = (xrays ?? [])
-    .filter((r: any) => r.energy === '0.1-0.8nm')
+  const xrayLong = asArray(xrays)
+    .filter((r: any) => r?.energy === '0.1-0.8nm')
     .map((r: any) => ({ time: r.time_tag, flux: Number(r.flux) }));
   const latestFlux = xrayLong[xrayLong.length - 1]?.flux ?? null;
 
   // ── Alerts (last 24h) ──────────────────────────────────────────
   const sinceMs = Date.now() - 36 * 3600_000;
-  const recentAlerts = (alerts ?? [])
-    .filter((a: any) => a.issue_datetime && new Date(a.issue_datetime + 'Z').getTime() >= sinceMs)
+  const recentAlerts = asArray(alerts)
+    .filter((a: any) => a?.issue_datetime && new Date(a.issue_datetime + 'Z').getTime() >= sinceMs)
     .slice(0, 25)
     .map((a: any) => ({
       issued: a.issue_datetime,
@@ -154,12 +177,9 @@ Deno.serve(async (req) => {
 
   // ── Sunspots / active regions ──────────────────────────────────
   // Sunspot report = daily counts; solar_regions = currently visible regions.
-  const latestSunspot = Array.isArray(sunspotReport) && sunspotReport.length
-    ? sunspotReport[sunspotReport.length - 1]
-    : null;
-  const activeRegionsCount = Array.isArray(solarRegions)
-    ? solarRegions.filter((r: any) => r.observed_date).length
-    : 0;
+  const sunspotArr = asArray(sunspotReport);
+  const latestSunspot = sunspotArr.length ? sunspotArr[sunspotArr.length - 1] : null;
+  const activeRegionsCount = asArray(solarRegions).filter((r: any) => r?.observed_date).length;
 
   // ── 3-day discussion text — extract just a couple of headers ───
   let threeDayHeadlines: string[] = [];
@@ -204,4 +224,4 @@ Deno.serve(async (req) => {
     }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
   );
-});
+}
