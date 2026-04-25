@@ -70,7 +70,7 @@ export function classifyCondition(
       label: 'Thunderstorm',
       emoji: '\u{26C8}\u{FE0F}',
       gradient: gradient('from-indigo-500/20', 'via-purple-500/10', 'to-transparent'),
-      pageBg: 'from-slate-900 via-indigo-950 to-slate-900',
+      pageBg: 'from-indigo-950 via-purple-950 to-slate-950',
       isDay,
     };
   }
@@ -81,7 +81,7 @@ export function classifyCondition(
       label: 'Heavy Rain',
       emoji: '\u{1F327}\u{FE0F}',
       gradient: gradient('from-blue-600/20', 'via-slate-500/10', 'to-transparent'),
-      pageBg: 'from-slate-900 via-blue-950 to-slate-900',
+      pageBg: 'from-blue-950 via-slate-900 to-blue-950',
       isDay,
     };
   }
@@ -92,7 +92,7 @@ export function classifyCondition(
       label: 'Rain',
       emoji: '\u{1F327}\u{FE0F}',
       gradient: gradient('from-blue-500/15', 'via-slate-500/10', 'to-transparent'),
-      pageBg: 'from-slate-900 via-blue-950/80 to-slate-900',
+      pageBg: 'from-slate-900 via-blue-950 to-slate-900',
       isDay,
     };
   }
@@ -103,7 +103,7 @@ export function classifyCondition(
       label: 'Drizzle',
       emoji: '\u{1F326}\u{FE0F}',
       gradient: gradient('from-sky-500/15', 'via-slate-500/5', 'to-transparent'),
-      pageBg: 'from-slate-900 via-sky-950/60 to-slate-900',
+      pageBg: 'from-slate-900 via-sky-950 to-slate-800',
       isDay,
     };
   }
@@ -114,7 +114,7 @@ export function classifyCondition(
       label: 'Snow',
       emoji: '\u{2744}\u{FE0F}',
       gradient: gradient('from-sky-300/15', 'via-slate-300/10', 'to-transparent'),
-      pageBg: 'from-slate-900 via-slate-800 to-slate-900',
+      pageBg: 'from-slate-700 via-slate-600 to-slate-800',
       isDay,
     };
   }
@@ -126,7 +126,7 @@ export function classifyCondition(
       label: 'Fog',
       emoji: '\u{1F32B}\u{FE0F}',
       gradient: gradient('from-slate-400/15', 'via-slate-500/5', 'to-transparent'),
-      pageBg: 'from-slate-800 via-slate-700 to-slate-800',
+      pageBg: 'from-slate-600 via-slate-500 to-slate-700',
       isDay,
     };
   }
@@ -137,7 +137,7 @@ export function classifyCondition(
       label: 'Windy',
       emoji: '\u{1F4A8}',
       gradient: gradient('from-teal-500/15', 'via-slate-500/5', 'to-transparent'),
-      pageBg: 'from-slate-900 via-teal-950/60 to-slate-900',
+      pageBg: 'from-teal-950 via-slate-900 to-teal-900',
       isDay,
     };
   }
@@ -148,7 +148,7 @@ export function classifyCondition(
       label: 'Hot & Clear',
       emoji: '\u{1F525}',
       gradient: gradient('from-orange-500/20', 'via-amber-500/10', 'to-transparent'),
-      pageBg: 'from-orange-950 via-amber-950/80 to-slate-900',
+      pageBg: 'from-orange-900 via-amber-900 to-red-950',
       isDay,
     };
   }
@@ -158,7 +158,7 @@ export function classifyCondition(
       label: 'Frigid',
       emoji: '\u{1F976}',
       gradient: gradient('from-sky-400/15', 'via-indigo-500/10', 'to-transparent'),
-      pageBg: 'from-slate-900 via-sky-950 to-slate-900',
+      pageBg: 'from-indigo-950 via-sky-950 to-slate-900',
       isDay,
     };
   }
@@ -180,7 +180,7 @@ export function classifyCondition(
       label: 'Clear Night',
       emoji: '\u{1F319}',
       gradient: gradient('from-indigo-600/20', 'via-slate-600/10', 'to-transparent'),
-      pageBg: 'from-slate-950 via-indigo-950 to-slate-950',
+      pageBg: 'from-indigo-950 via-slate-950 to-slate-950',
       isDay,
     };
   }
@@ -191,7 +191,7 @@ export function classifyCondition(
       label: 'Sunny',
       emoji: '\u{2600}\u{FE0F}',
       gradient: gradient('from-amber-400/20', 'via-sky-400/10', 'to-transparent'),
-      pageBg: 'from-sky-900 via-sky-950 to-slate-900',
+      pageBg: 'from-sky-700 via-sky-800 to-blue-900',
       isDay,
     };
   }
@@ -201,7 +201,7 @@ export function classifyCondition(
       label: 'Partly Cloudy',
       emoji: '\u{26C5}',
       gradient: gradient('from-sky-400/15', 'via-slate-400/10', 'to-transparent'),
-      pageBg: 'from-slate-800 via-sky-950/60 to-slate-900',
+      pageBg: 'from-sky-800 via-slate-700 to-sky-900',
       isDay,
     };
   }
@@ -210,7 +210,7 @@ export function classifyCondition(
     label: 'Cloudy',
     emoji: '\u{2601}\u{FE0F}',
     gradient: gradient('from-slate-400/15', 'via-slate-500/5', 'to-transparent'),
-    pageBg: 'from-slate-800 via-slate-900 to-slate-900',
+    pageBg: 'from-slate-700 via-slate-600 to-slate-800',
     isDay,
   };
 }

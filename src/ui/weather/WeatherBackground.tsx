@@ -139,7 +139,7 @@ export default function WeatherBackground({ condition, windMph }: Props) {
             y: 30 + Math.random() * (H * 0.55),
             scale: 0.9 + Math.random() * 1.6,
             speed: (10 + Math.random() * 18) * (windFactor !== 0 ? Math.sign(windFactor) : 1),
-            a: condition.isDay ? 0.20 + Math.random() * 0.15 : 0.10 + Math.random() * 0.10,
+            a: condition.isDay ? 0.32 + Math.random() * 0.22 : 0.16 + Math.random() * 0.14,
             type: Math.random() > 0.6 ? 'wisp' : 'puffy',
           });
         }
@@ -245,13 +245,65 @@ export default function WeatherBackground({ condition, windMph }: Props) {
       const H = h();
       ctx.clearRect(0, 0, W, H);
 
-      // Sun glow — pulled WAY down because translucent card backgrounds
-      // (bg-white/5) bleed-through anything bright on the canvas behind
-      // them, making it look like the sun "overlays" the content.
+      // Whole-canvas color wash that tints the scene to the current weather.
+      // Cards on top are opaque enough that this reads as ambient mood
+      // rather than bleed-through. Tones the whole viewport with a soft
+      // gradient sympathetic to the condition.
+      const wash = ctx.createLinearGradient(0, 0, 0, H);
+      if (k === 'thunderstorm') {
+        wash.addColorStop(0, 'rgba(67, 56, 202, 0.22)');
+        wash.addColorStop(0.6, 'rgba(30, 27, 75, 0.18)');
+        wash.addColorStop(1, 'rgba(15, 23, 42, 0.10)');
+      } else if (k === 'heavyRain' || k === 'rain') {
+        wash.addColorStop(0, 'rgba(30, 64, 175, 0.18)');
+        wash.addColorStop(1, 'rgba(15, 23, 42, 0.05)');
+      } else if (k === 'drizzle') {
+        wash.addColorStop(0, 'rgba(56, 189, 248, 0.10)');
+        wash.addColorStop(1, 'rgba(15, 23, 42, 0.04)');
+      } else if (k === 'snow') {
+        wash.addColorStop(0, 'rgba(186, 230, 253, 0.14)');
+        wash.addColorStop(1, 'rgba(241, 245, 249, 0.06)');
+      } else if (k === 'fog') {
+        wash.addColorStop(0, 'rgba(203, 213, 225, 0.16)');
+        wash.addColorStop(1, 'rgba(148, 163, 184, 0.20)');
+      } else if (k === 'windy') {
+        wash.addColorStop(0, 'rgba(20, 184, 166, 0.10)');
+        wash.addColorStop(1, 'rgba(15, 23, 42, 0.05)');
+      } else if (k === 'hot') {
+        wash.addColorStop(0, 'rgba(249, 115, 22, 0.20)');
+        wash.addColorStop(0.6, 'rgba(245, 158, 11, 0.12)');
+        wash.addColorStop(1, 'rgba(127, 29, 29, 0.08)');
+      } else if (k === 'cold') {
+        wash.addColorStop(0, 'rgba(99, 102, 241, 0.14)');
+        wash.addColorStop(1, 'rgba(30, 58, 138, 0.10)');
+      } else if (k === 'sunny' && condition.isDay) {
+        wash.addColorStop(0, 'rgba(56, 189, 248, 0.16)');
+        wash.addColorStop(0.5, 'rgba(253, 224, 71, 0.10)');
+        wash.addColorStop(1, 'rgba(15, 23, 42, 0.04)');
+      } else if (k === 'partlyCloudy' && condition.isDay) {
+        wash.addColorStop(0, 'rgba(56, 189, 248, 0.10)');
+        wash.addColorStop(1, 'rgba(15, 23, 42, 0.04)');
+      } else if (k === 'cloudy') {
+        wash.addColorStop(0, 'rgba(100, 116, 139, 0.14)');
+        wash.addColorStop(1, 'rgba(15, 23, 42, 0.06)');
+      } else if (!condition.isDay) {
+        // Clear / partly-cloudy night
+        wash.addColorStop(0, 'rgba(30, 27, 75, 0.18)');
+        wash.addColorStop(1, 'rgba(2, 6, 23, 0.10)');
+      } else {
+        wash.addColorStop(0, 'rgba(15, 23, 42, 0.04)');
+        wash.addColorStop(1, 'rgba(15, 23, 42, 0.04)');
+      }
+      ctx.fillStyle = wash;
+      ctx.fillRect(0, 0, W, H);
+
+      // Sun glow — restored intensity now that cards are opaque enough not
+      // to bleed yellow through their backgrounds.
       if (condition.isDay && (k === 'sunny' || k === 'hot' || k === 'partlyCloudy')) {
-        const grad = ctx.createRadialGradient(sunX(), sunY(), 0, sunX(), sunY(), 130);
-        grad.addColorStop(0, 'rgba(253, 224, 71, 0.08)');
-        grad.addColorStop(0.5, 'rgba(251, 191, 36, 0.025)');
+        const glowR = k === 'partlyCloudy' ? 180 : 240;
+        const grad = ctx.createRadialGradient(sunX(), sunY(), 0, sunX(), sunY(), glowR);
+        grad.addColorStop(0, 'rgba(253, 224, 71, 0.22)');
+        grad.addColorStop(0.5, 'rgba(251, 191, 36, 0.09)');
         grad.addColorStop(1, 'rgba(251, 191, 36, 0)');
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, W, H);
@@ -263,11 +315,11 @@ export default function WeatherBackground({ condition, windMph }: Props) {
             ray.a += ray.speed * dt;
             const pulse = 0.5 + 0.2 * Math.sin(t / 400 + ray.phase * 6);
             ctx.rotate(ray.a);
-            ctx.fillStyle = `rgba(253, 224, 71, ${0.018 * pulse})`;
+            ctx.fillStyle = `rgba(253, 224, 71, ${0.06 * pulse})`;
             ctx.beginPath();
             ctx.moveTo(0, 0);
-            ctx.lineTo(170, -7);
-            ctx.lineTo(170, 7);
+            ctx.lineTo(220, -9);
+            ctx.lineTo(220, 9);
             ctx.closePath();
             ctx.fill();
             ctx.rotate(-ray.a);
@@ -275,20 +327,36 @@ export default function WeatherBackground({ condition, windMph }: Props) {
           ctx.restore();
         }
 
-        ctx.fillStyle = 'rgba(253, 224, 71, 0.5)';
+        ctx.fillStyle = 'rgba(253, 224, 71, 0.78)';
         ctx.beginPath();
-        ctx.arc(sunX(), sunY(), 16, 0, Math.PI * 2);
+        ctx.arc(sunX(), sunY(), 22, 0, Math.PI * 2);
         ctx.fill();
 
         // Hot: heat shimmer near bottom
-        if (k === 'hot' ) {
+        if (k === 'hot') {
           for (let i = 0; i < 6; i++) {
             const y = H - 20 - i * 8;
             const offset = Math.sin(t / 200 + i) * 4;
-            ctx.fillStyle = `rgba(251, 191, 36, ${0.04 - i * 0.005})`;
+            ctx.fillStyle = `rgba(251, 191, 36, ${0.10 - i * 0.012})`;
             ctx.fillRect(0, y + offset, W, 3);
           }
         }
+      }
+
+      // Moon for clear / partly-cloudy nights — gives the night sky an
+      // anchor instead of just stars on a flat gradient.
+      if (!condition.isDay && (k === 'clear' || k === 'partlyCloudy' || k === 'sunny')) {
+        const mx = w() * 0.78;
+        const my = h() * 0.22;
+        const moonGlow = ctx.createRadialGradient(mx, my, 0, mx, my, 90);
+        moonGlow.addColorStop(0, 'rgba(226, 232, 240, 0.28)');
+        moonGlow.addColorStop(1, 'rgba(226, 232, 240, 0)');
+        ctx.fillStyle = moonGlow;
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = 'rgba(241, 245, 249, 0.92)';
+        ctx.beginPath();
+        ctx.arc(mx, my, 18, 0, Math.PI * 2);
+        ctx.fill();
       }
 
       // Stars — twinkle visibly. Wider modulation (35%-100% of base alpha)
