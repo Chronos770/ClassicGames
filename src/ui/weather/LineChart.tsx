@@ -233,9 +233,10 @@ export default function LineChart({
         </div>
       )}
 
-      {/* Legend — click any series to toggle visibility */}
+      {/* Legend — tap any series to toggle visibility. Sized as proper
+          tap targets so it works on mobile without zooming. */}
       {series.length > 1 && (
-        <div className="flex flex-wrap gap-x-3 gap-y-1.5 mt-1 px-2">
+        <div className="flex flex-wrap gap-2 mt-2 px-1">
           {series.map((s) => {
             const isHidden = hidden.has(s.label);
             return (
@@ -251,15 +252,17 @@ export default function LineChart({
                   });
                 }}
                 title={isHidden ? `Show ${s.label}` : `Hide ${s.label}`}
-                className={`flex items-center gap-1.5 text-[10px] cursor-pointer select-none transition-opacity ${
-                  isHidden ? 'opacity-40 line-through' : 'opacity-100 hover:opacity-80'
+                className={`flex items-center gap-2 text-xs cursor-pointer select-none transition-all rounded-full px-3 py-1.5 border ${
+                  isHidden
+                    ? 'opacity-50 line-through border-white/10 bg-white/0'
+                    : 'opacity-100 border-white/15 bg-white/5 hover:bg-white/10'
                 }`}
               >
                 <span
-                  className="w-3 h-0.5 rounded-sm"
-                  style={{ background: isHidden ? 'rgba(255,255,255,0.3)' : s.color }}
+                  className="w-3 h-3 rounded-full flex-shrink-0"
+                  style={{ background: isHidden ? 'rgba(255,255,255,0.25)' : s.color }}
                 />
-                <span className={isHidden ? 'text-white/40' : 'text-white/70'}>{s.label}</span>
+                <span className={isHidden ? 'text-white/50' : 'text-white/85'}>{s.label}</span>
               </button>
             );
           })}

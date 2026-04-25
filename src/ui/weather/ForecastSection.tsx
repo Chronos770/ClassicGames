@@ -44,7 +44,6 @@ export default function ForecastSection({
 
   return (
     <div className="space-y-5">
-      {forecast && <CurrentPeriod period={forecast.properties.periods[0]} />}
       {hourly && <Next24Hours periods={hourly.properties.periods.slice(0, 24)} />}
       {forecast && (
         <DailyGrid
@@ -56,40 +55,6 @@ export default function ForecastSection({
         Forecast: National Weather Service (weather.gov)
         {forecast && ` · Updated ${new Date(forecast.properties.updateTime).toLocaleString()}`}
       </div>
-    </div>
-  );
-}
-
-function CurrentPeriod({ period }: { period: NwsForecastPeriod }) {
-  return (
-    <div className="bg-gradient-to-br from-sky-500/10 via-blue-500/5 to-transparent rounded-2xl border border-white/10 p-5">
-      <div className="flex items-start justify-between gap-4 mb-2">
-        <div>
-          <div className="text-xs uppercase tracking-wide text-white/40 mb-1">{period.name}</div>
-          <div className="flex items-center gap-3">
-            <AnimatedWeatherIcon
-              conditionKey={forecastConditionKey(period.shortForecast, period.isDaytime)}
-              isDay={period.isDaytime}
-              size={72}
-            />
-            <span className="text-5xl font-display font-bold text-white tabular-nums">
-              {period.temperature}°{period.temperatureUnit}
-            </span>
-          </div>
-          <div className="text-sm text-white/70 mt-1">{period.shortForecast}</div>
-        </div>
-        <div className="text-right text-xs text-white/60 space-y-0.5">
-          <div>
-            <span className="text-white/40">Wind:</span> {period.windSpeed} {period.windDirection}
-          </div>
-          {period.probabilityOfPrecipitation.value !== null && (
-            <div>
-              <span className="text-white/40">Precip:</span> {period.probabilityOfPrecipitation.value}%
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="text-sm text-white/60 leading-relaxed">{period.detailedForecast}</div>
     </div>
   );
 }
@@ -276,17 +241,10 @@ function DailyGrid({
   periods: NwsForecastPeriod[];
   hourly: NwsForecastPeriod[];
 }) {
-  // Pair up day/night periods. Skip the "Tonight" period (today's night)
-  // entirely — covered above by hourly + tomorrow banner already, and a
-  // standalone Tonight row clutters the 7-day list.
-  const todayKey = new Date().toDateString();
-  const filtered = periods.filter(
-    (p) =>
-      !(new Date(p.startTime).toDateString() === todayKey && !p.isDaytime),
-  );
+  // Pair up day/night periods
   const days: { day?: NwsForecastPeriod; night?: NwsForecastPeriod; key: string }[] = [];
   let current: { day?: NwsForecastPeriod; night?: NwsForecastPeriod; key: string } | null = null;
-  for (const p of filtered) {
+  for (const p of periods) {
     const dateKey = new Date(p.startTime).toDateString();
     if (!current || current.key !== dateKey) {
       if (current) days.push(current);
