@@ -107,18 +107,20 @@ function Sun({ big = false }: { big?: boolean }) {
 function Moon() {
   return (
     <g>
-      {/* Soft halo that gently pulses */}
+      {/* Soft halo behind everything that pulses noticeably */}
       <circle
         cx={54}
         cy={48}
-        r={26}
+        r={28}
         fill="url(#wxMoonHalo)"
         className="wx-moon-halo"
       />
-      {/* Crescent: light disk + dark mask */}
-      <circle cx={54} cy={48} r={20} fill="#f1f5f9" className="wx-moon-body" />
-      <circle cx={62} cy={43} r={18} fill="#0b0b0d" />
-      {/* Twinkling stars — bigger, brighter, with a 4th color rotation */}
+      {/* Crescent (light disk + dark mask wrapped together so they pulse as a unit) */}
+      <g className="wx-moon-body">
+        <circle cx={54} cy={48} r={20} fill="#f1f5f9" />
+        <circle cx={62} cy={43} r={18} fill="#0b0b0d" />
+      </g>
+      {/* Twinkling stars */}
       <g className="wx-stars">
         <circle cx={20} cy={26} r={1.8} fill="#e2e8f0" className="wx-star-a" />
         <circle cx={82} cy={20} r={1.5} fill="#e2e8f0" className="wx-star-b" />
@@ -128,8 +130,8 @@ function Moon() {
       </g>
       <defs>
         <radialGradient id="wxMoonHalo">
-          <stop offset="0%" stopColor="rgba(241, 245, 249, 0.35)" />
-          <stop offset="60%" stopColor="rgba(241, 245, 249, 0.1)" />
+          <stop offset="0%" stopColor="rgba(241, 245, 249, 0.55)" />
+          <stop offset="55%" stopColor="rgba(241, 245, 249, 0.15)" />
           <stop offset="100%" stopColor="rgba(241, 245, 249, 0)" />
         </radialGradient>
       </defs>
@@ -326,9 +328,9 @@ const styles = `
 .wx-sun-rays { transform-origin: 50px 50px; animation: wx-rotate 20s linear infinite; }
 .wx-sun-body { transform-origin: 50px 50px; animation: wx-pulse 3s ease-in-out infinite; }
 
-.wx-moon-halo { transform-origin: 54px 48px; animation: wx-halo-pulse 4s ease-in-out infinite; }
-.wx-moon-body { transform-origin: 54px 48px; animation: wx-pulse 5s ease-in-out infinite; }
-@keyframes wx-halo-pulse { 0%, 100% { transform: scale(0.92); opacity: 0.7; } 50% { transform: scale(1.08); opacity: 1; } }
+.wx-moon-halo { transform-origin: 54px 48px; animation: wx-halo-pulse 2.4s ease-in-out infinite; }
+.wx-moon-body { transform-origin: 54px 48px; animation: wx-pulse 4s ease-in-out infinite; }
+@keyframes wx-halo-pulse { 0%, 100% { transform: scale(0.8); opacity: 0.4; } 50% { transform: scale(1.2); opacity: 1; } }
 
 .wx-star-a { animation: wx-twinkle 2.4s ease-in-out infinite; }
 .wx-star-b { animation: wx-twinkle 3.1s ease-in-out 0.6s infinite; }

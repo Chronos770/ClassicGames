@@ -282,19 +282,22 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         }
       }
 
-      // Stars — always twinkle (subtle), independent of reduced-motion since
-      // the effect is tiny and nice. Twinkle amplitude is intentionally light:
-      // brightness varies between ~0.7 and 1.0 of base alpha.
+      // Stars — twinkle visibly. Wider modulation (35%-100% of base alpha)
+      // and faster phase so the eye actually catches the change. The
+      // brightest ~15% of stars get an extra soft glow that pulses with
+      // them so they sparkle.
       for (const s of stars) {
-        s.phase += s.speed * dt * 0.35;
-        const tw = 0.7 + 0.3 * (0.5 + 0.5 * Math.sin(s.phase));
-        ctx.globalAlpha = s.a * tw;
+        s.phase += s.speed * dt * 1.4;
+        const norm = 0.5 + 0.5 * Math.sin(s.phase); // 0..1
+        const tw = 0.35 + 0.65 * norm;
+        ctx.globalAlpha = Math.min(1, s.a * tw);
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(s.x, s.y, 1.8, 1.8);
-        // Bigger glow on the brightest stars
-        if (s.a > 0.85) {
-          ctx.globalAlpha = s.a * tw * 0.3;
-          ctx.fillRect(s.x - 1, s.y - 1, 4, 4);
+        const sz = 1.6 + norm * 0.6;
+        ctx.fillRect(s.x, s.y, sz, sz);
+        if (s.a > 0.82) {
+          ctx.globalAlpha = s.a * tw * 0.45;
+          const g = 3.5 + norm * 2;
+          ctx.fillRect(s.x - g / 2 + sz / 2, s.y - g / 2 + sz / 2, g, g);
         }
       }
       ctx.globalAlpha = 1;
