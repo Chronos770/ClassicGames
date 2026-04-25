@@ -18,7 +18,7 @@ import RadarTab from './weather/RadarTab';
 import HealthTab from './weather/HealthTab';
 import { WeatherInstallButton, useWeatherManifest } from './weather/WeatherPwa';
 import WeatherAlertsBanner from './weather/WeatherAlertsBanner';
-import PrecipOutlook from './weather/PrecipOutlook';
+import TomorrowBanner from './weather/TomorrowBanner';
 import UnitsToggle from './weather/UnitsToggle';
 import WeatherBackground from './weather/WeatherBackground';
 import { classifyCondition } from '../lib/weatherCondition';
@@ -250,7 +250,7 @@ export default function WeatherPage() {
 
         {/* Alerts + precip outlook above the tabs so they're visible on every tab */}
         <WeatherAlertsBanner station={station} tick={lastIngestTick} />
-        <PrecipOutlook station={station} tick={lastIngestTick} />
+        <TomorrowBanner station={station} tick={lastIngestTick} />
 
         {/* Tab bar */}
         <div className="flex gap-1 mb-5 overflow-x-auto pb-1">
