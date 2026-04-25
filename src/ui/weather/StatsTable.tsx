@@ -338,29 +338,46 @@ export function StatsSummary({ readings }: { readings: WeatherReading[] }) {
   }, [readings, tempU, windU, pressU, windLabel]);
 
   const totalRain = useMemo(() => {
-    // Compute the window's rainfall by differencing consecutive samples of the
-    // console's own cumulative `rainfall_year_in` counter — this matches the
-    // console's year-total exactly. Year rollovers (Dec 31 → Jan 1) reset the
-    // counter to 0; we detect that by seeing the value drop and start a new
-    // segment. Missed ingest windows naturally self-correct at the next
-    // reading because we always diff against the previous sample.
+    // Two ingest paths give us two different rainfall fields per row, and
+    // we have to combine them correctly:
+    //
+    //   * Live rows (from WeatherLink /current, polled every 10 min) have the
+    //     cumulative `rainfall_year_in` counter. Differencing consecutive
+    //     samples gives the exact rain that fell between them.
+    //   * Backfilled rows (from /historic, 15-min archive buckets) DON'T
+    //     have `rainfall_year_in` — the historic API doesn't return it.
+    //     Instead, each row's `rainfall_last_15_min_in` is the rain that
+    //     fell in that one 15-min bucket (mapped from `rainfall_in`).
+    //
+    // Naively diffing only `rainfall_year_in` and skipping nulls silently
+    // drops every backfilled row's contribution, so windows that include
+    // historic data report a total much lower than reality. Combine both:
+    // diff the year counter when present, fall back to the per-period sum
+    // when not. Both are non-overlapping so the totals add cleanly.
     const sorted = [...readings].sort(
       (a, b) => new Date(a.observed_at).getTime() - new Date(b.observed_at).getTime(),
     );
     let total = 0;
-    let prev: number | null = null;
+    let prevYear: number | null = null;
     const seenDays = new Set<string>();
     for (const r of sorted) {
-      const v = r.rainfall_year_in;
-      if (v !== null && Number.isFinite(v)) {
-        if (prev !== null) {
-          if (v >= prev) total += v - prev;
-          else total += v; // year rollover — accept post-reset amount as lower bound
-        }
-        prev = v;
-      }
       const d = new Date(r.observed_at);
       seenDays.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`);
+
+      const yr = r.rainfall_year_in;
+      if (yr !== null && Number.isFinite(yr)) {
+        if (prevYear !== null) {
+          if (yr >= prevYear) total += yr - prevYear;
+          else total += yr; // year rollover — accept post-reset amount as lower bound
+        }
+        prevYear = yr;
+      } else {
+        // Historic / backfill row — no year counter. Add the row's
+        // per-period rainfall directly. These buckets don't overlap each
+        // other (15-min archive records).
+        const p = r.rainfall_last_15_min_in;
+        if (p !== null && Number.isFinite(p) && p > 0) total += p;
+      }
     }
     const converted = convertPrecip(total, precU) ?? 0;
     return { total: converted, days: seenDays.size };

@@ -46,7 +46,12 @@ export default function ForecastSection({
     <div className="space-y-5">
       {forecast && <CurrentPeriod period={forecast.properties.periods[0]} />}
       {hourly && <Next24Hours periods={hourly.properties.periods.slice(0, 24)} />}
-      {forecast && <DailyGrid periods={forecast.properties.periods} />}
+      {forecast && (
+        <DailyGrid
+          periods={forecast.properties.periods}
+          hourly={hourly?.properties.periods ?? []}
+        />
+      )}
       <div className="text-[10px] text-white/30 text-center">
         Forecast: National Weather Service (weather.gov)
         {forecast && ` · Updated ${new Date(forecast.properties.updateTime).toLocaleString()}`}
@@ -264,7 +269,13 @@ function SummaryStat({
   );
 }
 
-function DailyGrid({ periods }: { periods: NwsForecastPeriod[] }) {
+function DailyGrid({
+  periods,
+  hourly,
+}: {
+  periods: NwsForecastPeriod[];
+  hourly: NwsForecastPeriod[];
+}) {
   // Pair up day/night periods
   const days: { day?: NwsForecastPeriod; night?: NwsForecastPeriod; key: string }[] = [];
   let current: { day?: NwsForecastPeriod; night?: NwsForecastPeriod; key: string } | null = null;
@@ -287,8 +298,11 @@ function DailyGrid({ periods }: { periods: NwsForecastPeriod[] }) {
           const primary = d.day ?? d.night!;
           const hiPeriod = d.day ?? null;
           const loPeriod = d.night ?? null;
+          const dayHourly = hourly.filter(
+            (p) => new Date(p.startTime).toDateString() === d.key,
+          );
           return (
-            <details key={d.key} className="bg-white/5 rounded-lg border border-white/5 overflow-hidden">
+            <details key={d.key} className="bg-white/5 rounded-lg border border-white/5 overflow-hidden group">
               <summary className="cursor-pointer list-none flex items-center gap-3 p-3 hover:bg-white/5 transition-colors">
                 <AnimatedWeatherIcon
                   conditionKey={forecastConditionKey(primary.shortForecast, primary.isDaytime)}
@@ -309,8 +323,14 @@ function DailyGrid({ periods }: { periods: NwsForecastPeriod[] }) {
                     {primary.probabilityOfPrecipitation.value}%
                   </div>
                 )}
+                <span
+                  className="text-white/40 text-[10px] flex-shrink-0 transition-transform duration-200 group-open:rotate-180"
+                  aria-hidden
+                >
+                  ▼
+                </span>
               </summary>
-              <div className="px-3 pb-3 pt-1 border-t border-white/5 text-xs text-white/60 space-y-2">
+              <div className="px-3 pb-3 pt-1 border-t border-white/5 text-xs text-white/60 space-y-3">
                 {d.day && (
                   <div>
                     <div className="text-[10px] uppercase tracking-wide text-amber-400/80 mb-0.5">{d.day.name}</div>
@@ -323,8 +343,71 @@ function DailyGrid({ periods }: { periods: NwsForecastPeriod[] }) {
                     <div>{d.night.detailedForecast}</div>
                   </div>
                 )}
+                {dayHourly.length > 0 && <TimeOfDayStrip dayHourly={dayHourly} />}
               </div>
             </details>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Bucket a day's hourly periods into morning / afternoon / evening / late-night
+// and render a 2x2 (or 1x4) grid of mini animated icons + hi/lo temps + max
+// precip% — same layout as the expanded TomorrowBanner.
+function TimeOfDayStrip({ dayHourly }: { dayHourly: NwsForecastPeriod[] }) {
+  type Bucket = { label: string; periods: NwsForecastPeriod[] };
+  const buckets: Bucket[] = [
+    { label: 'Morning (6–12)', periods: [] },
+    { label: 'Afternoon (12–18)', periods: [] },
+    { label: 'Evening (18–24)', periods: [] },
+    { label: 'Late night (0–6)', periods: [] },
+  ];
+  for (const p of dayHourly) {
+    const h = new Date(p.startTime).getHours();
+    if (h >= 6 && h < 12) buckets[0].periods.push(p);
+    else if (h >= 12 && h < 18) buckets[1].periods.push(p);
+    else if (h >= 18) buckets[2].periods.push(p);
+    else buckets[3].periods.push(p);
+  }
+  const visible = buckets.filter((b) => b.periods.length > 0);
+  if (visible.length === 0) return null;
+  return (
+    <div className="pt-2 border-t border-white/5">
+      <div className="text-[10px] uppercase tracking-wide text-white/40 font-semibold mb-2">
+        By time of day
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {visible.map((b) => {
+          const temps = b.periods.map((p) => p.temperature);
+          const hi = Math.max(...temps);
+          const lo = Math.min(...temps);
+          const maxRain = Math.max(
+            ...b.periods.map((p) => p.probabilityOfPrecipitation.value ?? 0),
+          );
+          const mid = b.periods[Math.floor(b.periods.length / 2)];
+          return (
+            <div key={b.label} className="bg-black/20 rounded-lg p-2 flex items-center gap-2">
+              <div className="flex-shrink-0">
+                <AnimatedWeatherIcon
+                  conditionKey={forecastConditionKey(mid.shortForecast, mid.isDaytime)}
+                  isDay={mid.isDaytime}
+                  size={28}
+                />
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] text-white/50">{b.label}</div>
+                <div className="text-xs font-mono">
+                  <span className="text-amber-300">{hi}°</span>
+                  <span className="text-white/30 mx-1">/</span>
+                  <span className="text-sky-300">{lo}°</span>
+                  {maxRain > 0 && (
+                    <span className="text-blue-300 ml-1.5">{maxRain}%</span>
+                  )}
+                </div>
+              </div>
+            </div>
           );
         })}
       </div>
