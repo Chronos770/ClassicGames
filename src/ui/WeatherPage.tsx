@@ -258,20 +258,22 @@ export default function WeatherPage() {
         <WeatherAlertsBanner station={station} tick={lastIngestTick} />
         <TomorrowBanner station={station} tick={lastIngestTick} onOpen={() => setTab('forecast')} />
 
-        {/* Tab bar */}
-        <div className="flex gap-1 mb-5 overflow-x-auto pb-1">
+        {/* Tab bar — wraps on small screens, labels collapse to icon-only
+            below 'sm' so all tabs fit without horizontal scroll. */}
+        <div className="flex flex-wrap gap-1 mb-5 pb-1">
           {TABS.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`px-3 sm:px-4 py-2 text-sm rounded-lg whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+              title={t.label}
+              className={`px-2.5 sm:px-3.5 py-2 text-sm rounded-lg whitespace-nowrap transition-colors flex items-center gap-1.5 flex-shrink-0 ${
                 tab === t.id
                   ? 'bg-amber-500/20 text-amber-400 font-medium'
                   : 'text-white/50 hover:text-white/80 hover:bg-white/5'
               }`}
             >
-              <span>{t.icon}</span>
-              <span>{t.label}</span>
+              <span className="text-base">{t.icon}</span>
+              <span className="hidden sm:inline">{t.label}</span>
             </button>
           ))}
         </div>

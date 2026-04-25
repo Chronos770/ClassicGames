@@ -95,10 +95,10 @@ export default function SpaceWeatherTab({ station, tick }: Props) {
 // ── Cards ────────────────────────────────────────────────────────
 
 function NoaaScalesCard({ scales }: { scales: { G: number; S: number; R: number } }) {
-  const items: { letter: 'G' | 'S' | 'R'; label: string; value: number; full: string }[] = [
-    { letter: 'G', label: 'Geomagnetic', value: scales.G, full: 'G-scale (geomagnetic storms — auroras, GPS, grid)' },
-    { letter: 'S', label: 'Radiation', value: scales.S, full: 'S-scale (solar radiation storms — sat ops, polar flights)' },
-    { letter: 'R', label: 'Radio', value: scales.R, full: 'R-scale (radio blackouts — HF comms)' },
+  const items: { letter: 'G' | 'S' | 'R'; label: string; value: number; explain: string }[] = [
+    { letter: 'G', label: 'Storm', value: scales.G, explain: 'Geomagnetic storm — when the Sun shakes Earth\'s magnetic field. Causes auroras, sometimes GPS errors and grid issues.' },
+    { letter: 'S', label: 'Radiation', value: scales.S, explain: 'Solar radiation storm — bursts of high-energy particles. Affects satellites and polar flights.' },
+    { letter: 'R', label: 'Radio', value: scales.R, explain: 'Radio blackout — flares disrupt long-range (HF) radio. Mostly impacts ham radio, aviation, and shortwave.' },
   ];
   const colorFor = (v: number): string =>
     v <= 0 ? 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10'
@@ -109,26 +109,29 @@ function NoaaScalesCard({ scales }: { scales: { G: number; S: number; R: number 
     :           'text-fuchsia-300 border-fuchsia-500/30 bg-fuchsia-500/10';
   return (
     <div className="bg-white/5 rounded-xl border border-white/10 p-4">
-      <div className="text-xs uppercase tracking-wide text-white/40 mb-3 font-semibold">
-        NOAA Scales (current)
+      <div className="text-xs uppercase tracking-wide text-white/40 mb-1 font-semibold">
+        Storm watch right now
       </div>
+      <p className="text-[11px] text-white/55 mb-3">
+        Three quick gauges from NOAA. 0 means everything's quiet, 5 means extreme. Tap any
+        card for what it means.
+      </p>
       <div className="grid grid-cols-3 gap-3">
         {items.map((it) => (
-          <div
+          <details
             key={it.letter}
-            className={`rounded-xl border p-3 text-center ${colorFor(it.value)}`}
-            title={it.full}
+            className={`rounded-xl border p-3 ${colorFor(it.value)}`}
           >
-            <div className="text-3xl font-display font-bold">
-              {it.letter}
-              {it.value}
-            </div>
-            <div className="text-[10px] uppercase tracking-wide opacity-80 mt-1">{it.label}</div>
-          </div>
+            <summary className="cursor-pointer list-none text-center">
+              <div className="text-3xl font-display font-bold">
+                {it.letter}
+                {it.value}
+              </div>
+              <div className="text-[10px] uppercase tracking-wide opacity-80 mt-1">{it.label}</div>
+            </summary>
+            <div className="text-[11px] opacity-85 mt-2 leading-relaxed">{it.explain}</div>
+          </details>
         ))}
-      </div>
-      <div className="text-[10px] text-white/40 mt-3 text-center">
-        0 = quiet · 5 = extreme. Hover for details.
       </div>
     </div>
   );
@@ -142,9 +145,13 @@ function KpCard({ data, station }: { data: SpaceWeatherSnapshot; station: Weathe
 
   return (
     <div className="bg-white/5 rounded-xl border border-white/10 p-4">
-      <div className="text-xs uppercase tracking-wide text-white/40 mb-2 font-semibold">
-        Geomagnetic activity (Kp)
+      <div className="text-xs uppercase tracking-wide text-white/40 mb-1 font-semibold">
+        How shaken-up Earth's magnetism is
       </div>
+      <p className="text-[11px] text-white/55 mb-3">
+        Known as the <span className="font-mono text-white/70">Kp index</span>. Higher = stronger
+        geomagnetic storm = more aurora and (at high values) GPS / power-grid effects.
+      </p>
       <div className="flex items-baseline gap-3">
         <span className="text-4xl font-display font-bold text-white tabular-nums">
           {kp === null ? '—' : kp.toFixed(1)}
@@ -223,9 +230,13 @@ function FlareCard({ data }: { data: SpaceWeatherSnapshot }) {
 
   return (
     <div className="bg-white/5 rounded-xl border border-white/10 p-4">
-      <div className="text-xs uppercase tracking-wide text-white/40 mb-2 font-semibold">
-        Solar X-ray flux (GOES)
+      <div className="text-xs uppercase tracking-wide text-white/40 mb-1 font-semibold">
+        Solar flare strength
       </div>
+      <p className="text-[11px] text-white/55 mb-3">
+        Big bursts of X-rays from the Sun (called <span className="font-mono text-white/70">X-ray flux</span>,
+        measured by the GOES satellite). Each letter is 10× the last: A &lt; B &lt; C &lt; M &lt; X.
+      </p>
       <div className="flex items-baseline gap-3">
         <span className="text-4xl font-display font-bold tabular-nums">
           <span className={tone}>{cls.letter}</span>
@@ -254,7 +265,7 @@ function FlareCard({ data }: { data: SpaceWeatherSnapshot }) {
         )}
       </div>
       <div className="text-[10px] text-white/40 mt-1">
-        Classes: A &lt; B &lt; C &lt; M &lt; X. C5+ = noticeable; M-class = sometimes radio blackouts; X = severe.
+        C-class = mild · M-class = moderate, sometimes brief radio blackouts · X-class = severe.
       </div>
     </div>
   );
@@ -265,24 +276,32 @@ function SolarWindCard({ data }: { data: SpaceWeatherSnapshot }) {
   const bzTone = l.bz === null ? 'text-white/50' : l.bz < -10 ? 'text-fuchsia-300' : l.bz < -5 ? 'text-amber-300' : l.bz < 0 ? 'text-emerald-300' : 'text-white/70';
   return (
     <div className="bg-white/5 rounded-xl border border-white/10 p-4">
-      <div className="text-xs uppercase tracking-wide text-white/40 mb-3 font-semibold">
-        Solar wind (DSCOVR)
+      <div className="text-xs uppercase tracking-wide text-white/40 mb-1 font-semibold">
+        Wind from the Sun
       </div>
+      <p className="text-[11px] text-white/55 mb-3">
+        A constant stream of particles flowing past Earth (the{' '}
+        <span className="font-mono text-white/70">solar wind</span>, measured by the DSCOVR satellite
+        a million miles upwind). Fast wind + a south-pointing magnetic field = great for aurora.
+      </p>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Stat label="Speed" value={l.speed === null ? '—' : `${Math.round(l.speed)}`} unit="km/s" tone={
+        <Stat label="Speed" sub="how fast" value={l.speed === null ? '—' : `${Math.round(l.speed)}`} unit="km/s" tone={
           l.speed === null ? 'text-white/50' :
           l.speed > 700 ? 'text-fuchsia-300' :
           l.speed > 500 ? 'text-amber-300' :
           'text-white'
         } />
-        <Stat label="Density" value={l.density === null ? '—' : l.density.toFixed(1)} unit="p/cm³" tone="text-white" />
-        <Stat label="Bz" value={l.bz === null ? '—' : l.bz.toFixed(1)} unit="nT" tone={bzTone} />
-        <Stat label="Bt" value={l.bt === null ? '—' : l.bt.toFixed(1)} unit="nT" tone="text-white" />
+        <Stat label="Density" sub="how thick" value={l.density === null ? '—' : l.density.toFixed(1)} unit="p/cm³" tone="text-white" />
+        <Stat label="Bz" sub="N/S magnetism" value={l.bz === null ? '—' : l.bz.toFixed(1)} unit="nT" tone={bzTone} />
+        <Stat label="Bt" sub="total field" value={l.bt === null ? '—' : l.bt.toFixed(1)} unit="nT" tone="text-white" />
       </div>
-      <SparklineRow points={data.solar_wind.plasma_recent.map((p) => p.speed)} label="Speed" color="#60a5fa" />
-      <SparklineRow points={data.solar_wind.mag_recent.map((p) => p.bz)} label="Bz" color="#f472b6" centerOnZero />
-      <div className="text-[10px] text-white/40 mt-2">
-        Strong negative Bz + fast wind = aurora-friendly. Speed &gt; 600 km/s suggests a CME impact.
+      <SparklineRow points={data.solar_wind.plasma_recent.map((p) => p.speed)} label="Speed (last 90 min)" color="#60a5fa" />
+      <SparklineRow points={data.solar_wind.mag_recent.map((p) => p.bz)} label="Bz (negative = aurora-friendly)" color="#f472b6" centerOnZero />
+      <div className="text-[11px] text-white/55 mt-2 leading-relaxed">
+        <strong className="text-white/75">Bz</strong> is the most important number: when it's strongly
+        negative (south-pointing) it punches holes in Earth's magnetic shield and drives auroras.
+        <strong className="text-white/75"> Speed</strong> over ~600 km/s usually means a coronal-mass-ejection
+        impact is in progress.
       </div>
     </div>
   );
@@ -346,10 +365,11 @@ function SparklineRow({
   );
 }
 
-function Stat({ label, value, unit, tone }: { label: string; value: string; unit: string; tone: string }) {
+function Stat({ label, sub, value, unit, tone }: { label: string; sub?: string; value: string; unit: string; tone: string }) {
   return (
     <div>
       <div className="text-[10px] uppercase tracking-wide text-white/40">{label}</div>
+      {sub && <div className="text-[9px] text-white/35 -mt-0.5">{sub}</div>}
       <div className={`text-lg font-display font-bold tabular-nums ${tone}`}>
         {value} <span className="text-[10px] text-white/40">{unit}</span>
       </div>
@@ -362,21 +382,36 @@ function SunspotsCard({ data }: { data: SpaceWeatherSnapshot }) {
   const f10 = (data.sunspots.latest as any)?.f10 ?? (data.sunspots.latest as any)?.flux_10cm ?? null;
   return (
     <div className="bg-white/5 rounded-xl border border-white/10 p-4">
-      <div className="text-xs uppercase tracking-wide text-white/40 mb-2 font-semibold">
-        Sunspots & active regions
+      <div className="text-xs uppercase tracking-wide text-white/40 mb-1 font-semibold">
+        How busy the Sun's surface is
       </div>
+      <p className="text-[11px] text-white/55 mb-3">
+        Dark spots on the Sun where flares and solar storms come from. More spots and more
+        active groups generally means a more energetic Sun.
+      </p>
       <div className="grid grid-cols-2 gap-3">
-        <Stat label="Sunspot number" value={ssn !== null ? String(ssn) : '—'} unit="" tone="text-white" />
-        <Stat label="Active regions" value={String(data.sunspots.active_regions_count)} unit="" tone="text-white" />
+        <Stat
+          label="Spots today"
+          sub="sunspot number"
+          value={ssn !== null ? String(ssn) : '—'}
+          unit=""
+          tone="text-white"
+        />
+        <Stat
+          label="Active groups"
+          sub="visible right now"
+          value={String(data.sunspots.active_regions_count)}
+          unit=""
+          tone="text-white"
+        />
       </div>
       {f10 !== null && (
-        <div className="text-xs text-white/60 mt-2">
-          10.7 cm flux: <span className="text-white font-mono">{f10}</span> sfu
+        <div className="text-xs text-white/60 mt-3">
+          Sun's overall energy output:{' '}
+          <span className="text-white font-mono">{f10}</span>{' '}
+          <span className="text-white/40">sfu (10.7 cm radio flux)</span>
         </div>
       )}
-      <div className="text-[10px] text-white/40 mt-2">
-        Higher SSN = more energetic sun. Active regions are sunspot groups visible right now.
-      </div>
     </div>
   );
 }
@@ -397,18 +432,23 @@ function AuroraCard({ data, station }: { data: SpaceWeatherSnapshot; station: We
 
   return (
     <div className="bg-white/5 rounded-xl border border-white/10 p-4">
-      <div className="text-xs uppercase tracking-wide text-white/40 mb-2 font-semibold">
-        Aurora outlook
+      <div className="text-xs uppercase tracking-wide text-white/40 mb-1 font-semibold">
+        Northern lights tonight
       </div>
+      <p className="text-[11px] text-white/55 mb-3">
+        Whether the aurora's likely to be visible from where your station is, based on
+        current Kp and your latitude.
+      </p>
       <div className={`text-3xl font-display font-bold ${tone}`}>{headline}</div>
       <div className="text-xs text-white/60 mt-1">
         At your latitude (
         {lat !== null ? `${lat.toFixed(1)}°` : '?'}
-        ), aurora typically reach down to {v.threshold.toFixed(0)}° geomagnetic when Kp ={' '}
+        ), aurora usually reach down to about {v.threshold.toFixed(0)}° at the current Kp of{' '}
         {data.kp.current?.toFixed(1) ?? '—'}.
       </div>
       <div className="text-[10px] text-white/40 mt-2 italic">
-        Best viewing: dark skies, no moon, looking poleward, ~22:00–02:00 local. Approximation only.
+        Best viewing: dark skies, no moon, looking north, around 10 PM–2 AM local. This is a
+        rough estimate, not a guarantee.
       </div>
     </div>
   );
@@ -459,9 +499,13 @@ function SunImageCard({ imgIndex, setImgIndex }: { imgIndex: number; setImgIndex
 function AlertsCard({ alerts }: { alerts: { issued: string; product_id: string; message: string }[] }) {
   return (
     <div className="bg-white/5 rounded-xl border border-white/10 p-4">
-      <div className="text-xs uppercase tracking-wide text-white/40 mb-3 font-semibold">
-        SWPC alerts (last 36 h)
+      <div className="text-xs uppercase tracking-wide text-white/40 mb-1 font-semibold">
+        Recent space weather alerts
       </div>
+      <p className="text-[11px] text-white/55 mb-3">
+        Official advisories from NOAA's Space Weather Prediction Center, last 36 hours.
+        Tap one to read the full text.
+      </p>
       <div className="space-y-2">
         {alerts.map((a, i) => (
           <details key={i} className="bg-white/5 rounded-lg border border-white/5 overflow-hidden">
@@ -484,9 +528,12 @@ function AlertsCard({ alerts }: { alerts: { issued: string; product_id: string; 
 function ThreeDayCard({ lines }: { lines: string[] }) {
   return (
     <div className="bg-white/5 rounded-xl border border-white/10 p-4">
-      <div className="text-xs uppercase tracking-wide text-white/40 mb-2 font-semibold">
-        3-day forecast highlights
+      <div className="text-xs uppercase tracking-wide text-white/40 mb-1 font-semibold">
+        Next 3 days
       </div>
+      <p className="text-[11px] text-white/55 mb-3">
+        Highlights from NOAA's 3-day space-weather discussion.
+      </p>
       <ul className="text-xs text-white/65 space-y-1 font-mono">
         {lines.map((l, i) => (
           <li key={i}>{l}</li>
