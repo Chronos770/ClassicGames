@@ -9,7 +9,9 @@ interface Props {
 // Canvas-based ambient background that reflects current conditions.
 // Tuned for visibility — particles are bright/opaque enough to read through
 // the dark cards on top, instead of blending into the page background.
-// Respects prefers-reduced-motion by rendering a static frame.
+// Animates regardless of prefers-reduced-motion (Brave + Safari Low Power
+// Mode default to 'reduce' on mobile, which previously froze the canvas
+// after one frame on those browsers).
 export default function WeatherBackground({ condition, windMph }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -19,7 +21,11 @@ export default function WeatherBackground({ condition, windMph }: Props) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    // Intentionally ignore prefers-reduced-motion. Brave reports 'reduce' by
+    // default on mobile (fingerprinting protection), and Safari Low Power
+    // Mode does the same. Honoring it killed the canvas animation entirely
+    // on those browsers — same problem we hit with the SVG icons. The
+    // canvas is a soft ambient background, no strobing or jarring motion.
     const isMobile = window.matchMedia?.('(max-width: 640px)').matches ?? false;
     const dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2);
     const densityScale = isMobile ? 0.55 : 1;
@@ -251,7 +257,7 @@ export default function WeatherBackground({ condition, windMph }: Props) {
           ctx.save();
           ctx.translate(sunX(), sunY());
           for (const ray of rays) {
-            if (!reduced) ray.a += ray.speed * dt;
+            ray.a += ray.speed * dt;
             const pulse = 0.5 + 0.2 * Math.sin(t / 400 + ray.phase * 6);
             ctx.rotate(ray.a);
             ctx.fillStyle = `rgba(253, 224, 71, ${0.04 * pulse})`;
@@ -272,7 +278,7 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         ctx.fill();
 
         // Hot: heat shimmer near bottom
-        if (k === 'hot' && !reduced) {
+        if (k === 'hot' ) {
           for (let i = 0; i < 6; i++) {
             const y = H - 20 - i * 8;
             const offset = Math.sin(t / 200 + i) * 4;
@@ -304,7 +310,7 @@ export default function WeatherBackground({ condition, windMph }: Props) {
 
       // Clouds
       for (const c of clouds) {
-        if (!reduced) c.x += c.speed * dt;
+        c.x += c.speed * dt;
         if (c.x - 90 * c.scale > W) c.x = -90 * c.scale;
         if (c.x + 90 * c.scale < 0) c.x = W + 90 * c.scale;
         if (c.type === 'wisp') drawWispCloud(c.x, c.y, c.scale, c.a);
@@ -314,7 +320,7 @@ export default function WeatherBackground({ condition, windMph }: Props) {
       // Fog (heavy diffuse mist)
       if (k === 'fog') {
         for (const m of mist) {
-          if (!reduced) m.x += m.speed * dt;
+          m.x += m.speed * dt;
           if (m.x - m.r > W) m.x = -m.r;
           const grad = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r);
           grad.addColorStop(0, `rgba(226, 232, 240, ${m.a})`);
@@ -335,7 +341,7 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         ctx.strokeStyle = 'rgba(186, 230, 253, 0.85)';
         ctx.lineWidth = k === 'heavyRain' || k === 'thunderstorm' ? 1.5 : 1;
         for (const d of rain) {
-          if (!reduced) {
+          {
             d.y += d.vy * dt;
             d.x += d.vx * dt;
           }
@@ -360,7 +366,7 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         ctx.lineWidth = 1;
         for (let i = splashes.length - 1; i >= 0; i--) {
           const s = splashes[i];
-          if (!reduced) {
+          {
             s.r += dt * 60;
             s.a -= dt * 1.8;
           }
@@ -380,7 +386,7 @@ export default function WeatherBackground({ condition, windMph }: Props) {
       if (flakes.length) {
         ctx.fillStyle = '#f8fafc';
         for (const f of flakes) {
-          if (!reduced) {
+          {
             f.phase += dt * 0.9;
             f.y += f.vy * dt;
             f.x += Math.sin(f.phase) * 18 * dt + windFactor * 6 * dt;
@@ -417,7 +423,7 @@ export default function WeatherBackground({ condition, windMph }: Props) {
 
       // Wind streaks
       for (const s of streaks) {
-        if (!reduced) s.x += s.vx * dt;
+        s.x += s.vx * dt;
         if (s.x > W + 100) {
           s.x = -100;
           s.y = Math.random() * H;
@@ -432,7 +438,7 @@ export default function WeatherBackground({ condition, windMph }: Props) {
 
       // Wind-blown leaves
       for (const lf of leaves) {
-        if (!reduced) {
+        {
           lf.x += lf.vx * dt;
           lf.y += lf.vy * dt + Math.sin(t / 300 + lf.rot) * 12 * dt;
           lf.rot += lf.vrot * dt;
@@ -456,7 +462,7 @@ export default function WeatherBackground({ condition, windMph }: Props) {
 
       // Thunderstorm: occasional flash + lightning bolt
       if (k === 'thunderstorm') {
-        if (!reduced && t > nextFlashAt) {
+        if (t > nextFlashAt) {
           flashAlpha = 0.5 + Math.random() * 0.4;
           nextFlashAt = t + 3000 + Math.random() * 7000;
           if (t > nextBoltAt) {
@@ -491,14 +497,14 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         }
       }
 
-      if (!reduced) raf = requestAnimationFrame(frame);
+      raf = requestAnimationFrame(frame);
     };
 
     raf = requestAnimationFrame(frame);
 
     const onVis = () => {
       paused = document.hidden;
-      if (!paused && !reduced && running) {
+      if (!paused && running) {
         prev = performance.now();
         raf = requestAnimationFrame(frame);
       }
