@@ -9,31 +9,31 @@ interface Props {
 
 const SEVERITY_STYLE: Record<string, { bg: string; border: string; text: string; pulse: string }> = {
   Extreme: {
-    bg: 'bg-red-500/15',
+    bg: 'bg-slate-900/85 backdrop-blur-sm',
     border: 'border-red-500/40',
     text: 'text-red-100',
     pulse: 'bg-red-400',
   },
   Severe: {
-    bg: 'bg-orange-500/12',
-    border: 'border-orange-500/35',
+    bg: 'bg-slate-900/85 backdrop-blur-sm',
+    border: 'border-orange-500/40',
     text: 'text-orange-100',
     pulse: 'bg-orange-400',
   },
   Moderate: {
-    bg: 'bg-amber-500/12',
-    border: 'border-amber-500/30',
+    bg: 'bg-slate-900/85 backdrop-blur-sm',
+    border: 'border-amber-500/35',
     text: 'text-amber-100',
     pulse: 'bg-amber-400',
   },
   Minor: {
-    bg: 'bg-yellow-500/10',
-    border: 'border-yellow-500/25',
+    bg: 'bg-slate-900/85 backdrop-blur-sm',
+    border: 'border-yellow-500/30',
     text: 'text-yellow-100',
     pulse: 'bg-yellow-400',
   },
   Unknown: {
-    bg: 'bg-white/5',
+    bg: 'bg-slate-900/85 backdrop-blur-sm',
     border: 'border-white/20',
     text: 'text-white/80',
     pulse: 'bg-white/60',
