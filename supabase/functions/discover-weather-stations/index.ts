@@ -98,26 +98,43 @@ Deno.serve(async (req) => {
 
   const remote: any[] = apiResp?.stations ?? [];
 
-  // Pull existing stations so we can annotate which ones are new.
+  // Pull existing stations so we can annotate which ones are new and
+  // preserve any fields that were manually corrected (notably elevation,
+  // which WeatherLink consoles sometimes ship with wrong values from the
+  // initial setup).
   const { data: existing } = await supabase
     .from('weather_stations')
-    .select('station_id');
+    .select('station_id, elevation, station_name');
   const existingIds = new Set((existing ?? []).map((s: any) => Number(s.station_id)));
+  const existingById = new Map<number, { elevation: number | null; station_name: string | null }>();
+  for (const s of (existing ?? []) as any[]) {
+    existingById.set(Number(s.station_id), {
+      elevation: s.elevation ?? null,
+      station_name: s.station_name ?? null,
+    });
+  }
 
   const discovered: DiscoveredStation[] = [];
   for (const s of remote) {
     const id = asNum(s.station_id);
     if (id === null) continue;
+    const prior = existingById.get(id);
+    // Preserve manually-corrected elevation + station name on existing
+    // rows. WeatherLink consoles often ship with garbage elevation from
+    // initial setup, and users may rename their station too — both should
+    // survive a re-run of discover.
+    const elevation = prior?.elevation ?? asNum(s.elevation);
+    const stationName = prior?.station_name ?? asStr(s.station_name) ?? `Station ${id}`;
     const row = {
       station_id: id,
       station_id_uuid: asStr(s.station_id_uuid),
-      station_name: asStr(s.station_name) ?? `Station ${id}`,
+      station_name: stationName,
       city: asStr(s.city),
       region: asStr(s.region),
       country: asStr(s.country),
       latitude: asNum(s.latitude),
       longitude: asNum(s.longitude),
-      elevation: asNum(s.elevation),
+      elevation,
       time_zone: asStr(s.time_zone),
       gateway_type: asStr(s.gateway_type),
       product_number: asStr(s.product_number),
