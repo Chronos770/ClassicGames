@@ -86,23 +86,18 @@ export function classifyCondition(
   const solar = reading.solar_rad;
   const baro = reading.bar_sea_level ?? 30;
   const nws = (nwsShortForecast || '').toLowerCase();
-  // "Chance" / "Slight Chance" / "Isolated" / "Few" in NWS phrasing means
-  // the precipitation isn't actually expected — only probabilistic.
-  // Without this hedge the classifier was reading "Chance Showers And
-  // Thunderstorms" as a full thunderstorm and rendering 460 drops +
-  // lightning flashes when reality was "mostly cloudy, might rain later".
-  const nwsHedged = /\b(chance|slight chance|isolated|few|patchy)\b/.test(nws);
-  const nwsHeavyRain = /heavy (rain|shower)|downpour|torrential|heavy thunderstorm/.test(nws);
-  const nwsLightRain = /\b(light|sprinkle|drizzle)\b/.test(nws);
-  const nwsAnyRain = /rain|shower|drizzle/.test(nws);
-  const nwsThunder = /thunder/.test(nws);
-  const nwsSnow = /snow|wintry|sleet|ice|freezing|flurr|blizzard/.test(nws);
+  // NWS is used ONLY as a sunny-vs-cloudy tie-breaker (because the
+  // station's solar reading can spike during a brief sun-break and
+  // mis-call sunny). Rain intensity is driven entirely by what the
+  // WeatherLink station is actually measuring — we don't render rain
+  // visuals just because NWS says "rain in forecast" or "chance of
+  // rain later today".
   const nwsFog = /fog|mist|haze/.test(nws);
-  const nwsCloudy = /cloudy|overcast|mostly cloudy|partly cloudy/.test(nws);
+  const nwsCloudy = /cloudy|overcast/.test(nws);
 
-  // Thunderstorm heuristic: heavy rain + low pressure + gusty winds,
-  // OR NWS confidently says thunderstorm right now (not just "chance of").
-  if (rate > 0.5 || (rain15 > 0.15 && baro < 29.8 && gust > 25) || (nwsThunder && !nwsHedged)) {
+  // Thunderstorm heuristic: heavy rain + low pressure + gusty winds.
+  // Pressure + wind tell us this is electrified weather, not just rain.
+  if (rate > 0.5 || (rain15 > 0.15 && baro < 29.8 && gust > 25)) {
     return {
       key: 'thunderstorm',
       label: 'Thunderstorm',
@@ -113,7 +108,7 @@ export function classifyCondition(
     };
   }
 
-  if (rate > 0.2 || rain15 > 0.1 || (nwsHeavyRain && !nwsHedged)) {
+  if (rate > 0.2 || rain15 > 0.1) {
     return {
       key: 'heavyRain',
       label: 'Heavy Rain',
@@ -124,21 +119,7 @@ export function classifyCondition(
     };
   }
 
-  // Light/drizzle takes priority over plain "rain" when NWS says it's
-  // light, even if the station has logged some accumulation today —
-  // otherwise a "Light Rain" forecast renders 280 drops on a sprinkle.
-  if (nwsLightRain && !nwsHeavyRain) {
-    return {
-      key: 'drizzle',
-      label: 'Drizzle',
-      emoji: '\u{1F326}\u{FE0F}',
-      gradient: gradient('from-sky-500/15', 'via-slate-500/5', 'to-transparent'),
-      pageBg: 'from-slate-900 via-sky-950 to-slate-800',
-      isDay,
-    };
-  }
-
-  if (rate > 0.02 || rain60 > 0.05 || (nwsAnyRain && !nwsHedged)) {
+  if (rate > 0.02 || rain60 > 0.05) {
     return {
       key: 'rain',
       label: 'Rain',
@@ -160,7 +141,7 @@ export function classifyCondition(
     };
   }
 
-  if ((temp <= 32 && (rate > 0 || rain15 > 0)) || (nwsSnow && temp < 38)) {
+  if (temp <= 32 && (rate > 0 || rain15 > 0)) {
     return {
       key: 'snow',
       label: 'Snow',
