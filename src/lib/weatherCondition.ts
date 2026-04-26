@@ -239,7 +239,11 @@ export function classifyCondition(
   //  - we have no solar reading and no NWS hint at all (no info → don't
   //    commit to either extreme; default to partly cloudy)
   const blockSunny = nwsCloudy || nwsPrecipMention || rainDay >= 0.05 || !cloudinessKnown;
-  const forceCloudy = nwsCloudy;
+  // Force fully "Cloudy" (not partly) when NWS firmly says cloudy/overcast
+  // OR when NWS has any precipitation in the current hour. A precipitation
+  // forecast implies the sky is overcast, so partly-cloudy is wrong.
+  // Also when measured cloudiness is high (> 0.55) regardless of NWS.
+  const forceCloudy = nwsCloudy || nwsPrecipMention || (cloudinessKnown && cloudiness > 0.55);
 
   if (cloudinessKnown && cloudiness < 0.10 && !blockSunny) {
     return {
