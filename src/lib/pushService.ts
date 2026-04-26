@@ -118,40 +118,54 @@ export async function subscribePush(): Promise<{ ok: boolean; error?: string }> 
         /* ignore */
       }
     }
-    const sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-    });
+
+    // Subscribe with up to 3 attempts. Transient FCM hiccups sometimes
+    // mint dead endpoints on the first try; retrying gives Chrome/Brave
+    // a chance to refresh the underlying token.
+    let sub: PushSubscription | null = null;
+    let lastHost = '';
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const candidate = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+      const candidateEndpoint = candidate.toJSON().endpoint || '';
+      try {
+        lastHost = new URL(candidateEndpoint).host;
+      } catch {
+        lastHost = '';
+      }
+      // eslint-disable-next-line no-console
+      console.log(`[push subscribe] attempt ${attempt + 1} endpoint host:`, lastHost);
+      if (lastHost && lastHost !== 'permanently-removed.invalid') {
+        sub = candidate;
+        break;
+      }
+      try {
+        await candidate.unsubscribe();
+      } catch {
+        /* ignore */
+      }
+      await new Promise((r) => setTimeout(r, 250));
+    }
+
+    if (!sub) {
+      return {
+        ok: false,
+        error:
+          `Browser keeps minting dead push endpoints (host=${lastHost || 'unknown'}). ` +
+          `This is a browser/OS-level FCM problem — usually fixed by: 1) reboot the device, ` +
+          `2) Settings → Apps → Google Play Services → Storage → Clear cache, ` +
+          `3) try a different browser (Firefox uses Mozilla Push, not FCM). ` +
+          `If you're on Brave, push is often disabled or broken — try Chrome.`,
+      };
+    }
 
     const json = sub.toJSON();
     const endpoint = json.endpoint!;
     const p256dh = (json.keys as any)?.p256dh;
     const auth = (json.keys as any)?.auth;
     const ua = navigator.userAgent.slice(0, 200);
-
-    // Detect dead-on-arrival endpoints up front so the user doesn't have
-    // to send a test to discover their browser is handing back broken
-    // subscriptions.
-    let endpointHost = '';
-    try {
-      endpointHost = new URL(endpoint).host;
-    } catch {
-      /* ignore */
-    }
-    // eslint-disable-next-line no-console
-    console.log('[push subscribe] endpoint host:', endpointHost);
-    if (endpointHost === 'permanently-removed.invalid') {
-      try {
-        await sub.unsubscribe();
-      } catch {
-        /* ignore */
-      }
-      return {
-        ok: false,
-        error:
-          'Browser minted a dead push endpoint. This usually means the site’s notification state is stuck. Open the browser site settings, clear notifications + storage for this site, then try again.',
-      };
-    }
 
     const { data: userData, error: userErr } = await supabase.auth.getUser();
     if (userErr || !userData.user) return { ok: false, error: 'Not signed in.' };
