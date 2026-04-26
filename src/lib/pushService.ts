@@ -60,6 +60,31 @@ export async function getPermission(): Promise<NotificationPermission> {
   return Notification.permission;
 }
 
+// Resolve to a ServiceWorkerRegistration whose `.active` is non-null.
+// `navigator.serviceWorker.ready` resolves on activated, but after the
+// user clears site data the registration may be missing entirely (so
+// `.ready` would hang forever) or `.active` may be null mid-update.
+// This (a) registers /sw.js if no registration exists, (b) waits for
+// `.active` with a poll fallback, (c) gives up after ~5s with a clear
+// error instead of "Subscription failed - no active Service Worker".
+async function getActiveServiceWorker(timeoutMs = 5000): Promise<ServiceWorkerRegistration | null> {
+  const start = Date.now();
+  let reg = await navigator.serviceWorker.getRegistration('/');
+  if (!reg) {
+    try {
+      reg = await navigator.serviceWorker.register('/sw.js');
+    } catch {
+      return null;
+    }
+  }
+  // Poll until active is non-null or timeout.
+  while (!reg.active && Date.now() - start < timeoutMs) {
+    await new Promise((r) => setTimeout(r, 100));
+    reg = (await navigator.serviceWorker.getRegistration('/')) ?? reg;
+  }
+  return reg.active ? reg : null;
+}
+
 // Subscribe the device to push and persist the subscription on Supabase.
 export async function subscribePush(): Promise<{ ok: boolean; error?: string }> {
   if (!isPushSupported()) return { ok: false, error: 'Push not supported on this device.' };
@@ -67,7 +92,14 @@ export async function subscribePush(): Promise<{ ok: boolean; error?: string }> 
     return { ok: false, error: 'VITE_VAPID_PUBLIC_KEY env var not set in the build.' };
 
   try {
-    const reg = await navigator.serviceWorker.ready;
+    const reg = await getActiveServiceWorker();
+    if (!reg) {
+      return {
+        ok: false,
+        error:
+          'Service worker not active yet. Reload the page (or close and reopen the tab) and try again.',
+      };
+    }
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
       return { ok: false, error: `Permission ${permission}.` };
