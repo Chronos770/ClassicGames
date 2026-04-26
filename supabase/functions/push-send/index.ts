@@ -244,8 +244,13 @@ Deno.serve(async (req) => {
           body: String(err?.body ?? err?.message ?? err).slice(0, 400),
           endpointHost,
         });
-        // 404 = unknown endpoint, 410 = gone — clean up stale subs
-        if (status === 404 || status === 410) {
+        // Treat as permanently dead and clean up:
+        //   404 = endpoint unknown
+        //   410 = subscription gone
+        //   permanently-removed.invalid = Google sentinel for retired FCM
+        //     endpoints — DNS resolves nowhere so we get statusCode=0
+        const isDeadHost = endpointHost === 'permanently-removed.invalid';
+        if (status === 404 || status === 410 || isDeadHost) {
           await supabase.from('weather_push_subscriptions').delete().eq('id', sub.id);
           removed++;
         }
