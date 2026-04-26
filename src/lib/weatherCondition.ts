@@ -15,7 +15,21 @@ export type ConditionKey =
   | 'clear'
   | 'partlyCloudy'
   | 'cloudy'
+  | 'space'
   | 'unknown';
+
+// Synthetic "Space" condition used when the user is on the Space tab.
+// Doesn't depend on the live weather reading — it's a vibe override that
+// swaps the canvas background to a starfield + nebula + comets and the
+// page gradient to a deep-space wash.
+export const SPACE_CONDITION: Condition = {
+  key: 'space',
+  label: 'Space',
+  emoji: '\u{1F30C}',
+  gradient: { from: 'from-indigo-500/15', via: 'via-purple-600/10', to: 'to-transparent' },
+  pageBg: 'from-slate-950 via-indigo-950 to-purple-950',
+  isDay: false,
+};
 
 export interface Condition {
   key: ConditionKey;

@@ -62,6 +62,7 @@ export default function WeatherBackground({ condition, windMph }: Props) {
     type Mist = { x: number; y: number; r: number; a: number; speed: number };
     type Streak = { x: number; y: number; vx: number; len: number; a: number };
     type Leaf = { x: number; y: number; vx: number; vy: number; rot: number; vrot: number; size: number; color: string };
+    type Comet = { x: number; y: number; vx: number; vy: number; len: number; a: number; life: number };
 
     const rain: Drop[] = [];
     const splashes: Splash[] = [];
@@ -72,6 +73,9 @@ export default function WeatherBackground({ condition, windMph }: Props) {
     const mist: Mist[] = [];
     const streaks: Streak[] = [];
     const leaves: Leaf[] = [];
+    const comets: Comet[] = [];
+    let nextCometAt = 0;
+    let nebulaPhase = 0;
     let nextFlashAt = 0;
     let flashAlpha = 0;
     let nextBoltAt = 0;
@@ -83,7 +87,24 @@ export default function WeatherBackground({ condition, windMph }: Props) {
       const W = w();
       const H = h();
       rain.length = splashes.length = flakes.length = stars.length = clouds.length = 0;
-      rays.length = mist.length = streaks.length = leaves.length = 0;
+      rays.length = mist.length = streaks.length = leaves.length = comets.length = 0;
+
+      // SPACE — dense starfield, no other particles
+      if (k === 'space') {
+        for (let i = 0; i < Math.round(420 * densityScale); i++) {
+          // Stars get a slight color tint via brightness (0..1) and use
+          // their existing alpha for opacity. Concentrate brighter stars
+          // upward where the page header is, fade slightly toward bottom.
+          stars.push({
+            x: Math.random() * W,
+            y: Math.random() * H,
+            a: 0.4 + Math.random() * 0.6,
+            phase: Math.random() * Math.PI * 2,
+            speed: 0.4 + Math.random() * 1.6,
+          });
+        }
+        return;
+      }
 
       // RAIN
       if (k === 'rain' || k === 'heavyRain' || k === 'drizzle' || k === 'thunderstorm') {
@@ -283,6 +304,10 @@ export default function WeatherBackground({ condition, windMph }: Props) {
       } else if (k === 'partlyCloudy' && condition.isDay) {
         wash.addColorStop(0, 'rgba(56, 189, 248, 0.10)');
         wash.addColorStop(1, 'rgba(15, 23, 42, 0.04)');
+      } else if (k === 'space') {
+        wash.addColorStop(0, 'rgba(30, 27, 75, 0.32)');
+        wash.addColorStop(0.5, 'rgba(67, 30, 75, 0.18)');
+        wash.addColorStop(1, 'rgba(2, 6, 23, 0.40)');
       } else if (k === 'cloudy') {
         wash.addColorStop(0, 'rgba(100, 116, 139, 0.14)');
         wash.addColorStop(1, 'rgba(15, 23, 42, 0.06)');
@@ -296,6 +321,98 @@ export default function WeatherBackground({ condition, windMph }: Props) {
       }
       ctx.fillStyle = wash;
       ctx.fillRect(0, 0, W, H);
+
+      // SPACE — nebula clouds + comets layered on top of the deep wash.
+      if (k === 'space') {
+        nebulaPhase += dt * 0.04;
+        // Two slowly-shifting nebula blobs for depth
+        const drawNebula = (
+          cx: number,
+          cy: number,
+          r: number,
+          inner: string,
+          outer: string,
+        ) => {
+          const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+          g.addColorStop(0, inner);
+          g.addColorStop(1, outer);
+          ctx.fillStyle = g;
+          ctx.fillRect(0, 0, W, H);
+        };
+        const driftX = Math.sin(nebulaPhase) * 30;
+        const driftY = Math.cos(nebulaPhase * 0.7) * 20;
+        drawNebula(
+          W * 0.25 + driftX,
+          H * 0.35 + driftY,
+          Math.max(W, H) * 0.55,
+          'rgba(139, 92, 246, 0.18)', // violet
+          'rgba(139, 92, 246, 0)',
+        );
+        drawNebula(
+          W * 0.75 - driftX * 0.6,
+          H * 0.7 - driftY,
+          Math.max(W, H) * 0.5,
+          'rgba(244, 114, 182, 0.14)', // pink
+          'rgba(244, 114, 182, 0)',
+        );
+        drawNebula(
+          W * 0.55,
+          H * 0.15,
+          Math.max(W, H) * 0.4,
+          'rgba(56, 189, 248, 0.10)', // cyan
+          'rgba(56, 189, 248, 0)',
+        );
+
+        // Spawn comets occasionally
+        if (t > nextCometAt) {
+          const fromLeft = Math.random() < 0.5;
+          comets.push({
+            x: fromLeft ? -50 : W + 50,
+            y: Math.random() * H * 0.6,
+            vx: (fromLeft ? 1 : -1) * (240 + Math.random() * 220),
+            vy: 60 + Math.random() * 110,
+            len: 80 + Math.random() * 70,
+            a: 0.85 + Math.random() * 0.15,
+            life: 1,
+          });
+          nextCometAt = t + 1800 + Math.random() * 4500;
+        }
+
+        // Draw + advance comets
+        for (let i = comets.length - 1; i >= 0; i--) {
+          const c = comets[i];
+          c.x += c.vx * dt;
+          c.y += c.vy * dt;
+          c.life -= dt * 0.35;
+          if (c.life <= 0 || c.x < -200 || c.x > W + 200 || c.y > H + 200) {
+            comets.splice(i, 1);
+            continue;
+          }
+          // Trail (gradient line)
+          const tailX = c.x - (c.vx / Math.hypot(c.vx, c.vy)) * c.len;
+          const tailY = c.y - (c.vy / Math.hypot(c.vx, c.vy)) * c.len;
+          const trail = ctx.createLinearGradient(tailX, tailY, c.x, c.y);
+          trail.addColorStop(0, 'rgba(186, 230, 253, 0)');
+          trail.addColorStop(0.6, `rgba(186, 230, 253, ${0.45 * c.a * c.life})`);
+          trail.addColorStop(1, `rgba(255, 255, 255, ${0.95 * c.a * c.life})`);
+          ctx.strokeStyle = trail;
+          ctx.lineWidth = 2.5;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(tailX, tailY);
+          ctx.lineTo(c.x, c.y);
+          ctx.stroke();
+          // Head (bright dot + soft glow)
+          ctx.fillStyle = `rgba(255, 255, 255, ${c.a * c.life})`;
+          ctx.beginPath();
+          ctx.arc(c.x, c.y, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = `rgba(186, 230, 253, ${0.4 * c.a * c.life})`;
+          ctx.beginPath();
+          ctx.arc(c.x, c.y, 6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
 
       // Sun glow — restored intensity now that cards are opaque enough not
       // to bleed yellow through their backgrounds.

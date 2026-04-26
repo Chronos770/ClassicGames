@@ -113,12 +113,18 @@ async function handle(): Promise<Response> {
   ]);
 
   // ── Kp ─────────────────────────────────────────────────────────
+  // SWPC's noaa-planetary-k-index.json has headers ["time_tag","Kp",
+  // "a_running","station_count"]. We previously read r.kp_index which
+  // doesn't exist, so currentKp was always NaN. Try every plausible
+  // field name to be resilient if SWPC renames again.
   const kpRows = kp1m ? tabularToObjects(kp1m) : [];
   const kpRecent = tail(kpRows, 24).map((r) => ({
     time: r.time_tag as string,
-    kp: Number(r.kp_index),
+    kp: Number(r.Kp ?? r.kp ?? r.kp_index),
   }));
-  const currentKp = kpRecent[kpRecent.length - 1]?.kp ?? null;
+  const currentKp = kpRecent.length
+    ? kpRecent.filter((p) => Number.isFinite(p.kp)).pop()?.kp ?? null
+    : null;
 
   // ── Solar wind ─────────────────────────────────────────────────
   const plasmaRows = plasma ? tabularToObjects(plasma) : [];
@@ -179,7 +185,19 @@ async function handle(): Promise<Response> {
   // Sunspot report = daily counts; solar_regions = currently visible regions.
   const sunspotArr = asArray(sunspotReport);
   const latestSunspot = sunspotArr.length ? sunspotArr[sunspotArr.length - 1] : null;
-  const activeRegionsCount = asArray(solarRegions).filter((r: any) => r?.observed_date).length;
+  // solar_regions.json contains every numbered region NOAA has ever
+  // observed. We want only those reported on the most recent observation
+  // day (not the entire historical archive — that's how this counter was
+  // displaying numbers like 238).
+  const regionRows = asArray(solarRegions);
+  let latestObsDate: string | null = null;
+  for (const r of regionRows as any[]) {
+    const d = r?.observed_date;
+    if (typeof d === 'string' && (!latestObsDate || d > latestObsDate)) latestObsDate = d;
+  }
+  const activeRegionsCount = latestObsDate
+    ? regionRows.filter((r: any) => r?.observed_date === latestObsDate).length
+    : 0;
 
   // ── 3-day discussion text — extract just a couple of headers ───
   let threeDayHeadlines: string[] = [];

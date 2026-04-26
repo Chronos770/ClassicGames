@@ -24,7 +24,7 @@ import WeatherAlertsBanner from './weather/WeatherAlertsBanner';
 import TomorrowBanner from './weather/TomorrowBanner';
 import UnitsToggle from './weather/UnitsToggle';
 import WeatherBackground from './weather/WeatherBackground';
-import { classifyCondition } from '../lib/weatherCondition';
+import { classifyCondition, SPACE_CONDITION } from '../lib/weatherCondition';
 
 type Tab = 'overview' | 'forecast' | 'history' | 'radar' | 'space' | 'news' | 'health';
 
@@ -183,7 +183,10 @@ export default function WeatherPage() {
   if (!isAdmin) return null;
 
   // Derive page background gradient from current reading's condition.
-  const condition = reading && station ? classifyCondition(reading, station.latitude, station.longitude) : null;
+  // The Space tab overrides with a synthetic "space" vibe so the canvas
+  // shows starfield + nebula + comets instead of weather.
+  const liveCondition = reading && station ? classifyCondition(reading, station.latitude, station.longitude) : null;
+  const condition = tab === 'space' ? SPACE_CONDITION : liveCondition;
   const bgClass = condition ? condition.pageBg : 'from-slate-950 via-slate-900 to-slate-950';
 
   const windForBg = reading?.wind_speed_avg_last_10_min ?? reading?.wind_speed_last ?? 0;
