@@ -184,6 +184,12 @@ export default function WeatherPage() {
     [stations, stationId],
   );
 
+  // Pull NWS hourly forecast (used below as a tie-breaker for the
+  // classifier). Must be called BEFORE the early return below or the
+  // hook order changes between renders and React throws — that's what
+  // caused the blank-screen regression in commit a918d28.
+  const nwsHourly = useNwsHourly(station?.latitude ?? null, station?.longitude ?? null, lastIngestTick);
+
   // Inline gate. Rather than rendering null or redirecting, show a card
   // explaining why the dashboard isn't available and let the URL stay at
   // /weather so coming back later picks up where we left off.
@@ -229,11 +235,10 @@ export default function WeatherPage() {
   // Derive page background gradient from current reading's condition.
   // The Space tab overrides with a synthetic "space" vibe so the canvas
   // shows starfield + nebula + comets instead of weather.
-  // Pull NWS hourly forecast and grab the period covering "right now" so
-  // classifyCondition can use it as a tie-breaker against the station's
-  // instantaneous solar/rain snapshot (which can momentarily mis-call
-  // sunny when the cloud cover briefly breaks).
-  const nwsHourly = useNwsHourly(station?.latitude ?? null, station?.longitude ?? null, lastIngestTick);
+  // Grab the NWS hourly period covering "right now" — used as a
+  // tie-breaker against the station's instantaneous solar/rain snapshot.
+  // (The hook itself runs above the early-return; only the period lookup
+  // happens here.)
   const nwsCurrentShort = (() => {
     const periods = nwsHourly.data?.properties?.periods;
     if (!periods?.length) return null;
