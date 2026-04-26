@@ -204,13 +204,19 @@ export function classifyCondition(
 
   // Cloud cover estimate via solar compared to clear-sky max.
   // Rough clear-sky ceiling as function of time of day (watts/m²).
+  // We need to differentiate "we know it's clear" from "we don't have a
+  // solar reading at all" — previously cloudiness defaulted to 0 (clear)
+  // when solar was null, which made the classifier return Sunny on every
+  // station that lacks a solar sensor or that reported a null reading.
   let cloudiness = 0;
+  let cloudinessKnown = false;
   if (isDay && solar !== null) {
     const st = lat !== null && lon !== null ? getSunTimes(now, lat, lon) : null;
     const frac = st?.dayFraction ?? 0.5;
     const arc = Math.sin(frac * Math.PI); // 0..1..0 across day
     const ceiling = Math.max(120, 950 * arc);
     cloudiness = Math.max(0, Math.min(1, 1 - solar / ceiling));
+    cloudinessKnown = true;
   }
 
   if (!isDay) {
@@ -230,13 +236,12 @@ export function classifyCondition(
   //    drizzle, snow, etc.) — sky can't be clear if rain is in the picture
   //  - rain has fallen today (≥ 0.05" — a clearly wet day isn't "sunny"
   //    even if a temporary break in clouds spikes solar radiation)
-  // Demote those to partlyCloudy / cloudy.
-  const blockSunny = nwsCloudy || nwsPrecipMention || rainDay >= 0.05;
-  // Block "Partly Cloudy" only when NWS is firmly overcast — a
-  // precipitation-mention alone leaves room for partly-cloudy.
+  //  - we have no solar reading and no NWS hint at all (no info → don't
+  //    commit to either extreme; default to partly cloudy)
+  const blockSunny = nwsCloudy || nwsPrecipMention || rainDay >= 0.05 || !cloudinessKnown;
   const forceCloudy = nwsCloudy;
 
-  if (cloudiness < 0.10 && !blockSunny) {
+  if (cloudinessKnown && cloudiness < 0.10 && !blockSunny) {
     return {
       key: 'sunny',
       label: 'Sunny',
@@ -246,7 +251,10 @@ export function classifyCondition(
       isDay,
     };
   }
-  if (cloudiness < 0.45 && !nwsCloudy) {
+  // Partly cloudy when we have a solar reading that's modest and NWS
+  // isn't firmly overcast. If we have no solar reading, we land here too
+  // (instead of crashing through to "Sunny") unless NWS forces cloudy.
+  if (!forceCloudy && (!cloudinessKnown || cloudiness < 0.45)) {
     return {
       key: 'partlyCloudy',
       label: 'Partly Cloudy',
