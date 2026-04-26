@@ -139,8 +139,16 @@ function HeroBanner({
 
   return (
     <div
-      className={`bg-gradient-to-br ${condition.gradient.from} ${condition.gradient.via} ${condition.gradient.to} rounded-2xl border border-white/10 p-5 sm:p-6 mb-4 transition-all duration-700`}
+      className={`relative overflow-hidden bg-slate-900/70 backdrop-blur-sm rounded-2xl border border-white/10 p-5 sm:p-6 mb-4 transition-all duration-700`}
     >
+      {/* Faint condition-tinted gradient sits on top of the opaque slate
+          base so the hero still reflects the weather mood without being
+          see-through against the animated canvas. */}
+      <div
+        aria-hidden
+        className={`absolute inset-0 pointer-events-none bg-gradient-to-br ${condition.gradient.from} ${condition.gradient.via} ${condition.gradient.to}`}
+      />
+      <div className="relative">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-white/50 mb-1">
@@ -204,6 +212,7 @@ function HeroBanner({
             Observed {timeAgo(reading.observed_at)} · {new Date(reading.observed_at).toLocaleString()}
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

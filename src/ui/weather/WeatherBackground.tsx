@@ -215,8 +215,11 @@ export default function WeatherBackground({ condition, windMph }: Props) {
     };
     seed();
 
-    const sunX = () => w() * 0.78;
-    const sunY = () => h() * 0.22;
+    // Tucked into the actual top-right corner. Previously at (0.78, 0.22)
+    // it sat in the middle of the hero card area on phones and read as
+    // an overlay rather than a background element.
+    const sunX = () => w() * 0.9;
+    const sunY = () => h() * 0.1;
 
     let prev = performance.now();
 

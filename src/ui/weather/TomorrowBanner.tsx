@@ -46,16 +46,18 @@ function findTomorrow(periods: NwsForecastPeriod[]): TomorrowSummary {
 }
 
 function toneFor(period: NwsForecastPeriod | null): { bg: string; border: string; accent: string } {
-  if (!period) return { bg: 'bg-white/5', border: 'border-white/10', accent: 'text-white/80' };
+  // Opaque slate base so the canvas can't bleed through; only the border
+  // and accent text carry the per-condition color cue (paired with the
+  // icon already shown in the banner).
+  const bg = 'bg-slate-900/70 backdrop-blur-sm';
+  if (!period) return { bg, border: 'border-white/10', accent: 'text-white/80' };
   const s = period.shortForecast.toLowerCase();
-  if (/thunder/.test(s)) return { bg: 'bg-purple-500/12', border: 'border-purple-500/25', accent: 'text-purple-200' };
+  if (/thunder/.test(s)) return { bg, border: 'border-purple-500/30', accent: 'text-purple-200' };
   if (/snow|wintry|sleet|ice|freezing|flurr|blizzard/.test(s))
-    return { bg: 'bg-sky-400/10', border: 'border-sky-400/20', accent: 'text-sky-200' };
-  if (/rain|shower|drizzle/.test(s))
-    return { bg: 'bg-blue-500/10', border: 'border-blue-500/20', accent: 'text-blue-200' };
-  if (/sunny|clear|fair/.test(s))
-    return { bg: 'bg-amber-500/10', border: 'border-amber-500/20', accent: 'text-amber-200' };
-  return { bg: 'bg-white/5', border: 'border-white/10', accent: 'text-white/80' };
+    return { bg, border: 'border-sky-400/30', accent: 'text-sky-200' };
+  if (/rain|shower|drizzle/.test(s)) return { bg, border: 'border-blue-500/30', accent: 'text-blue-200' };
+  if (/sunny|clear|fair/.test(s)) return { bg, border: 'border-amber-500/30', accent: 'text-amber-200' };
+  return { bg, border: 'border-white/10', accent: 'text-white/80' };
 }
 
 export default function TomorrowBanner({ station, tick, onOpen }: Props) {
@@ -90,7 +92,7 @@ export default function TomorrowBanner({ station, tick, onOpen }: Props) {
     <button
       type="button"
       onClick={onOpen}
-      className={`w-full rounded-xl border p-3 ${tone.bg} ${tone.border} flex items-center gap-3 mb-4 hover:bg-white/5 transition-colors text-left`}
+      className={`w-full rounded-xl border p-3 ${tone.bg} ${tone.border} flex items-center gap-3 mb-4 hover:bg-slate-800/70 transition-colors text-left`}
     >
       <div className="flex-shrink-0">
         <AnimatedWeatherIcon conditionKey={conditionKey} isDay={day.isDaytime} size={44} />
