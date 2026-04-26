@@ -63,18 +63,33 @@ export default function WeatherPage() {
   const [realtimeOk, setRealtimeOk] = useState(false);
   const stationIdRef = useRef<number | null>(null);
 
+  // Detect installed-PWA standalone mode (Android Chrome/Edge "Add to
+  // Home Screen", iOS Safari "Add to Home Screen", desktop installed
+  // app). When the OS kills the PWA process for memory pressure and the
+  // user comes back, the SPA reloads with auth still rehydrating from
+  // localStorage — during that brief null-user window we used to bounce
+  // to "/", which then dumps the user on the marketing site instead of
+  // their weather dashboard. In standalone mode we hold position and
+  // render an inline state instead.
+  const isStandalone =
+    typeof window !== 'undefined' &&
+    (window.matchMedia?.('(display-mode: standalone)').matches ||
+      // iOS Safari uses a non-standard property
+      (navigator as any).standalone === true);
+
   // Redirect non-admins (only after auth has finished loading and we've had a
   // chance to fetch the profile — otherwise a fresh page load races the
   // session restore and bounces you to / before your role is known).
   useEffect(() => {
     if (authLoading) return;
+    if (isStandalone) return; // never bounce out of an installed PWA
     if (!user) {
       navigate('/');
       return;
     }
     // user is loaded but profile may still be fetching — wait one tick
     if (profile && !isAdmin) navigate('/');
-  }, [authLoading, user, profile, isAdmin, navigate]);
+  }, [authLoading, user, profile, isAdmin, navigate, isStandalone]);
 
   // Swap manifest, apple-touch-icon, theme-color, and title to weather branding
   // while on this page so "Add to Home Screen" installs the Weather app.
@@ -180,7 +195,36 @@ export default function WeatherPage() {
     [stations, stationId],
   );
 
-  if (!isAdmin) return null;
+  // In standalone PWA mode, don't return null — that would just show a
+  // blank page when auth is mid-restore. Render a holding state and let
+  // the auth store catch up; once isAdmin flips true the dashboard
+  // renders normally.
+  if (!isAdmin) {
+    if (!isStandalone) return null;
+    return (
+      <div className="relative min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-6">
+        <div className="bg-slate-900/85 backdrop-blur-sm border border-white/10 rounded-2xl p-6 max-w-sm w-full text-center">
+          <div className="text-2xl mb-2">{authLoading || (user && !profile) ? '⏳' : '🔒'}</div>
+          <div className="text-white text-base font-display font-semibold mb-1">
+            {authLoading || (user && !profile) ? 'Restoring session…' : 'Signed out'}
+          </div>
+          <div className="text-white/60 text-xs mb-4">
+            {authLoading || (user && !profile)
+              ? 'Hang tight — finishing authentication.'
+              : 'Your session expired while the app was in the background.'}
+          </div>
+          {!authLoading && !user && (
+            <button
+              onClick={() => navigate('/')}
+              className="text-sm px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-lg transition-colors"
+            >
+              Open Castle &amp; Cards to sign in
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // Derive page background gradient from current reading's condition.
   // The Space tab overrides with a synthetic "space" vibe so the canvas
