@@ -86,7 +86,13 @@ export function classifyCondition(
   const solar = reading.solar_rad;
   const baro = reading.bar_sea_level ?? 30;
   const nws = (nwsShortForecast || '').toLowerCase();
-  const nwsRain = /rain|shower|drizzle|storm/.test(nws);
+  // Bucket NWS phrasing by intensity so the animated background matches
+  // reality. "Light rain" / "drizzle" / "sprinkle" → drizzle bucket
+  // (~140 drops). "Heavy rain" / "downpour" / "torrential" → heavy
+  // (~460 drops). Anything else with rain/shower in it → middle bucket.
+  const nwsHeavyRain = /heavy (rain|shower)|downpour|torrential|heavy thunderstorm/.test(nws);
+  const nwsLightRain = /\b(light|few|slight|chance of) (rain|shower|drizzle)|drizzle|sprinkle|patchy/.test(nws);
+  const nwsAnyRain = /rain|shower|drizzle/.test(nws);
   const nwsThunder = /thunder/.test(nws);
   const nwsSnow = /snow|wintry|sleet|ice|freezing|flurr|blizzard/.test(nws);
   const nwsFog = /fog|mist|haze/.test(nws);
@@ -105,7 +111,7 @@ export function classifyCondition(
     };
   }
 
-  if (rate > 0.2 || rain15 > 0.1) {
+  if (rate > 0.2 || rain15 > 0.1 || nwsHeavyRain) {
     return {
       key: 'heavyRain',
       label: 'Heavy Rain',
@@ -116,7 +122,21 @@ export function classifyCondition(
     };
   }
 
-  if (rate > 0.02 || rain60 > 0.05 || nwsRain) {
+  // Light/drizzle takes priority over plain "rain" when NWS says it's
+  // light, even if the station has logged some accumulation today —
+  // otherwise a "Light Rain" forecast renders 280 drops on a sprinkle.
+  if (nwsLightRain && !nwsHeavyRain) {
+    return {
+      key: 'drizzle',
+      label: 'Drizzle',
+      emoji: '\u{1F326}\u{FE0F}',
+      gradient: gradient('from-sky-500/15', 'via-slate-500/5', 'to-transparent'),
+      pageBg: 'from-slate-900 via-sky-950 to-slate-800',
+      isDay,
+    };
+  }
+
+  if (rate > 0.02 || rain60 > 0.05 || nwsAnyRain) {
     return {
       key: 'rain',
       label: 'Rain',

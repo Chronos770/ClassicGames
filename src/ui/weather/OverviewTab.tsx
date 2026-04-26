@@ -23,9 +23,15 @@ interface Props {
   station: WeatherStation | null;
   stationId: number | null;
   tick: number;
+  // Optional pre-classified condition from WeatherPage. When provided we
+  // use it instead of re-classifying here, so the hero label always
+  // matches what the canvas + page gradient are showing. WeatherPage has
+  // the NWS hourly tie-breaker; without it the local re-classify can
+  // disagree (e.g. station says solar=high "Sunny" while NWS says rain).
+  condition?: ReturnType<typeof classifyCondition>;
 }
 
-export default function OverviewTab({ reading, station, stationId, tick }: Props) {
+export default function OverviewTab({ reading, station, stationId, tick, condition: conditionProp }: Props) {
   const recent = useRecentReadings(stationId, 24, tick);
   const history30d = useRecentReadings(
     stationId,
@@ -36,7 +42,12 @@ export default function OverviewTab({ reading, station, stationId, tick }: Props
 
   return (
     <>
-      <HeroBanner reading={reading} station={station} recentRows={recent.rows} />
+      <HeroBanner
+        reading={reading}
+        station={station}
+        recentRows={recent.rows}
+        condition={conditionProp}
+      />
       {reading.rain_storm_current_in !== null &&
         reading.rain_storm_current_in > 0 &&
         reading.rain_storm_current_start_at && <ActiveStormCard reading={reading} />}
@@ -82,10 +93,12 @@ function HeroBanner({
   reading,
   station,
   recentRows,
+  condition: conditionProp,
 }: {
   reading: WeatherReading;
   station: WeatherStation | null;
   recentRows: WeatherReading[];
+  condition?: ReturnType<typeof classifyCondition>;
 }) {
   const fmt = useUnitFormatters();
   const feelsLike = reading.thw_index ?? reading.heat_index ?? reading.wind_chill ?? reading.temp;
@@ -111,11 +124,9 @@ function HeroBanner({
               ? 'text-blue-300'
               : 'text-white';
 
-  const condition = classifyCondition(
-    reading,
-    station?.latitude ?? null,
-    station?.longitude ?? null,
-  );
+  const condition =
+    conditionProp ??
+    classifyCondition(reading, station?.latitude ?? null, station?.longitude ?? null);
 
   // Today's high/low (from 24h window, filtered to today)
   const todayExt = (() => {

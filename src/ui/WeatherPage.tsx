@@ -364,6 +364,7 @@ export default function WeatherPage() {
                 station={station}
                 stationId={stationId}
                 tick={lastIngestTick}
+                condition={liveCondition ?? undefined}
               />
             )}
             {tab === 'forecast' && (
