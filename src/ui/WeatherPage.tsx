@@ -25,6 +25,7 @@ import TomorrowBanner from './weather/TomorrowBanner';
 import UnitsToggle from './weather/UnitsToggle';
 import WeatherBackground from './weather/WeatherBackground';
 import { classifyCondition, SPACE_CONDITION } from '../lib/weatherCondition';
+import { useNwsHourly } from '../lib/nwsCache';
 
 type Tab = 'overview' | 'forecast' | 'history' | 'radar' | 'space' | 'news' | 'health';
 
@@ -228,7 +229,26 @@ export default function WeatherPage() {
   // Derive page background gradient from current reading's condition.
   // The Space tab overrides with a synthetic "space" vibe so the canvas
   // shows starfield + nebula + comets instead of weather.
-  const liveCondition = reading && station ? classifyCondition(reading, station.latitude, station.longitude) : null;
+  // Pull NWS hourly forecast and grab the period covering "right now" so
+  // classifyCondition can use it as a tie-breaker against the station's
+  // instantaneous solar/rain snapshot (which can momentarily mis-call
+  // sunny when the cloud cover briefly breaks).
+  const nwsHourly = useNwsHourly(station?.latitude ?? null, station?.longitude ?? null, lastIngestTick);
+  const nwsCurrentShort = (() => {
+    const periods = nwsHourly.data?.properties?.periods;
+    if (!periods?.length) return null;
+    const now = Date.now();
+    for (const p of periods) {
+      const start = new Date(p.startTime).getTime();
+      const end = new Date(p.endTime).getTime();
+      if (now >= start && now < end) return p.shortForecast as string;
+    }
+    return periods[0].shortForecast as string;
+  })();
+  const liveCondition =
+    reading && station
+      ? classifyCondition(reading, station.latitude, station.longitude, nwsCurrentShort)
+      : null;
   const condition = tab === 'space' ? SPACE_CONDITION : liveCondition;
   const bgClass = condition ? condition.pageBg : 'from-slate-950 via-slate-900 to-slate-950';
 

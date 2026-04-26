@@ -48,10 +48,18 @@ function gradient(from: string, via: string, to: string) {
 
 // Classify current conditions. Uses solar_rad + rain rate + wind +
 // sunrise/sunset as heuristic inputs.
+//
+// Optional `nwsShortForecast` (e.g. "Mostly Cloudy", "Showers", "Sunny")
+// from the NWS hourly forecast for *this* hour acts as a tie-breaker
+// against the station's instantaneous snapshot. The station can mis-call
+// "Sunny" when solar momentarily spikes through a break in clouds, or
+// when its reading is 15+ minutes stale; NWS data is human-curated and
+// catches those misses.
 export function classifyCondition(
   reading: WeatherReading,
   lat: number | null,
   lon: number | null,
+  nwsShortForecast?: string | null,
 ): Condition {
   const now = new Date(reading.observed_at);
   let isDay = true;
@@ -69,6 +77,7 @@ export function classifyCondition(
   const rate = reading.rain_rate_last_in ?? 0;
   const rain15 = reading.rainfall_last_15_min_in ?? 0;
   const rain60 = reading.rainfall_last_60_min_in ?? 0;
+  const rainDay = reading.rainfall_day_in ?? 0;
   const wind = reading.wind_speed_avg_last_10_min ?? reading.wind_speed_last ?? 0;
   const gust = reading.wind_speed_hi_last_10_min ?? 0;
   const temp = reading.temp ?? 60;
@@ -76,9 +85,16 @@ export function classifyCondition(
   const dew = reading.dew_point ?? 0;
   const solar = reading.solar_rad;
   const baro = reading.bar_sea_level ?? 30;
+  const nws = (nwsShortForecast || '').toLowerCase();
+  const nwsRain = /rain|shower|drizzle|storm/.test(nws);
+  const nwsThunder = /thunder/.test(nws);
+  const nwsSnow = /snow|wintry|sleet|ice|freezing|flurr|blizzard/.test(nws);
+  const nwsFog = /fog|mist|haze/.test(nws);
+  const nwsCloudy = /cloudy|overcast/.test(nws);
 
-  // Thunderstorm heuristic: heavy rain + low pressure + gusty winds.
-  if (rate > 0.5 || (rain15 > 0.15 && baro < 29.8 && gust > 25)) {
+  // Thunderstorm heuristic: heavy rain + low pressure + gusty winds,
+  // OR NWS explicitly says thunderstorm right now.
+  if (rate > 0.5 || (rain15 > 0.15 && baro < 29.8 && gust > 25) || nwsThunder) {
     return {
       key: 'thunderstorm',
       label: 'Thunderstorm',
@@ -100,7 +116,7 @@ export function classifyCondition(
     };
   }
 
-  if (rate > 0.02 || rain60 > 0.05) {
+  if (rate > 0.02 || rain60 > 0.05 || nwsRain) {
     return {
       key: 'rain',
       label: 'Rain',
@@ -122,7 +138,7 @@ export function classifyCondition(
     };
   }
 
-  if (temp <= 32 && (rate > 0 || rain15 > 0)) {
+  if ((temp <= 32 && (rate > 0 || rain15 > 0)) || (nwsSnow && temp < 38)) {
     return {
       key: 'snow',
       label: 'Snow',
@@ -133,8 +149,8 @@ export function classifyCondition(
     };
   }
 
-  // Fog heuristic: near dew point, high humidity, low wind.
-  if (hum >= 95 && temp - dew <= 2 && wind < 3) {
+  // Fog heuristic: near dew point, high humidity, low wind, or NWS says fog.
+  if ((hum >= 95 && temp - dew <= 2 && wind < 3) || nwsFog) {
     return {
       key: 'fog',
       label: 'Fog',
@@ -199,7 +215,14 @@ export function classifyCondition(
     };
   }
 
-  if (cloudiness < 0.2) {
+  // Block "Sunny" when:
+  //  - NWS says cloudy/overcast for this hour
+  //  - rain has fallen today (≥ 0.05" — a clearly wet day isn't "sunny"
+  //    even if a temporary break in clouds spikes solar radiation)
+  // Demote those to partlyCloudy at minimum.
+  const blockSunny = nwsCloudy || rainDay >= 0.05;
+
+  if (cloudiness < 0.10 && !blockSunny) {
     return {
       key: 'sunny',
       label: 'Sunny',
@@ -209,7 +232,7 @@ export function classifyCondition(
       isDay,
     };
   }
-  if (cloudiness < 0.55) {
+  if (cloudiness < 0.45 && !nwsCloudy) {
     return {
       key: 'partlyCloudy',
       label: 'Partly Cloudy',
