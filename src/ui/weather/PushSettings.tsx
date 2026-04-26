@@ -45,7 +45,8 @@ export default function PushSettings() {
 
   const flash = (m: string) => {
     setMsg(m);
-    setTimeout(() => setMsg(null), 8000);
+    // No auto-dismiss — error messages were vanishing before they could
+    // be read on mobile. The user can clear them with the × button.
   };
 
   const handleEnable = async () => {
@@ -168,7 +169,18 @@ export default function PushSettings() {
             )}
           </div>
         </div>
-        {msg && <div className="mt-3 text-xs text-white/70">{msg}</div>}
+        {msg && (
+          <div className="mt-3 flex items-start gap-2 text-xs text-white/80 bg-white/5 rounded-lg p-2.5 border border-white/10">
+            <div className="flex-1 break-words">{msg}</div>
+            <button
+              onClick={() => setMsg(null)}
+              className="text-white/40 hover:text-white/80 leading-none px-1 -mt-0.5 text-base"
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          </div>
+        )}
       </div>
 
       {subscribed && (

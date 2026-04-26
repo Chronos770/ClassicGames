@@ -73,19 +73,53 @@ export async function subscribePush(): Promise<{ ok: boolean; error?: string }> 
       return { ok: false, error: `Permission ${permission}.` };
     }
 
-    let sub = await reg.pushManager.getSubscription();
-    if (!sub) {
-      sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-      });
+    // Always force a fresh subscription. Reusing the cached one via
+    // getSubscription() perpetuates the case where the browser is handing
+    // back endpoints that route to permanently-removed.invalid (Google's
+    // sentinel for retired FCM endpoints) — push-send cleans them up but
+    // the next "Enable" hands back the same dead endpoint.
+    const existing = await reg.pushManager.getSubscription();
+    if (existing) {
+      try {
+        await existing.unsubscribe();
+      } catch {
+        /* ignore */
+      }
     }
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    });
 
     const json = sub.toJSON();
     const endpoint = json.endpoint!;
     const p256dh = (json.keys as any)?.p256dh;
     const auth = (json.keys as any)?.auth;
     const ua = navigator.userAgent.slice(0, 200);
+
+    // Detect dead-on-arrival endpoints up front so the user doesn't have
+    // to send a test to discover their browser is handing back broken
+    // subscriptions.
+    let endpointHost = '';
+    try {
+      endpointHost = new URL(endpoint).host;
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line no-console
+    console.log('[push subscribe] endpoint host:', endpointHost);
+    if (endpointHost === 'permanently-removed.invalid') {
+      try {
+        await sub.unsubscribe();
+      } catch {
+        /* ignore */
+      }
+      return {
+        ok: false,
+        error:
+          'Browser minted a dead push endpoint. This usually means the site’s notification state is stuck. Open the browser site settings, clear notifications + storage for this site, then try again.',
+      };
+    }
 
     const { data: userData, error: userErr } = await supabase.auth.getUser();
     if (userErr || !userData.user) return { ok: false, error: 'Not signed in.' };
