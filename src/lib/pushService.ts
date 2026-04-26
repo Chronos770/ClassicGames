@@ -60,6 +60,140 @@ export async function getPermission(): Promise<NotificationPermission> {
   return Notification.permission;
 }
 
+// Mobile-friendly diagnostic. Returns everything needed to debug push
+// without DevTools: client VAPID tail, SW state, an actual subscribe
+// attempt's endpoint host, server VAPID tail (so the user can compare),
+// and the raw push-send response counts.
+export async function runPushDiagnostic(): Promise<{
+  clientVapidTail: string;
+  serverVapidTail: string | null;
+  vapidMatches: boolean | null;
+  swState: string;
+  endpointHost: string;
+  permission: string;
+  subsFound: number | null;
+  sent: number | null;
+  errors: any[];
+  notes: string[];
+}> {
+  const notes: string[] = [];
+  const clientVapidTail = (VAPID_PUBLIC_KEY || '').slice(-16);
+  const permission = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
+
+  // SW state
+  let swState = 'none';
+  let reg: ServiceWorkerRegistration | null = null;
+  try {
+    reg = (await navigator.serviceWorker.getRegistration('/')) ?? null;
+    if (!reg) {
+      try {
+        reg = await navigator.serviceWorker.register('/sw.js');
+      } catch (e: any) {
+        notes.push(`SW register failed: ${e?.message ?? e}`);
+      }
+    }
+    if (reg) {
+      // Wait briefly for activation
+      const start = Date.now();
+      while (!reg.active && Date.now() - start < 3000) {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      swState = reg.active ? 'active' : reg.installing ? 'installing' : reg.waiting ? 'waiting' : 'idle';
+    }
+  } catch (e: any) {
+    notes.push(`SW lookup failed: ${e?.message ?? e}`);
+  }
+
+  // Subscribe attempt (no upsert — just to read the endpoint host)
+  let endpointHost = 'n/a';
+  let liveSub: PushSubscription | null = null;
+  if (reg && reg.active && permission === 'granted') {
+    try {
+      const existing = await reg.pushManager.getSubscription();
+      if (existing) {
+        try {
+          await existing.unsubscribe();
+        } catch {
+          /* ignore */
+        }
+      }
+      liveSub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+      try {
+        endpointHost = new URL(liveSub.toJSON().endpoint || '').host || 'unparseable';
+      } catch {
+        endpointHost = 'unparseable';
+      }
+    } catch (e: any) {
+      notes.push(`subscribe() failed: ${e?.message ?? e}`);
+    }
+  } else if (permission !== 'granted') {
+    notes.push(`permission is "${permission}" — can't run subscribe`);
+  } else if (!reg?.active) {
+    notes.push('no active service worker');
+  }
+
+  // Hit push-send to read the server's VAPID tail (it returns it in the
+  // response body now). Use a no-op-ish payload — even if subs_found is
+  // 0, we still get vapid_pub_tail.
+  let serverVapidTail: string | null = null;
+  let subsFound: number | null = null;
+  let sent: number | null = null;
+  let errors: any[] = [];
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    const { data, error } = await supabase.functions.invoke('push-send', {
+      body: {
+        user_ids: userData.user ? [userData.user.id] : [],
+        alert_kind: 'test',
+        alert_key: `diag-${Date.now()}`,
+        title: '🔧 Diagnostic',
+        body: 'Diagnostic ping (safe to ignore).',
+        url: '/weather',
+        tag: 'diag',
+        bypass_quiet_hours: true,
+      },
+    });
+    if (error) {
+      notes.push(`push-send error: ${error.message}`);
+    }
+    if (data) {
+      serverVapidTail = data.vapid_pub_tail ?? null;
+      subsFound = data.subs_found ?? null;
+      sent = data.sent ?? null;
+      errors = data.errors ?? [];
+    }
+  } catch (e: any) {
+    notes.push(`push-send invoke failed: ${e?.message ?? e}`);
+  }
+
+  // Cleanup the diagnostic subscription so we don't leave a sub behind
+  // — the user will go through the normal Enable flow afterwards.
+  if (liveSub) {
+    try {
+      await liveSub.unsubscribe();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const vapidMatches = serverVapidTail ? serverVapidTail === clientVapidTail : null;
+  return {
+    clientVapidTail,
+    serverVapidTail,
+    vapidMatches,
+    swState,
+    endpointHost,
+    permission,
+    subsFound,
+    sent,
+    errors,
+    notes,
+  };
+}
+
 // Resolve to a ServiceWorkerRegistration whose `.active` is non-null.
 // `navigator.serviceWorker.ready` resolves on activated, but after the
 // user clears site data the registration may be missing entirely (so

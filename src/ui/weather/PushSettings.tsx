@@ -4,6 +4,7 @@ import {
   isPushSupported,
   isSubscribed,
   loadPreferences,
+  runPushDiagnostic,
   savePreferences,
   sendTestNotification,
   subscribePush,
@@ -31,6 +32,8 @@ export default function PushSettings() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [diag, setDiag] = useState<Awaited<ReturnType<typeof runPushDiagnostic>> | null>(null);
+  const [diagBusy, setDiagBusy] = useState(false);
 
   const refresh = async () => {
     setLoading(true);
@@ -99,6 +102,30 @@ export default function PushSettings() {
     const updated = { ...prefs, [key]: value };
     setPrefs(updated);
     await savePreferences({ [key]: value } as Partial<PushPreferences>);
+  };
+
+  const handleDiagnose = async () => {
+    setDiagBusy(true);
+    setDiag(null);
+    try {
+      const r = await runPushDiagnostic();
+      setDiag(r);
+    } catch (e: any) {
+      setDiag({
+        clientVapidTail: VAPID_PUBLIC_KEY.slice(-16),
+        serverVapidTail: null,
+        vapidMatches: null,
+        swState: 'error',
+        endpointHost: 'n/a',
+        permission: 'unknown',
+        subsFound: null,
+        sent: null,
+        errors: [],
+        notes: [`Diagnostic threw: ${e?.message ?? e}`],
+      });
+    } finally {
+      setDiagBusy(false);
+    }
   };
 
   if (!supported) {
@@ -259,6 +286,92 @@ export default function PushSettings() {
           </div>
         </>
       )}
+
+      {/* Mobile-friendly diagnostic — runs entirely in the page so the
+          user can compare client/server VAPID tails without DevTools. */}
+      <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <div className="text-xs uppercase tracking-wide text-white/40 font-semibold">
+            Diagnostic
+          </div>
+          <button
+            onClick={handleDiagnose}
+            disabled={diagBusy}
+            className="text-xs px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white/70 rounded-lg border border-white/10 transition-colors disabled:opacity-40"
+          >
+            {diagBusy ? 'Running…' : 'Run diagnostic'}
+          </button>
+        </div>
+        <p className="text-[11px] text-white/50 mb-3">
+          Compares the VAPID public key your browser uses against the one the server signs with,
+          and tries a single subscribe to read the endpoint host. Safe to run.
+        </p>
+        {diag && (
+          <div className="space-y-2 text-[11px] font-mono break-words">
+            <DRow
+              k="VAPID match"
+              v={
+                diag.vapidMatches === null
+                  ? 'unknown'
+                  : diag.vapidMatches
+                  ? '✓ match'
+                  : '✗ MISMATCH — fix Vercel VITE_VAPID_PUBLIC_KEY'
+              }
+              tone={diag.vapidMatches === false ? 'bad' : diag.vapidMatches === true ? 'good' : 'neutral'}
+            />
+            <DRow k="Client tail (browser)" v={diag.clientVapidTail || '(empty)'} />
+            <DRow k="Server tail (push-send)" v={diag.serverVapidTail ?? '(no response)'} />
+            <DRow k="Permission" v={diag.permission} />
+            <DRow k="Service worker" v={diag.swState} />
+            <DRow
+              k="Endpoint host"
+              v={diag.endpointHost}
+              tone={diag.endpointHost === 'permanently-removed.invalid' ? 'bad' : 'neutral'}
+            />
+            <DRow k="Subs found (yours)" v={diag.subsFound === null ? 'n/a' : String(diag.subsFound)} />
+            <DRow k="Sent" v={diag.sent === null ? 'n/a' : String(diag.sent)} />
+            {diag.errors.length > 0 && (
+              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-2 text-red-200/80">
+                <div className="text-[10px] uppercase tracking-wide mb-1">Push provider errors</div>
+                {diag.errors.map((e: any, i: number) => (
+                  <div key={i} className="break-words">
+                    {e.statusCode} @ {e.endpointHost}: {String(e.body || '').slice(0, 200)}
+                  </div>
+                ))}
+              </div>
+            )}
+            {diag.notes.length > 0 && (
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2 text-amber-200/80">
+                <div className="text-[10px] uppercase tracking-wide mb-1">Notes</div>
+                {diag.notes.map((n, i) => (
+                  <div key={i} className="break-words">
+                    · {n}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DRow({
+  k,
+  v,
+  tone,
+}: {
+  k: string;
+  v: string;
+  tone?: 'good' | 'bad' | 'neutral';
+}) {
+  const valueClass =
+    tone === 'good' ? 'text-green-300' : tone === 'bad' ? 'text-red-300' : 'text-white/80';
+  return (
+    <div className="flex items-baseline gap-2">
+      <div className="text-white/40 flex-shrink-0">{k}:</div>
+      <div className={`flex-1 ${valueClass}`}>{v}</div>
     </div>
   );
 }
