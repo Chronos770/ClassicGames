@@ -1,4 +1,4 @@
-const CACHE_NAME = 'castle-cards-v1';
+const CACHE_NAME = 'castle-cards-v2';
 const PRECACHE_URLS = [
   '/',
   '/index.html',
@@ -71,12 +71,17 @@ self.addEventListener('push', (event) => {
   } catch {
     // ignore — keep defaults
   }
+  // All pushes from this app are weather-related (push-tick + push-send
+  // only deliver weather + space-weather alerts), so always use the
+  // weather icon. The previous '/icons/icon-192.png' did not exist —
+  // only SVG versions ship in /icons — so Chrome 404'd the icon and
+  // fell back to its own browser logo for the notification avatar.
   event.waitUntil(
     self.registration.showNotification(payload.title, {
       body: payload.body,
       tag: payload.tag,
-      icon: '/icons/icon-192.png',
-      badge: '/icons/icon-192.png',
+      icon: '/icons/weather-icon-192.svg',
+      badge: '/icons/weather-icon-192.svg',
       data: { url: payload.url, kind: payload.kind },
       // Keep severe alerts persistent until the user interacts.
       requireInteraction: payload.kind === 'severe_alerts',
