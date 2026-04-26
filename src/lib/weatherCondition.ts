@@ -86,21 +86,23 @@ export function classifyCondition(
   const solar = reading.solar_rad;
   const baro = reading.bar_sea_level ?? 30;
   const nws = (nwsShortForecast || '').toLowerCase();
-  // Bucket NWS phrasing by intensity so the animated background matches
-  // reality. "Light rain" / "drizzle" / "sprinkle" → drizzle bucket
-  // (~140 drops). "Heavy rain" / "downpour" / "torrential" → heavy
-  // (~460 drops). Anything else with rain/shower in it → middle bucket.
+  // "Chance" / "Slight Chance" / "Isolated" / "Few" in NWS phrasing means
+  // the precipitation isn't actually expected — only probabilistic.
+  // Without this hedge the classifier was reading "Chance Showers And
+  // Thunderstorms" as a full thunderstorm and rendering 460 drops +
+  // lightning flashes when reality was "mostly cloudy, might rain later".
+  const nwsHedged = /\b(chance|slight chance|isolated|few|patchy)\b/.test(nws);
   const nwsHeavyRain = /heavy (rain|shower)|downpour|torrential|heavy thunderstorm/.test(nws);
-  const nwsLightRain = /\b(light|few|slight|chance of) (rain|shower|drizzle)|drizzle|sprinkle|patchy/.test(nws);
+  const nwsLightRain = /\b(light|sprinkle|drizzle)\b/.test(nws);
   const nwsAnyRain = /rain|shower|drizzle/.test(nws);
   const nwsThunder = /thunder/.test(nws);
   const nwsSnow = /snow|wintry|sleet|ice|freezing|flurr|blizzard/.test(nws);
   const nwsFog = /fog|mist|haze/.test(nws);
-  const nwsCloudy = /cloudy|overcast/.test(nws);
+  const nwsCloudy = /cloudy|overcast|mostly cloudy|partly cloudy/.test(nws);
 
   // Thunderstorm heuristic: heavy rain + low pressure + gusty winds,
-  // OR NWS explicitly says thunderstorm right now.
-  if (rate > 0.5 || (rain15 > 0.15 && baro < 29.8 && gust > 25) || nwsThunder) {
+  // OR NWS confidently says thunderstorm right now (not just "chance of").
+  if (rate > 0.5 || (rain15 > 0.15 && baro < 29.8 && gust > 25) || (nwsThunder && !nwsHedged)) {
     return {
       key: 'thunderstorm',
       label: 'Thunderstorm',
@@ -111,7 +113,7 @@ export function classifyCondition(
     };
   }
 
-  if (rate > 0.2 || rain15 > 0.1 || nwsHeavyRain) {
+  if (rate > 0.2 || rain15 > 0.1 || (nwsHeavyRain && !nwsHedged)) {
     return {
       key: 'heavyRain',
       label: 'Heavy Rain',
@@ -136,7 +138,7 @@ export function classifyCondition(
     };
   }
 
-  if (rate > 0.02 || rain60 > 0.05 || nwsAnyRain) {
+  if (rate > 0.02 || rain60 > 0.05 || (nwsAnyRain && !nwsHedged)) {
     return {
       key: 'rain',
       label: 'Rain',
