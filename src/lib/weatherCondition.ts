@@ -94,6 +94,12 @@ export function classifyCondition(
   // rain later today".
   const nwsFog = /fog|mist|haze/.test(nws);
   const nwsCloudy = /cloudy|overcast/.test(nws);
+  // If NWS mentions ANY precipitation in the current-hour short
+  // forecast, the sky cannot be clear — block "Sunny" even if the
+  // station's solar radiation is reading high during a temporary
+  // gap in the clouds. This catches phrases like "Slight Chance
+  // Showers" that don't literally contain "cloudy".
+  const nwsPrecipMention = /rain|shower|drizzle|thunder|snow|sleet|wintry|hail|flurr/.test(nws);
 
   // Thunderstorm heuristic: heavy rain + low pressure + gusty winds.
   // Pressure + wind tell us this is electrified weather, not just rain.
@@ -219,11 +225,16 @@ export function classifyCondition(
   }
 
   // Block "Sunny" when:
-  //  - NWS says cloudy/overcast for this hour
+  //  - NWS says cloudy / overcast for this hour
+  //  - NWS mentions any precip in this hour's forecast (showers, thunder,
+  //    drizzle, snow, etc.) — sky can't be clear if rain is in the picture
   //  - rain has fallen today (≥ 0.05" — a clearly wet day isn't "sunny"
   //    even if a temporary break in clouds spikes solar radiation)
-  // Demote those to partlyCloudy at minimum.
-  const blockSunny = nwsCloudy || rainDay >= 0.05;
+  // Demote those to partlyCloudy / cloudy.
+  const blockSunny = nwsCloudy || nwsPrecipMention || rainDay >= 0.05;
+  // Block "Partly Cloudy" only when NWS is firmly overcast — a
+  // precipitation-mention alone leaves room for partly-cloudy.
+  const forceCloudy = nwsCloudy;
 
   if (cloudiness < 0.10 && !blockSunny) {
     return {
