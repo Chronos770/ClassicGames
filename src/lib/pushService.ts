@@ -232,9 +232,23 @@ export async function sendTestNotification(): Promise<{
   const skipped = data?.skipped ?? 0;
   const users_reached = data?.users_reached ?? 0;
   if (sent === 0) {
+    const subsFound = data?.subs_found ?? null;
+    const errs: Array<{ statusCode: number; body: string; endpointHost: string }> = data?.errors ?? [];
     let why = data?.reason || 'function returned sent=0';
-    if (removed > 0) why = 'subscription was stale and was removed — re-enable notifications';
-    else if (skipped > 0) why = 'all targets skipped (preferences or quiet hours)';
+    if (removed > 0) {
+      why = 'subscription was stale and was removed — re-enable notifications';
+    } else if (skipped > 0) {
+      why = 'all targets skipped (preferences or quiet hours)';
+    } else if (subsFound === 0) {
+      why = 'no subscription rows found for your user — re-enable notifications';
+    } else if (errs.length > 0) {
+      const e = errs[0];
+      if (e.statusCode === 401 || e.statusCode === 403) {
+        why = `push provider rejected (${e.statusCode}) — likely VAPID key mismatch. Server tail=${data?.vapid_pub_tail}`;
+      } else {
+        why = `push provider error ${e.statusCode}: ${e.body.slice(0, 120)}`;
+      }
+    }
     return { ok: false, error: why, sent, removed, skipped, users_reached };
   }
   return { ok: true, sent, removed, skipped, users_reached };

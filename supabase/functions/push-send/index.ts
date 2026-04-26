@@ -213,6 +213,7 @@ Deno.serve(async (req) => {
     let sent = 0;
     let removed = 0;
     const sentToUsers = new Set<string>();
+    const errors: Array<{ statusCode: number; body: string; endpointHost: string }> = [];
 
     for (const sub of (subs ?? []) as any[]) {
       try {
@@ -232,6 +233,17 @@ Deno.serve(async (req) => {
           .eq('id', sub.id);
       } catch (err: any) {
         const status = err?.statusCode ?? 0;
+        let endpointHost = '';
+        try {
+          endpointHost = new URL(sub.endpoint).host;
+        } catch {
+          /* ignore */
+        }
+        errors.push({
+          statusCode: status,
+          body: String(err?.body ?? err?.message ?? err).slice(0, 400),
+          endpointHost,
+        });
         // 404 = unknown endpoint, 410 = gone — clean up stale subs
         if (status === 404 || status === 410) {
           await supabase.from('weather_push_subscriptions').delete().eq('id', sub.id);
@@ -261,6 +273,12 @@ Deno.serve(async (req) => {
         removed,
         users_targeted: finalIds.length,
         users_reached: sentToUsers.size,
+        subs_found: (subs ?? []).length,
+        errors,
+        // Tail of the VAPID public key so the caller can compare it to the
+        // VITE_VAPID_PUBLIC_KEY their browser subscribed with — the most
+        // common cause of "sent=0 with non-410 errors" is a key mismatch.
+        vapid_pub_tail: vapidPub.slice(-12),
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
