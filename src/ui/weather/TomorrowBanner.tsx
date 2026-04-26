@@ -49,7 +49,7 @@ function toneFor(period: NwsForecastPeriod | null): { bg: string; border: string
   // Opaque slate base so the canvas can't bleed through; only the border
   // and accent text carry the per-condition color cue (paired with the
   // icon already shown in the banner).
-  const bg = 'bg-slate-900/70 backdrop-blur-sm';
+  const bg = 'bg-slate-900/85 backdrop-blur-sm';
   if (!period) return { bg, border: 'border-white/10', accent: 'text-white/80' };
   const s = period.shortForecast.toLowerCase();
   if (/thunder/.test(s)) return { bg, border: 'border-purple-500/30', accent: 'text-purple-200' };

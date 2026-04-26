@@ -215,11 +215,11 @@ export default function WeatherBackground({ condition, windMph }: Props) {
     };
     seed();
 
-    // Tucked into the actual top-right corner. Previously at (0.78, 0.22)
-    // it sat in the middle of the hero card area on phones and read as
-    // an overlay rather than a background element.
-    const sunX = () => w() * 0.9;
-    const sunY = () => h() * 0.1;
+    // Tucked into the actual top-right corner — close enough to the edge
+    // that the corona feels like it's spilling in from outside, rather
+    // than the sun sitting on top of content.
+    const sunX = () => w() - 50;
+    const sunY = () => 60;
 
     let prev = performance.now();
 
@@ -417,39 +417,59 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         }
       }
 
-      // Sun glow — restored intensity now that cards are opaque enough not
-      // to bleed yellow through their backgrounds.
+      // Cleaner sun: tucked into the corner, with a multi-stop radial core
+      // (white-hot center → warm yellow → orange edge), a soft outer
+      // corona, and thin hairline rays that gently pulse instead of
+      // chunky filled triangles.
       if (condition.isDay && (k === 'sunny' || k === 'hot' || k === 'partlyCloudy')) {
-        const glowR = k === 'partlyCloudy' ? 180 : 240;
-        const grad = ctx.createRadialGradient(sunX(), sunY(), 0, sunX(), sunY(), glowR);
-        grad.addColorStop(0, 'rgba(253, 224, 71, 0.22)');
-        grad.addColorStop(0.5, 'rgba(251, 191, 36, 0.09)');
-        grad.addColorStop(1, 'rgba(251, 191, 36, 0)');
-        ctx.fillStyle = grad;
+        const cx = sunX();
+        const cy = sunY();
+        const coreR = 18;
+        const coronaR = k === 'partlyCloudy' ? 140 : 200;
+
+        // Wide soft corona
+        const corona = ctx.createRadialGradient(cx, cy, 0, cx, cy, coronaR);
+        corona.addColorStop(0, 'rgba(254, 240, 138, 0.30)');
+        corona.addColorStop(0.4, 'rgba(251, 191, 36, 0.12)');
+        corona.addColorStop(1, 'rgba(251, 146, 60, 0)');
+        ctx.fillStyle = corona;
         ctx.fillRect(0, 0, W, H);
 
         if (k === 'sunny' || k === 'hot') {
+          // Hairline rays — 12 thin lines fading toward the tip, pulsing
+          // gently in opacity. Looks like sunbeams rather than triangles.
           ctx.save();
-          ctx.translate(sunX(), sunY());
+          ctx.translate(cx, cy);
+          ctx.lineCap = 'round';
           for (const ray of rays) {
-            ray.a += ray.speed * dt;
-            const pulse = 0.5 + 0.2 * Math.sin(t / 400 + ray.phase * 6);
+            ray.a += ray.speed * dt * 0.4;
+            const pulse = 0.55 + 0.45 * Math.sin(t / 600 + ray.phase * 5);
             ctx.rotate(ray.a);
-            ctx.fillStyle = `rgba(253, 224, 71, ${0.06 * pulse})`;
+            const inner = coreR + 6;
+            const outer = coreR + 90 + pulse * 30;
+            const grad = ctx.createLinearGradient(inner, 0, outer, 0);
+            grad.addColorStop(0, `rgba(254, 240, 138, ${0.55 * pulse})`);
+            grad.addColorStop(1, 'rgba(254, 240, 138, 0)');
+            ctx.strokeStyle = grad;
+            ctx.lineWidth = 1.5;
             ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(220, -9);
-            ctx.lineTo(220, 9);
-            ctx.closePath();
-            ctx.fill();
+            ctx.moveTo(inner, 0);
+            ctx.lineTo(outer, 0);
+            ctx.stroke();
             ctx.rotate(-ray.a);
           }
           ctx.restore();
         }
 
-        ctx.fillStyle = 'rgba(253, 224, 71, 0.78)';
+        // Sun core — multi-stop radial so the disk has depth instead of
+        // reading as a flat dot.
+        const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
+        core.addColorStop(0, 'rgba(255, 251, 235, 1)');
+        core.addColorStop(0.5, 'rgba(253, 224, 71, 1)');
+        core.addColorStop(1, 'rgba(251, 146, 60, 0.9)');
+        ctx.fillStyle = core;
         ctx.beginPath();
-        ctx.arc(sunX(), sunY(), 22, 0, Math.PI * 2);
+        ctx.arc(cx, cy, coreR, 0, Math.PI * 2);
         ctx.fill();
 
         // Hot: heat shimmer near bottom
