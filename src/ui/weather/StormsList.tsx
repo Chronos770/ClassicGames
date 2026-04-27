@@ -121,16 +121,20 @@ export default function StormsList({
           );
           const { data: rateRows } = await supabase
             .from('weather_readings')
-            .select('observed_at, rain_rate_last_in, rain_rate_hi_in')
+            .select(
+              'observed_at, rain_rate_last_in, rain_rate_hi_in, rain_rate_hi_last_15_min_in, rain_rate_hi_last_60_min_in, rain_rate_hi_last_24_hr_in',
+            )
             .eq('station_id', stationId)
             .gte('observed_at', new Date(earliest).toISOString())
-            .lte('observed_at', toIso)
-            .or('rain_rate_last_in.gt.0,rain_rate_hi_in.gt.0');
+            .lte('observed_at', toIso);
           for (const row of (rateRows as any[]) ?? []) {
             const t = new Date(row.observed_at).getTime();
             const rate = Math.max(
               Number(row.rain_rate_last_in ?? 0),
               Number(row.rain_rate_hi_in ?? 0),
+              Number(row.rain_rate_hi_last_15_min_in ?? 0),
+              Number(row.rain_rate_hi_last_60_min_in ?? 0),
+              Number(row.rain_rate_hi_last_24_hr_in ?? 0),
             );
             if (!Number.isFinite(rate) || rate <= 0) continue;
             for (const s of arr) {

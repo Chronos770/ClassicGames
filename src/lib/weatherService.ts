@@ -58,6 +58,8 @@ export interface WeatherReading {
   rain_rate_last_in: number | null;
   rain_rate_hi_in: number | null;
   rain_rate_hi_last_15_min_in: number | null;
+  rain_rate_hi_last_60_min_in: number | null;
+  rain_rate_hi_last_24_hr_in: number | null;
   rain_storm_current_in: number | null;
   rain_storm_last_in: number | null;
   rain_storm_current_start_at: string | null;

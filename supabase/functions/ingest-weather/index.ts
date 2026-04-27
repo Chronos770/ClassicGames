@@ -100,6 +100,8 @@ function buildReading(stationId: number, current: any) {
     rain_rate_last_in: numField(m, 'rain_rate_last_in'),
     rain_rate_hi_in: numField(m, 'rain_rate_hi_in'),
     rain_rate_hi_last_15_min_in: numField(m, 'rain_rate_hi_last_15_min_in'),
+    rain_rate_hi_last_60_min_in: numField(m, 'rain_rate_hi_last_60_min_in'),
+    rain_rate_hi_last_24_hr_in: numField(m, 'rain_rate_hi_last_24_hr_in'),
     rain_storm_current_in: numField(m, 'rain_storm_current_in'),
     rain_storm_last_in: numField(m, 'rain_storm_last_in'),
     rain_storm_current_start_at: tsField(m, 'rain_storm_current_start_at'),

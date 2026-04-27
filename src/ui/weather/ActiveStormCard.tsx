@@ -31,17 +31,30 @@ export default function ActiveStormCard({ reading }: Props) {
       return;
     }
     // Fetch rate samples since the storm started so we can show its peak.
+    // We take the max across four fields:
+    //   - rain_rate_last_in: snapshot at poll time
+    //   - rain_rate_hi_in: peak in the current archive period (~15 min)
+    //   - rain_rate_hi_last_15_min_in / 60_min / 24_hr_in: rolling-window
+    //     peaks from Davis. The 24-hr rolling field is what the WeatherLink
+    //     mobile app shows as "Today's High Rain Rate".
     (async () => {
       const { data } = await supabase
         .from('weather_readings')
-        .select('rain_rate_last_in, rain_rate_hi_in')
+        .select(
+          'rain_rate_last_in, rain_rate_hi_in, rain_rate_hi_last_15_min_in, rain_rate_hi_last_60_min_in, rain_rate_hi_last_24_hr_in',
+        )
         .eq('station_id', reading.station_id)
-        .gte('observed_at', startIso)
-        .or('rain_rate_last_in.gt.0,rain_rate_hi_in.gt.0');
+        .gte('observed_at', startIso);
       if (cancelled) return;
       let peak = 0;
       for (const r of (data as any[]) ?? []) {
-        const v = Math.max(Number(r.rain_rate_last_in ?? 0), Number(r.rain_rate_hi_in ?? 0));
+        const v = Math.max(
+          Number(r.rain_rate_last_in ?? 0),
+          Number(r.rain_rate_hi_in ?? 0),
+          Number(r.rain_rate_hi_last_15_min_in ?? 0),
+          Number(r.rain_rate_hi_last_60_min_in ?? 0),
+          Number(r.rain_rate_hi_last_24_hr_in ?? 0),
+        );
         if (Number.isFinite(v) && v > peak) peak = v;
       }
       setMaxRate(peak > 0 ? peak : null);
