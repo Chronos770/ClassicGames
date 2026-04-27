@@ -3,6 +3,7 @@ import LineChart, { type Series } from './LineChart';
 import StormsList from './StormsList';
 import StatsTable, { StatsSummary } from './StatsTable';
 import { getReadingsRange, type WeatherReading } from '../../lib/weatherService';
+import { supabase } from '../../lib/supabase';
 import {
   convertPrecip,
   convertPressure,
@@ -114,6 +115,8 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
   const [rawReadings, setRawReadings] = useState<WeatherReading[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalRows, setTotalRows] = useState(0);
+  const [backfillBusy, setBackfillBusy] = useState(false);
+  const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
 
   useEffect(() => {
     let from: Date;
@@ -142,6 +145,43 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
       })
       .finally(() => setLoading(false));
   }, [stationId, preset, customStart, customEnd, lastIngestTick]);
+
+  // Triggers WeatherLink's /historic endpoint for the currently-selected
+  // date range. Console keeps a 15-min archive log even during gateway
+  // outages — when the gateway reconnects, those buckets become available
+  // in the WL API. Useful when ingest missed data due to a power outage.
+  const handleBackfill = async () => {
+    if (backfillBusy) return;
+    setBackfillBusy(true);
+    setBackfillMsg(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('backfill-weather', {
+        body: { station_id: stationId, start: fromIso, end: toIso },
+      });
+      if (error) throw new Error(error.message);
+      const inserted = (data?.stations ?? []).reduce(
+        (acc: number, s: any) => acc + Number(s?.rows_inserted ?? 0),
+        0,
+      );
+      setBackfillMsg(
+        inserted > 0
+          ? `Backfilled ${inserted} rows from WeatherLink. Refreshing chart…`
+          : 'WeatherLink had no archive data for that range (or it was already ingested).',
+      );
+      // Bump the effect's deps so the chart re-fetches.
+      if (inserted > 0) {
+        // small delay so the upserts settle before re-reading
+        await new Promise((r) => setTimeout(r, 800));
+        // Re-trigger fetch by toggling preset (no-op set)
+        setPreset((p) => p);
+      }
+    } catch (e: any) {
+      setBackfillMsg(`Backfill failed: ${String(e?.message ?? e).slice(0, 200)}`);
+    } finally {
+      setBackfillBusy(false);
+      setTimeout(() => setBackfillMsg(null), 8000);
+    }
+  };
 
   const tempU = useWeatherUnitsStore((s) => s.temp);
   const windU = useWeatherUnitsStore((s) => s.wind);
@@ -343,6 +383,24 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Backfill control — pulls 15-min archive buckets from
+            WeatherLink for the visible range. Useful after power
+            outages where ingest missed data but the console kept
+            logging. */}
+        <div className="flex flex-wrap items-center gap-2 mb-3 text-xs">
+          <button
+            onClick={handleBackfill}
+            disabled={backfillBusy || stationId === null}
+            className="px-2.5 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10 text-white/70 transition-colors disabled:opacity-40"
+            title="Pull 15-minute archive buckets from WeatherLink for this date range"
+          >
+            {backfillBusy ? '↻ Backfilling…' : '↻ Backfill from WeatherLink'}
+          </button>
+          {backfillMsg && (
+            <span className="text-white/60 break-words flex-1 min-w-0">{backfillMsg}</span>
+          )}
         </div>
 
         {/* Metric tabs (only for chart view) */}
