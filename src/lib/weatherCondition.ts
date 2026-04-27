@@ -103,7 +103,13 @@ export function classifyCondition(
 
   // Thunderstorm heuristic: heavy rain + low pressure + gusty winds.
   // Pressure + wind tell us this is electrified weather, not just rain.
-  if (rate > 0.5 || (rain15 > 0.15 && baro < 29.8 && gust > 25)) {
+  // We only commit to a precip class while the sensor is actually
+  // measuring rain RIGHT NOW (rate > 0). Trailing accumulation fields
+  // like rain15 / rain60 don't mean it's currently raining — those just
+  // mean it rained at some point in the last 15 / 60 minutes. Using them
+  // as triggers caused the page to keep showing rain for up to an hour
+  // after a shower stopped.
+  if (rate > 0.5 || (rate > 0 && rain15 > 0.15 && baro < 29.8 && gust > 25)) {
     return {
       key: 'thunderstorm',
       label: 'Thunderstorm',
@@ -114,7 +120,7 @@ export function classifyCondition(
     };
   }
 
-  if (rate > 0.2 || rain15 > 0.1) {
+  if (rate > 0.2) {
     return {
       key: 'heavyRain',
       label: 'Heavy Rain',
@@ -125,7 +131,7 @@ export function classifyCondition(
     };
   }
 
-  if (rate > 0.02 || rain60 > 0.05) {
+  if (rate > 0.02) {
     return {
       key: 'rain',
       label: 'Rain',
@@ -136,7 +142,7 @@ export function classifyCondition(
     };
   }
 
-  if (rate > 0 || rain60 > 0.01) {
+  if (rate > 0) {
     return {
       key: 'drizzle',
       label: 'Drizzle',
