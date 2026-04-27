@@ -293,7 +293,7 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
 
   return (
     <div className="space-y-4">
-      <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
+      <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-4">
         {/* Preset + custom range + view toggle */}
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <div className="flex gap-1 border border-white/10 rounded-lg p-0.5 flex-wrap">

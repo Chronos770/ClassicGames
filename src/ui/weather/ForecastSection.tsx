@@ -94,7 +94,7 @@ function Next24Hours({ periods }: { periods: NwsForecastPeriod[] }) {
   const maxWind = Math.max(...periods.map((p) => parseWindSpeed(p.windSpeed) ?? 0));
 
   return (
-    <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
+    <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-4">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div className="text-xs uppercase tracking-wide text-white/40 font-semibold">Next 24 Hours</div>
         <div className="flex gap-1 border border-white/10 rounded-lg p-0.5">
@@ -256,7 +256,7 @@ function DailyGrid({
   if (current) days.push(current);
 
   return (
-    <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
+    <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-4">
       <div className="text-xs uppercase tracking-wide text-white/40 mb-3 font-semibold">7-Day Forecast</div>
       <div className="space-y-2">
         {days

@@ -29,7 +29,7 @@ export default function ActiveStormCard({ reading }: Props) {
   const avgRate = current / hours;
 
   return (
-    <div className="bg-gradient-to-br from-blue-600/20 via-indigo-500/10 to-transparent rounded-xl border border-blue-400/20 p-4 sm:p-5 mb-4">
+    <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-blue-400/30 p-4 sm:p-5 mb-4 shadow-lg shadow-blue-500/5">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-blue-200/80 mb-1">

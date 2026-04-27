@@ -82,7 +82,7 @@ export default function WindRose({ rows, size = 280 }: Props) {
 
   if (data.total === 0) {
     return (
-      <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
+      <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-4">
         <div className="text-xs uppercase tracking-wide text-white/40 mb-3 font-semibold">
           Wind Rose &middot; 24h
         </div>
@@ -112,7 +112,7 @@ export default function WindRose({ rows, size = 280 }: Props) {
   const fmtSpeed = (v: number | null) => (v === null ? '--' : `${(convertWind(v, windUnit) ?? 0).toFixed(1)} ${unitLabel}`);
 
   return (
-    <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
+    <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-4">
       {/* Header */}
       <div className="flex items-baseline justify-between mb-1 flex-wrap gap-2">
         <div className="text-xs uppercase tracking-wide text-white/40 font-semibold">

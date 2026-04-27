@@ -130,7 +130,7 @@ export default function PushSettings() {
 
   if (!supported) {
     return (
-      <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4 text-sm text-white/60">
+      <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-4 text-sm text-white/60">
         This browser doesn't support push notifications.
         {typeof window !== 'undefined' && /iPhone|iPad|iPod/.test(navigator.userAgent) && (
           <p className="text-[11px] text-white/40 mt-2">
@@ -153,7 +153,7 @@ export default function PushSettings() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
+      <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-4">
         <div className="flex items-baseline justify-between gap-3 flex-wrap">
           <div>
             <div className="text-sm font-semibold text-white">Push notifications</div>
@@ -212,7 +212,7 @@ export default function PushSettings() {
 
       {subscribed && (
         <>
-          <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
+          <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-4">
             <div className="text-xs uppercase tracking-wide text-white/40 mb-3 font-semibold">
               What to alert me about
             </div>
@@ -240,7 +240,7 @@ export default function PushSettings() {
             </div>
           </div>
 
-          <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
+          <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-4">
             <div className="text-xs uppercase tracking-wide text-white/40 mb-3 font-semibold">
               Quiet hours
             </div>
@@ -289,7 +289,7 @@ export default function PushSettings() {
 
       {/* Mobile-friendly diagnostic — runs entirely in the page so the
           user can compare client/server VAPID tails without DevTools. */}
-      <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
+      <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-4">
         <div className="flex items-center justify-between gap-3 mb-2">
           <div className="text-xs uppercase tracking-wide text-white/40 font-semibold">
             Diagnostic

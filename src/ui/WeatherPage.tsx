@@ -432,7 +432,7 @@ function FreshnessPill({
 
 function EmptyState({ onRefresh, busy }: { onRefresh: () => void; busy: boolean }) {
   return (
-    <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-8 text-center">
+    <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-8 text-center">
       <div className="text-white/60 text-lg mb-2">No readings yet</div>
       <div className="text-white/40 text-sm mb-4">
         Trigger the first ingestion to pull current conditions from WeatherLink.

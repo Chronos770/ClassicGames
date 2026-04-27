@@ -104,7 +104,7 @@ export default function MoonCard({ now }: Props) {
   };
 
   return (
-    <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
+    <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-4">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="text-xs uppercase tracking-wide text-white/40 font-semibold">Moon</div>
         <div className="text-[10px] text-white/40">Day {data.age.toFixed(1)} of {SYNODIC_MONTH_DAYS.toFixed(1)}</div>

@@ -35,7 +35,7 @@ export default function ForecastTab({ station, tick, onBack }: Props) {
           beyond-7-days note for context. */}
       <ForecastSection station={station} tick={tick} />
 
-      <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4 text-sm text-white/60">
+      <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-4 text-sm text-white/60">
         <div className="text-xs uppercase tracking-wide text-white/40 mb-1.5 font-semibold">
           Beyond 7 days
         </div>

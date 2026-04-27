@@ -128,7 +128,7 @@ export default function NewsTab({ tick }: Props) {
       )}
 
       {adding && (
-        <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4 space-y-3">
+        <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-4 space-y-3">
           <div className="text-sm font-semibold text-white">Add a YouTube channel</div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="block">
@@ -216,12 +216,12 @@ export default function NewsTab({ tick }: Props) {
       {loading && videos.length === 0 ? (
         <div className="text-white/40 text-sm py-12 text-center">Loading latest videos…</div>
       ) : sources.length === 0 ? (
-        <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-8 text-center">
+        <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-8 text-center">
           <div className="text-white/60 text-base mb-1">No channels yet</div>
           <div className="text-xs text-white/40">Add a YouTube channel above to see the latest videos.</div>
         </div>
       ) : videos.length === 0 ? (
-        <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-6 text-center text-sm text-white/40 italic">
+        <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-6 text-center text-sm text-white/40 italic">
           No videos returned yet. Check back in a minute.
         </div>
       ) : (
@@ -246,7 +246,7 @@ function VideoCard({ video }: { video: NewsVideo }) {
 
   if (playing) {
     return (
-      <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 overflow-hidden">
+      <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 overflow-hidden">
         <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
           <iframe
             src={`https://www.youtube-nocookie.com/embed/${video.videoId}?autoplay=1&rel=0`}
@@ -270,7 +270,7 @@ function VideoCard({ video }: { video: NewsVideo }) {
     <button
       type="button"
       onClick={() => setPlaying(true)}
-      className="text-left w-full bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 hover:bg-white/10 transition-colors overflow-hidden group"
+      className="text-left w-full bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 hover:bg-white/10 transition-colors overflow-hidden group"
     >
       <div className="relative w-full bg-black/40" style={{ paddingBottom: '56.25%' }}>
         <img

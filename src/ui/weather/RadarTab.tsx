@@ -54,7 +54,7 @@ export default function RadarTab({ station }: { station: WeatherStation | null }
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-3 bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-3">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-3 bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-3">
         <div className="flex flex-col gap-1 w-full sm:w-auto sm:flex-1">
           <span className="text-[10px] uppercase tracking-wider text-white/30">Overlay</span>
           <div className="flex flex-wrap gap-1">

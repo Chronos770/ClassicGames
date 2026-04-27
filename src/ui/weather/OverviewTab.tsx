@@ -447,7 +447,7 @@ function HumidityArc({ pct, size = 80 }: { pct: number | null; size?: number }) 
 
 function Card({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="bg-slate-900/70 backdrop-blur-sm rounded-xl border border-white/10 p-4">
+    <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-4">
       <div className="text-xs uppercase tracking-wide text-white/40 mb-3 font-semibold">{title}</div>
       <div className="space-y-1.5">{children}</div>
     </div>
