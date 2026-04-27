@@ -245,11 +245,17 @@ Deno.serve(async (req) => {
         const rows = Object.entries(byTs).map(([ts, m]) => buildReading(stationId, Number(ts), m));
 
         if (rows.length > 0) {
+          // Strictly additive: only insert buckets that don't already
+          // exist at (station_id, observed_at). Without ignoreDuplicates
+          // the upsert would *update* existing rows with the historic
+          // archive values, which can clobber instantaneous live fields
+          // (wind_speed_last is NULL on historic rows by design) — so we
+          // never overwrite live data with archive aggregates.
           for (let i = 0; i < rows.length; i += 200) {
             const slice = rows.slice(i, i + 200);
             const { error } = await supabase
               .from('weather_readings')
-              .upsert(slice, { onConflict: 'station_id,observed_at' });
+              .upsert(slice, { onConflict: 'station_id,observed_at', ignoreDuplicates: true });
             if (error) throw new Error(error.message);
           }
         }
