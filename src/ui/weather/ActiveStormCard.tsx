@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+import { supabase } from '../../lib/supabase';
 import type { WeatherReading } from '../../lib/weatherService';
 import { useUnitFormatters } from '../../lib/weatherUnits';
 
@@ -20,6 +22,35 @@ export default function ActiveStormCard({ reading }: Props) {
   const { fmtPrecip, fmtPrecipRate } = useUnitFormatters();
   const current = reading.rain_storm_current_in;
   const startIso = reading.rain_storm_current_start_at;
+  const [maxRate, setMaxRate] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!startIso) {
+      setMaxRate(null);
+      return;
+    }
+    // Fetch rate samples since the storm started so we can show its peak.
+    (async () => {
+      const { data } = await supabase
+        .from('weather_readings')
+        .select('rain_rate_last_in, rain_rate_hi_in')
+        .eq('station_id', reading.station_id)
+        .gte('observed_at', startIso)
+        .or('rain_rate_last_in.gt.0,rain_rate_hi_in.gt.0');
+      if (cancelled) return;
+      let peak = 0;
+      for (const r of (data as any[]) ?? []) {
+        const v = Math.max(Number(r.rain_rate_last_in ?? 0), Number(r.rain_rate_hi_in ?? 0));
+        if (Number.isFinite(v) && v > peak) peak = v;
+      }
+      setMaxRate(peak > 0 ? peak : null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [startIso, reading.station_id, reading.observed_at]);
+
   if (!current || current <= 0 || !startIso) return null;
 
   const start = new Date(startIso);
@@ -59,6 +90,12 @@ export default function ActiveStormCard({ reading }: Props) {
           <div>
             <span className="text-white/40">Current:</span> <span className="font-mono">{fmtPrecipRate(reading.rain_rate_last_in)}</span>
           </div>
+          {maxRate !== null && (
+            <div>
+              <span className="text-white/40">Peak Rate:</span>{' '}
+              <span className="font-mono text-blue-300">{fmtPrecipRate(maxRate)}</span>
+            </div>
+          )}
         </div>
       </div>
     </div>

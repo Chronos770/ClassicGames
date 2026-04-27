@@ -8,6 +8,7 @@ interface StormRow {
   total_in: number;
   duration_hrs: number | null;
   ongoing: boolean;
+  max_rate_in_per_hr: number | null;
 }
 
 export default function StormsList({
@@ -66,7 +67,7 @@ export default function StormsList({
           // Use the EARLIEST start and LATEST end so the displayed range covers
           // the full span observed across the duplicate readings.
           if (!existing) {
-            byBucket[key] = { start_at: start, end_at: end, total_in: total, duration_hrs: dur, ongoing: false };
+            byBucket[key] = { start_at: start, end_at: end, total_in: total, duration_hrs: dur, ongoing: false, max_rate_in_per_hr: null };
           } else {
             const newStart = new Date(start).getTime() < new Date(existing.start_at).getTime() ? start : existing.start_at;
             const newEnd = end && (!existing.end_at || new Date(end).getTime() > new Date(existing.end_at).getTime())
@@ -75,7 +76,7 @@ export default function StormsList({
             const newDur = newEnd
               ? (new Date(newEnd).getTime() - new Date(newStart).getTime()) / 3600_000
               : null;
-            byBucket[key] = { start_at: newStart, end_at: newEnd, total_in: newTotal, duration_hrs: newDur, ongoing: false };
+            byBucket[key] = { start_at: newStart, end_at: newEnd, total_in: newTotal, duration_hrs: newDur, ongoing: false, max_rate_in_per_hr: existing.max_rate_in_per_hr };
           }
         }
 
@@ -102,12 +103,49 @@ export default function StormsList({
             total_in: total,
             duration_hrs: dur,
             ongoing: true,
+            max_rate_in_per_hr: null,
           };
         }
 
         const arr = Object.values(byBucket)
           .filter((s) => s.total_in > 0)
           .sort((a, b) => new Date(b.start_at).getTime() - new Date(a.start_at).getTime());
+
+        // Single batch query for the rain rates within the visible range.
+        // We then fold each row's rate into the storm whose window covers
+        // its observed_at. Avoids N round-trips for N storms.
+        if (arr.length > 0) {
+          const earliest = arr.reduce(
+            (acc, s) => (new Date(s.start_at).getTime() < acc ? new Date(s.start_at).getTime() : acc),
+            Date.now(),
+          );
+          const { data: rateRows } = await supabase
+            .from('weather_readings')
+            .select('observed_at, rain_rate_last_in, rain_rate_hi_in')
+            .eq('station_id', stationId)
+            .gte('observed_at', new Date(earliest).toISOString())
+            .lte('observed_at', toIso)
+            .or('rain_rate_last_in.gt.0,rain_rate_hi_in.gt.0');
+          for (const row of (rateRows as any[]) ?? []) {
+            const t = new Date(row.observed_at).getTime();
+            const rate = Math.max(
+              Number(row.rain_rate_last_in ?? 0),
+              Number(row.rain_rate_hi_in ?? 0),
+            );
+            if (!Number.isFinite(rate) || rate <= 0) continue;
+            for (const s of arr) {
+              const start = new Date(s.start_at).getTime();
+              const end = s.end_at ? new Date(s.end_at).getTime() : Date.now();
+              if (t >= start && t <= end) {
+                if (s.max_rate_in_per_hr === null || rate > s.max_rate_in_per_hr) {
+                  s.max_rate_in_per_hr = rate;
+                }
+                break;
+              }
+            }
+          }
+        }
+
         if (!cancelled) setStorms(arr);
       } finally {
         if (!cancelled) setLoading(false);
@@ -169,6 +207,12 @@ export default function StormsList({
                 )}
               </div>
             </div>
+            {s.max_rate_in_per_hr !== null && (
+              <div className="text-[11px] text-white/50 font-mono mb-1.5">
+                <span className="text-white/40">Peak rate:</span>{' '}
+                <span className="text-blue-300">{s.max_rate_in_per_hr.toFixed(2)} in/hr</span>
+              </div>
+            )}
             <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full ${s.ongoing ? 'bg-blue-500/70' : 'bg-blue-500/50'}`}
