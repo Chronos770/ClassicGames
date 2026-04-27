@@ -49,7 +49,7 @@ function buildColumns(
   ];
 }
 
-const DEFAULT_COLUMNS = ['observed_at', 'temp', 'hum', 'dew_point', 'wind_speed_avg_last_10_min', 'wind_speed_hi_last_10_min', 'wind_dir_last', 'rainfall_last_15_min_in', 'bar_sea_level'];
+const DEFAULT_COLUMNS = ['observed_at', 'temp', 'hum', 'dew_point', 'wind_speed_avg_last_10_min', 'wind_speed_hi_last_10_min', 'wind_dir_last', 'rain_rate_hi_in', 'rainfall_last_15_min_in', 'bar_sea_level'];
 
 type SortDir = 'asc' | 'desc';
 
@@ -311,6 +311,7 @@ export function StatsSummary({ readings }: { readings: WeatherReading[] }) {
   const precU = useWeatherUnitsStore((s) => s.precip);
   const windLabel = windU === 'ms' ? 'm/s' : windU;
   const precLabel = precU === 'in' ? '"' : 'mm';
+  const rateU = `${precLabel}/hr`;
 
   const stats = useMemo(() => {
     const collect = (
@@ -331,11 +332,19 @@ export function StatsSummary({ readings }: { readings: WeatherReading[] }) {
       collect('Dew Point', `°${tempU}`, (r) => convertTemp(r.dew_point, tempU)),
       collect('Wind Avg', windLabel, (r) => convertWind(r.wind_speed_avg_last_10_min, windU)),
       collect('Wind Gust', windLabel, (r) => convertWind(r.wind_speed_hi_last_10_min, windU)),
+      collect('Rain Rate', rateU, (r) =>
+        convertPrecip(
+          // r.rain_rate_hi_in is the peak within the reading's bucket; fall
+          // back to rain_rate_last_in for older rows that didn't capture it.
+          r.rain_rate_hi_in ?? r.rain_rate_last_in,
+          precU,
+        ),
+      ),
       collect('Pressure', pressU, (r) => convertPressure(r.bar_sea_level, pressU)),
       collect('Indoor Temp', `°${tempU}`, (r) => convertTemp(r.temp_in, tempU)),
       collect('Indoor Hum', '%', (r) => r.hum_in),
     ].filter((s) => s.values.length > 0);
-  }, [readings, tempU, windU, pressU, windLabel]);
+  }, [readings, tempU, windU, pressU, precU, rateU, windLabel]);
 
   const totalRain = useMemo(() => {
     // Two ingest paths give us two different rainfall fields per row, and
