@@ -129,15 +129,35 @@ export async function getReadingsRange(
   toIso: string,
   columns = '*',
 ): Promise<WeatherReading[]> {
-  const { data, error } = await supabase
-    .from('weather_readings')
-    .select(columns)
-    .eq('station_id', stationId)
-    .gte('observed_at', fromIso)
-    .lte('observed_at', toIso)
-    .order('observed_at', { ascending: true });
-  if (error) throw error;
-  return (data as unknown as WeatherReading[]) ?? [];
+  // Supabase / PostgREST caps a single response at 1000 rows by default,
+  // which silently truncated long history pulls (1y / All) to 1000 readings.
+  // Page through the range in CHUNK_SIZE-row windows until we get a short
+  // page, accumulating everything client-side so the chart, table, and
+  // summary all see the full row set.
+  const CHUNK_SIZE = 1000;
+  const all: WeatherReading[] = [];
+  // Hard ceiling — at our 15-min ingest cadence, 200k rows is ~5.7 years of
+  // data. If we ever exceed this we're paging forever and something's wrong.
+  const HARD_CAP = 200_000;
+  let from = 0;
+
+  while (from < HARD_CAP) {
+    const to = from + CHUNK_SIZE - 1;
+    const { data, error } = await supabase
+      .from('weather_readings')
+      .select(columns)
+      .eq('station_id', stationId)
+      .gte('observed_at', fromIso)
+      .lte('observed_at', toIso)
+      .order('observed_at', { ascending: true })
+      .range(from, to);
+    if (error) throw error;
+    const rows = (data as unknown as WeatherReading[]) ?? [];
+    all.push(...rows);
+    if (rows.length < CHUNK_SIZE) break; // last page
+    from += CHUNK_SIZE;
+  }
+  return all;
 }
 
 export async function triggerIngest(): Promise<{ ingested_at: string; results: IngestResult[] }> {
