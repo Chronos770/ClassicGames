@@ -63,6 +63,10 @@ export default function WeatherBackground({ condition, windMph }: Props) {
     type Streak = { x: number; y: number; vx: number; len: number; a: number };
     type Leaf = { x: number; y: number; vx: number; vy: number; rot: number; vrot: number; size: number; color: string };
     type Comet = { x: number; y: number; vx: number; vy: number; len: number; a: number; life: number };
+    type Ridge = { points: Array<[number, number]> };
+    type Tree = { x: number; baseY: number; size: number; jitter: number };
+    type Pond = { cx: number; cy: number; rx: number; ry: number };
+    type Ripple = { x: number; y: number; r: number; a: number };
 
     const rain: Drop[] = [];
     const splashes: Splash[] = [];
@@ -74,6 +78,13 @@ export default function WeatherBackground({ condition, windMph }: Props) {
     const streaks: Streak[] = [];
     const leaves: Leaf[] = [];
     const comets: Comet[] = [];
+    // Scene elements (mountains / treeline silhouettes / pond / foreground trees).
+    // Generated once per resize; mostly static, with sway + ripples on top.
+    let mountains: Ridge | null = null;
+    let treeline: Ridge | null = null;
+    let pond: Pond | null = null;
+    const trees: Tree[] = [];
+    const ripples: Ripple[] = [];
     let nextCometAt = 0;
     let nebulaPhase = 0;
     let nextFlashAt = 0;
@@ -88,6 +99,63 @@ export default function WeatherBackground({ condition, windMph }: Props) {
       const H = h();
       rain.length = splashes.length = flakes.length = stars.length = clouds.length = 0;
       rays.length = mist.length = streaks.length = leaves.length = comets.length = 0;
+      ripples.length = trees.length = 0;
+      mountains = treeline = pond = null;
+
+      // SCENE — silhouette landscape that the weather plays out over. Skipped
+      // for the pure space view; that one keeps its starfield-only background.
+      if (k !== 'space') {
+        // Distant mountain ridge — jagged polyline near horizon.
+        const mtnY = H * 0.62;
+        const mtnPts: Array<[number, number]> = [[-20, H + 20]];
+        for (let i = 0; i <= 18; i++) {
+          const x = (i / 18) * (W + 40) - 20;
+          const peak = mtnY
+            + Math.sin(i * 0.7) * 22
+            + Math.sin(i * 1.9 + 1.3) * 14
+            + (Math.random() - 0.5) * 18;
+          mtnPts.push([x, peak]);
+        }
+        mtnPts.push([W + 20, H + 20]);
+        mountains = { points: mtnPts };
+
+        // Closer hills / treeline silhouette — taller bumps, more frequent.
+        const tlY = H * 0.80;
+        const tlPts: Array<[number, number]> = [[-20, H + 20]];
+        for (let i = 0; i <= 32; i++) {
+          const x = (i / 32) * (W + 40) - 20;
+          const peak = tlY
+            + Math.sin(i * 1.2) * 10
+            + (i % 3 === 0 ? -10 - Math.random() * 14 : 0)
+            + (Math.random() - 0.5) * 6;
+          tlPts.push([x, peak]);
+        }
+        tlPts.push([W + 20, H + 20]);
+        treeline = { points: tlPts };
+
+        // Pond — wide ellipse centered horizontally near the bottom.
+        pond = {
+          cx: W * 0.5,
+          cy: H * 0.93,
+          rx: Math.min(W * 0.32, 360),
+          ry: 18,
+        };
+
+        // Foreground trees flanking the pond.
+        const treeCount = isMobile ? 5 : 9;
+        for (let i = 0; i < treeCount; i++) {
+          const onLeft = i % 2 === 0;
+          const x = onLeft
+            ? 20 + Math.random() * (W * 0.35 - 40)
+            : W * 0.65 + Math.random() * (W * 0.35 - 40);
+          trees.push({
+            x,
+            baseY: H * 0.90 + Math.random() * 14,
+            size: 36 + Math.random() * 28,
+            jitter: Math.random() * Math.PI * 2,
+          });
+        }
+      }
 
       // SPACE — dense starfield, no other particles
       if (k === 'space') {
@@ -247,6 +315,148 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         ctx.stroke();
       }
       ctx.globalAlpha = 1;
+    };
+
+    // ── Scene palette per condition ────────────────────────────────────────
+    // Returns {mountain, treeline, tree, pond, snowy, frozen, lightFlash}.
+    const scenePalette = () => {
+      const isDay = condition.isDay;
+      switch (k) {
+        case 'thunderstorm':
+          return { mtn: 'rgba(15, 23, 42, 0.70)', tl: 'rgba(8, 12, 24, 0.78)', tree: 'rgba(5, 10, 16, 0.85)', pond: 'rgba(2, 6, 23, 0.78)', snowy: false, frozen: false, lightFlash: true };
+        case 'heavyRain':
+          return { mtn: 'rgba(30, 41, 59, 0.60)', tl: 'rgba(20, 30, 45, 0.70)', tree: 'rgba(12, 22, 25, 0.78)', pond: 'rgba(15, 23, 42, 0.72)', snowy: false, frozen: false, lightFlash: false };
+        case 'rain':
+          return { mtn: 'rgba(40, 55, 75, 0.55)', tl: 'rgba(25, 38, 50, 0.65)', tree: 'rgba(18, 32, 30, 0.75)', pond: 'rgba(20, 35, 60, 0.65)', snowy: false, frozen: false, lightFlash: false };
+        case 'drizzle':
+          return { mtn: 'rgba(60, 80, 100, 0.50)', tl: 'rgba(40, 60, 70, 0.60)', tree: 'rgba(30, 55, 50, 0.70)', pond: 'rgba(56, 100, 140, 0.55)', snowy: false, frozen: false, lightFlash: false };
+        case 'snow':
+          return { mtn: 'rgba(100, 116, 139, 0.55)', tl: 'rgba(80, 95, 110, 0.65)', tree: 'rgba(50, 70, 65, 0.70)', pond: 'rgba(186, 230, 253, 0.55)', snowy: true, frozen: true, lightFlash: false };
+        case 'fog':
+          return { mtn: 'rgba(148, 163, 184, 0.20)', tl: 'rgba(120, 135, 150, 0.32)', tree: 'rgba(95, 110, 120, 0.45)', pond: 'rgba(148, 163, 184, 0.30)', snowy: false, frozen: false, lightFlash: false };
+        case 'cold':
+          return { mtn: 'rgba(51, 65, 85, 0.55)', tl: 'rgba(40, 55, 70, 0.65)', tree: 'rgba(30, 50, 50, 0.70)', pond: 'rgba(99, 102, 241, 0.45)', snowy: false, frozen: false, lightFlash: false };
+        case 'cloudy':
+          return { mtn: 'rgba(71, 85, 105, 0.50)', tl: 'rgba(55, 70, 85, 0.60)', tree: 'rgba(40, 55, 50, 0.70)', pond: 'rgba(71, 85, 105, 0.55)', snowy: false, frozen: false, lightFlash: false };
+        case 'partlyCloudy':
+          return isDay
+            ? { mtn: 'rgba(82, 100, 130, 0.45)', tl: 'rgba(55, 80, 90, 0.55)', tree: 'rgba(36, 70, 50, 0.65)', pond: 'rgba(80, 150, 200, 0.50)', snowy: false, frozen: false, lightFlash: false }
+            : { mtn: 'rgba(20, 28, 50, 0.60)', tl: 'rgba(10, 18, 35, 0.70)', tree: 'rgba(8, 15, 22, 0.75)', pond: 'rgba(15, 23, 50, 0.65)', snowy: false, frozen: false, lightFlash: false };
+        case 'hot':
+          return { mtn: 'rgba(120, 75, 60, 0.50)', tl: 'rgba(100, 60, 50, 0.60)', tree: 'rgba(60, 65, 35, 0.65)', pond: 'rgba(180, 120, 80, 0.50)', snowy: false, frozen: false, lightFlash: false };
+        case 'sunny':
+          return isDay
+            ? { mtn: 'rgba(85, 110, 145, 0.45)', tl: 'rgba(55, 90, 100, 0.55)', tree: 'rgba(34, 80, 55, 0.65)', pond: 'rgba(100, 180, 220, 0.55)', snowy: false, frozen: false, lightFlash: false }
+            : { mtn: 'rgba(15, 23, 50, 0.60)', tl: 'rgba(8, 15, 35, 0.70)', tree: 'rgba(5, 12, 20, 0.78)', pond: 'rgba(15, 30, 70, 0.65)', snowy: false, frozen: false, lightFlash: false };
+        case 'clear':
+        default:
+          return isDay
+            ? { mtn: 'rgba(100, 130, 160, 0.45)', tl: 'rgba(60, 95, 110, 0.55)', tree: 'rgba(34, 75, 50, 0.65)', pond: 'rgba(110, 180, 220, 0.55)', snowy: false, frozen: false, lightFlash: false }
+            : { mtn: 'rgba(20, 28, 55, 0.55)', tl: 'rgba(12, 20, 40, 0.65)', tree: 'rgba(8, 14, 22, 0.75)', pond: 'rgba(20, 35, 70, 0.60)', snowy: false, frozen: false, lightFlash: false };
+      }
+    };
+
+    const drawScene = (now: number) => {
+      if (k === 'space' || !mountains || !treeline || !pond) return;
+      const W = w();
+      const H = h();
+      const pal = scenePalette();
+      // If a lightning flash is active, briefly brighten the whole scene.
+      const flashBoost = pal.lightFlash && flashAlpha > 0.4 ? Math.min(0.35, flashAlpha * 0.35) : 0;
+
+      // Distant mountains
+      ctx.fillStyle = pal.mtn;
+      ctx.beginPath();
+      ctx.moveTo(mountains.points[0][0], mountains.points[0][1]);
+      for (const p of mountains.points) ctx.lineTo(p[0], p[1]);
+      ctx.closePath();
+      ctx.fill();
+
+      // Closer treeline silhouette
+      ctx.fillStyle = pal.tl;
+      ctx.beginPath();
+      ctx.moveTo(treeline.points[0][0], treeline.points[0][1]);
+      for (const p of treeline.points) ctx.lineTo(p[0], p[1]);
+      ctx.closePath();
+      ctx.fill();
+
+      // Pond surface
+      ctx.fillStyle = pal.pond;
+      ctx.beginPath();
+      ctx.ellipse(pond.cx, pond.cy, pond.rx, pond.ry, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Subtle highlight on top half of pond for shape
+      const reflG = ctx.createLinearGradient(pond.cx, pond.cy - pond.ry, pond.cx, pond.cy);
+      reflG.addColorStop(0, 'rgba(255, 255, 255, 0.10)');
+      reflG.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.fillStyle = reflG;
+      ctx.beginPath();
+      ctx.ellipse(pond.cx, pond.cy - pond.ry * 0.25, pond.rx * 0.95, pond.ry * 0.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Frozen pond — faint hairline cracks
+      if (pal.frozen) {
+        ctx.strokeStyle = 'rgba(241, 245, 249, 0.35)';
+        ctx.lineWidth = 0.6;
+        for (let i = 0; i < 6; i++) {
+          const sx = pond.cx + ((i - 3) / 3) * pond.rx * 0.85;
+          ctx.beginPath();
+          ctx.moveTo(sx, pond.cy - pond.ry * 0.7);
+          ctx.lineTo(sx + (Math.random() - 0.5) * 30, pond.cy + pond.ry * 0.7);
+          ctx.stroke();
+        }
+      }
+
+      // Foreground trees — pine-style, 3 stacked triangles per tree.
+      // Sway: trees on cyclic motion driven by wind speed and per-tree jitter.
+      for (const tr of trees) {
+        const tBase = (now / 1000);
+        const swayAmount = (Math.abs(windFactor) * 0.08 + 0.012)
+          * Math.sin(tBase * (1.0 + windFactor * 0.05) + tr.jitter);
+
+        ctx.save();
+        ctx.translate(tr.x, tr.baseY);
+        ctx.rotate(swayAmount);
+
+        // Trunk
+        ctx.fillStyle = 'rgba(46, 30, 18, 0.78)';
+        ctx.fillRect(-tr.size * 0.06, -tr.size * 0.18, tr.size * 0.12, tr.size * 0.22);
+
+        // 3 layered triangles, top → bottom
+        const layers = 3;
+        for (let i = 0; i < layers; i++) {
+          const baseW = tr.size * (0.95 - i * 0.18);
+          const triH = tr.size * 0.42;
+          const yTop = -tr.size * 0.18 - (layers - 1 - i) * tr.size * 0.30;
+          ctx.fillStyle = pal.tree;
+          ctx.beginPath();
+          ctx.moveTo(0, yTop);
+          ctx.lineTo(-baseW, yTop + triH);
+          ctx.lineTo(baseW, yTop + triH);
+          ctx.closePath();
+          ctx.fill();
+          if (pal.snowy) {
+            // Snow cap on the top portion of each triangle
+            ctx.fillStyle = 'rgba(248, 250, 252, 0.85)';
+            ctx.beginPath();
+            ctx.moveTo(0, yTop);
+            ctx.lineTo(-baseW * 0.42, yTop + triH * 0.32);
+            ctx.lineTo(baseW * 0.42, yTop + triH * 0.32);
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+      }
+
+      // Lightning flash boost — overlay a soft white wash on the scene area
+      if (flashBoost > 0) {
+        const lf = ctx.createLinearGradient(0, H * 0.55, 0, H);
+        lf.addColorStop(0, `rgba(226, 232, 240, ${flashBoost})`);
+        lf.addColorStop(1, `rgba(226, 232, 240, 0)`);
+        ctx.fillStyle = lf;
+        ctx.fillRect(0, H * 0.55, W, H * 0.45);
+      }
     };
 
     const drawLightningBolt = (x: number, y: number) => {
@@ -519,6 +729,12 @@ export default function WeatherBackground({ condition, windMph }: Props) {
       }
       ctx.globalAlpha = 1;
 
+      // SCENE — silhouette landscape (mountains + treeline + pond + trees).
+      // Painted between the sky elements (stars/sun/moon) and the
+      // atmospheric particles (clouds/rain/fog) so clouds float in front of
+      // mountains and rain falls in front of trees.
+      drawScene(t);
+
       // Clouds
       for (const c of clouds) {
         c.x += c.speed * dt;
@@ -547,17 +763,43 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         ctx.fillRect(0, 0, W, H);
       }
 
-      // Rain (with splashes near bottom)
+      // Rain (with splashes near bottom + pond ripples). Drops landing in
+      // the pond ellipse spawn a circular ripple instead of a ground splash.
+      // Density of rain already scales with intensity (drizzle/rain/heavy),
+      // so ripple frequency naturally tracks the rainfall amount.
       if (rain.length) {
         ctx.strokeStyle = 'rgba(186, 230, 253, 0.85)';
         ctx.lineWidth = k === 'heavyRain' || k === 'thunderstorm' ? 1.5 : 1;
+        const rippleSpawnChance =
+          k === 'heavyRain' || k === 'thunderstorm' ? 0.55 :
+          k === 'rain' ? 0.35 :
+          0.18; // drizzle
         for (const d of rain) {
           {
             d.y += d.vy * dt;
             d.x += d.vx * dt;
           }
+          // Pond hit detection — drop ends its life when it meets the water.
+          // Compares (x - cx)^2 / rx^2 + (y - cy)^2 / ry^2 <= 1, but only
+          // accepts hits on the upper half of the ellipse (water surface).
+          if (pond) {
+            const dx = (d.x - pond.cx) / pond.rx;
+            const dy = (d.y - pond.cy) / pond.ry;
+            if (dx * dx + dy * dy <= 1 && d.y <= pond.cy) {
+              if (Math.random() < rippleSpawnChance) {
+                ripples.push({
+                  x: d.x,
+                  y: pond.cy + (d.y - pond.cy) * 0.3,
+                  r: 0.8,
+                  a: 0.6 + Math.random() * 0.25,
+                });
+              }
+              d.y = -20;
+              d.x = Math.random() * (W + 200) - 100;
+            }
+          }
           if (d.y > H - 4) {
-            // Splash
+            // Splash on ground
             if (Math.random() < 0.3) splashes.push({ x: d.x, y: H - 6, r: 1, a: 0.6 });
             d.y = -20;
             d.x = Math.random() * (W + 200) - 100;
@@ -571,6 +813,28 @@ export default function WeatherBackground({ condition, windMph }: Props) {
           ctx.stroke();
         }
         ctx.globalAlpha = 1;
+
+        // Pond ripples — concentric ovals fading out. Drawn after the rain
+        // so they appear to be on the water surface.
+        if (ripples.length) {
+          ctx.strokeStyle = 'rgba(186, 230, 253, 0.75)';
+          ctx.lineWidth = 1;
+          for (let i = ripples.length - 1; i >= 0; i--) {
+            const rp = ripples[i];
+            rp.r += dt * 28;
+            rp.a -= dt * 1.0;
+            if (rp.a <= 0) {
+              ripples.splice(i, 1);
+              continue;
+            }
+            ctx.globalAlpha = rp.a;
+            ctx.beginPath();
+            // Compress vertically since the pond is an ellipse seen at an angle
+            ctx.ellipse(rp.x, rp.y, rp.r, rp.r * 0.4, 0, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+          ctx.globalAlpha = 1;
+        }
 
         // Splashes
         ctx.strokeStyle = 'rgba(186, 230, 253, 0.7)';
