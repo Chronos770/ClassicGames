@@ -247,16 +247,28 @@ export const SDO_IMAGES: {
 // Builds a Helioviewer takeScreenshot URL for a single SDO layer at a
 // specific instant. The endpoint returns a rendered PNG directly when
 // display=true, so we can plug it straight into an <img src=...>.
+//
+// Param values mirror Helioviewer's official sample request:
+//   imageScale = 2.4204409 (their "natural" arcsec/pixel for SDO at full
+//                          disk; substituting 2.4 yielded blank PNGs)
+//   x0 / y0    = 0          (center the field of view; required, defaults
+//                          aren't applied if omitted)
+//   date       = ISO without milliseconds (some Helioviewer params reject
+//                                          fractional seconds)
 export function helioviewerImageUrl(sourceId: number, when: Date): string {
-  const iso = when.toISOString();
-  const layers = `[${sourceId},1,100]`;
+  const iso = when.toISOString().replace(/\.\d+Z$/, 'Z'); // strip ms
   const params = new URLSearchParams({
     date: iso,
-    imageScale: '2.4', // arcsec/pixel — gives a ~512px solar disk
-    layers,
+    imageScale: '2.4204409',
+    layers: `[${sourceId},1,100]`,
     events: '',
     eventLabels: 'false',
     scale: 'false',
+    scaleType: 'earth',
+    scaleX: '0',
+    scaleY: '0',
+    x0: '0',
+    y0: '0',
     width: '512',
     height: '512',
     watermark: 'false',
