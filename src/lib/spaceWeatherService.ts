@@ -248,18 +248,15 @@ export const SDO_IMAGES: {
 // specific instant. The endpoint returns a rendered PNG directly when
 // display=true, so we can plug it straight into an <img src=...>.
 //
-// Param values mirror Helioviewer's official sample request:
-//   imageScale = 2.4204409 (their "natural" arcsec/pixel for SDO at full
-//                          disk; substituting 2.4 yielded blank PNGs)
-//   x0 / y0    = 0          (center the field of view; required, defaults
-//                          aren't applied if omitted)
-//   date       = ISO without milliseconds (some Helioviewer params reject
-//                                          fractional seconds)
+// imageScale = 4.84 arcsec/pixel renders the full ~1920-arcsec solar
+// disk in ~400 of our 512 viewport pixels with comfortable margin. The
+// previous 2.4204409 value was Helioviewer's "natural" SDO scale but
+// produced a crop of the disk's center at our smaller viewport size.
 export function helioviewerImageUrl(sourceId: number, when: Date): string {
   const iso = when.toISOString().replace(/\.\d+Z$/, 'Z'); // strip ms
   const params = new URLSearchParams({
     date: iso,
-    imageScale: '2.4204409',
+    imageScale: '4.84',
     layers: `[${sourceId},1,100]`,
     events: '',
     eventLabels: 'false',

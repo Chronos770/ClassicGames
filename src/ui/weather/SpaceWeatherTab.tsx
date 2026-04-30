@@ -477,7 +477,10 @@ function SunImageCard({ imgIndex, setImgIndex }: { imgIndex: number; setImgIndex
   });
   const [offsetHours, setOffsetHours] = useState<number>(SPAN_HOURS); // 0 = newest, SPAN_HOURS = oldest
   const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState<number>(4); // frames-per-second
+  // Default 2 fps because Helioviewer's takeScreenshot endpoint takes
+  // ~0.5–2 seconds to render uncached frames. Faster defaults caused
+  // the image to flash blank between every step on first playback.
+  const [speed, setSpeed] = useState<number>(2);
 
   // Re-anchor "now" once when entering timelapse mode.
   useEffect(() => {
@@ -570,16 +573,23 @@ function SunImageCard({ imgIndex, setImgIndex }: { imgIndex: number; setImgIndex
         )}
       </div>
 
-      <div className="bg-black flex items-center justify-center">
+      <div className="bg-black flex items-center justify-center min-h-[300px]">
+        {/* No `key` here — letting the browser update src in place keeps
+            the previous frame visible while the next one decodes, instead
+            of remounting and showing a blank box every step. */}
         <img
-          // Cache-bust by including the timestamp string in src; Helioviewer
-          // returns identical bytes for repeated requests so the browser
-          // keeps each frame cached after first fetch.
-          key={currentSrc}
           src={currentSrc}
           alt={`Sun: ${img.description}${mode === 'timelapse' ? ` · ${currentDate.toISOString()}` : ''}`}
           className="max-w-full h-auto max-h-[480px]"
           loading="lazy"
+          onError={(e) => {
+            // Hide broken-image icon if Helioviewer 404s a particular
+            // timestamp. The frame just stays as the previous good one.
+            (e.currentTarget as HTMLImageElement).style.visibility = 'hidden';
+          }}
+          onLoad={(e) => {
+            (e.currentTarget as HTMLImageElement).style.visibility = 'visible';
+          }}
         />
       </div>
 
@@ -627,7 +637,7 @@ function SunImageCard({ imgIndex, setImgIndex }: { imgIndex: number; setImgIndex
             </button>
             <div className="ml-auto flex items-center gap-1 text-white/50">
               <span>Speed</span>
-              {[2, 4, 8, 16].map((s) => (
+              {[1, 2, 4, 8].map((s) => (
                 <button
                   key={s}
                   onClick={() => setSpeed(s)}
