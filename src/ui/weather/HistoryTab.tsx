@@ -248,16 +248,34 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
           yUnit: precLabel,
           yDomain: undefined,
         };
-      case 'rainTotals':
+      case 'rainTotals': {
+        // Cumulative counters (rainfall_*_in) are populated by live ingest
+        // but NULL on historic-backfill rows because WeatherLink's
+        // /historic endpoint doesn't return cumulative totals — only
+        // per-period rainfall. If we plot the raw values, the line
+        // breaks into disconnected dots wherever live and backfill rows
+        // alternate. Forward-fill nulls with the most recent observed
+        // counter so the line stays continuous (counter values can only
+        // go up over time, except at the year/month/day rollover).
+        const sortedR = [...readings].sort((a, b) => t(a) - t(b));
+        const ffillSeries = (extract: (r: WeatherReading) => number | null) => {
+          let last: number | null = null;
+          return sortedR.map((r) => {
+            const v = extract(r);
+            if (v !== null && Number.isFinite(v)) last = v;
+            return { t: t(r), v: last !== null ? rC(last) : null };
+          });
+        };
         return {
           series: [
-            { label: 'Day Total', color: '#3b82f6', points: readings.map((r) => ({ t: t(r), v: rC(r.rainfall_day_in) })) },
-            { label: 'Month Total', color: '#60a5fa', points: readings.map((r) => ({ t: t(r), v: rC(r.rainfall_month_in) })) },
-            { label: 'Year Total', color: '#93c5fd', points: readings.map((r) => ({ t: t(r), v: rC(r.rainfall_year_in) })) },
+            { label: 'Day Total', color: '#3b82f6', points: ffillSeries((r) => r.rainfall_day_in) },
+            { label: 'Month Total', color: '#60a5fa', points: ffillSeries((r) => r.rainfall_month_in) },
+            { label: 'Year Total', color: '#93c5fd', points: ffillSeries((r) => r.rainfall_year_in) },
           ] as Series[],
           yUnit: precLabel,
           yDomain: undefined,
         };
+      }
       case 'bar':
         return {
           series: [
