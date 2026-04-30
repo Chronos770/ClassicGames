@@ -174,10 +174,14 @@ function MoonCloud() {
 }
 
 function Clouds() {
+  // Pushed both clouds toward the vertical center of the viewBox so the
+  // rendered icon doesn't have a tall empty band above it. Previously
+  // the upper cloud sat at y=40, which on the 96px hero icon let the
+  // top edge ride up into the "CLOUDY" label's row.
   return (
     <g>
-      <Cloud x={35} y={40} scale={0.7} color="#94a3b8" className="wx-cloud-slow" />
-      <Cloud x={60} y={60} scale={1} color="#e2e8f0" className="wx-cloud-fast" />
+      <Cloud x={32} y={56} scale={0.65} color="#94a3b8" className="wx-cloud-slow" />
+      <Cloud x={62} y={62} scale={0.95} color="#e2e8f0" className="wx-cloud-fast" />
     </g>
   );
 }
