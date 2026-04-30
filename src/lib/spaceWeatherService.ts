@@ -205,29 +205,62 @@ export function auroraVisible(lat: number | null, kp: number | null): {
 // Public SDO (Solar Dynamics Observatory) image URLs. These are static
 // daily/hourly images NASA serves with an open Access-Control-Allow-Origin
 // header, so we can <img> them directly.
-export const SDO_IMAGES: { id: string; label: string; url: string; description: string }[] = [
+export const SDO_IMAGES: {
+  id: string;
+  label: string;
+  url: string;
+  description: string;
+  // Helioviewer source ID for the same wavelength/instrument, used by
+  // the timelapse player on the Space tab to fetch historic frames.
+  helioviewerSourceId: number;
+}[] = [
   {
     id: '193',
     label: '193 Å',
     url: 'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_0193.jpg',
     description: 'Corona — hot active regions and flares',
+    helioviewerSourceId: 13, // SDO/AIA/193
   },
   {
     id: '304',
     label: '304 Å',
     url: 'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_0304.jpg',
     description: 'Chromosphere — prominences and filaments',
+    helioviewerSourceId: 15, // SDO/AIA/304
   },
   {
     id: 'HMIIF',
     label: 'Visible',
     url: 'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_HMIIF.jpg',
     description: 'Sunspots in visible light',
+    helioviewerSourceId: 20, // SDO/HMI continuum
   },
   {
     id: 'HMIB',
     label: 'Magnetogram',
     url: 'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_512_HMIB.jpg',
     description: 'Surface magnetic polarity',
+    helioviewerSourceId: 21, // SDO/HMI magnetogram
   },
 ];
+
+// Builds a Helioviewer takeScreenshot URL for a single SDO layer at a
+// specific instant. The endpoint returns a rendered PNG directly when
+// display=true, so we can plug it straight into an <img src=...>.
+export function helioviewerImageUrl(sourceId: number, when: Date): string {
+  const iso = when.toISOString();
+  const layers = `[${sourceId},1,100]`;
+  const params = new URLSearchParams({
+    date: iso,
+    imageScale: '2.4', // arcsec/pixel — gives a ~512px solar disk
+    layers,
+    events: '',
+    eventLabels: 'false',
+    scale: 'false',
+    width: '512',
+    height: '512',
+    watermark: 'false',
+    display: 'true',
+  });
+  return `https://api.helioviewer.org/v2/takeScreenshot/?${params.toString()}`;
+}

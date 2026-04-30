@@ -10,6 +10,7 @@ import {
   solarWindActivity,
   sunspotActivity,
   SDO_IMAGES,
+  helioviewerImageUrl,
   type SpaceWeatherSnapshot,
 } from '../../lib/spaceWeatherService';
 import type { WeatherStation } from '../../lib/weatherService';
@@ -461,12 +462,57 @@ function AuroraCard({ data, station }: { data: SpaceWeatherSnapshot; station: We
 
 function SunImageCard({ imgIndex, setImgIndex }: { imgIndex: number; setImgIndex: (n: number) => void }) {
   const img = SDO_IMAGES[imgIndex];
+  // Timelapse state. When mode === 'live' we show the latest NASA/SDO
+  // image direct from sdo.gsfc.nasa.gov. When 'timelapse' we render a
+  // Helioviewer screenshot for a specific past timestamp; the slider
+  // covers the last 14 days at hourly resolution and the play button
+  // auto-advances the timestamp at a configurable speed.
+  const [mode, setMode] = useState<'live' | 'timelapse'>('live');
+  const HOUR_MS = 3600_000;
+  const STEP_HOURS = 1;
+  const SPAN_HOURS = 14 * 24; // 14 days
+  const [endRef, setEndRef] = useState<number>(() => {
+    // Snap to the top of the current hour so frames align.
+    return Math.floor(Date.now() / HOUR_MS) * HOUR_MS;
+  });
+  const [offsetHours, setOffsetHours] = useState<number>(SPAN_HOURS); // 0 = newest, SPAN_HOURS = oldest
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState<number>(4); // frames-per-second
+
+  // Re-anchor "now" once when entering timelapse mode.
+  useEffect(() => {
+    if (mode !== 'timelapse') return;
+    setEndRef(Math.floor(Date.now() / HOUR_MS) * HOUR_MS);
+    setOffsetHours(SPAN_HOURS); // start at oldest so play moves toward present
+  }, [mode]);
+
+  // Playback tick.
+  useEffect(() => {
+    if (!playing || mode !== 'timelapse') return;
+    const id = window.setInterval(() => {
+      setOffsetHours((h) => {
+        const next = h - STEP_HOURS;
+        if (next <= 0) {
+          setPlaying(false);
+          return 0;
+        }
+        return next;
+      });
+    }, 1000 / speed);
+    return () => window.clearInterval(id);
+  }, [playing, speed, mode]);
+
+  const currentTs = endRef - offsetHours * HOUR_MS;
+  const currentDate = new Date(currentTs);
+  const currentSrc =
+    mode === 'live' ? img.url : helioviewerImageUrl(img.helioviewerSourceId, currentDate);
+
   return (
     <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 overflow-hidden">
       <div className="px-4 pt-4 pb-2 flex items-baseline justify-between gap-2 flex-wrap">
         <div>
           <div className="text-xs uppercase tracking-wide text-white/40 font-semibold">
-            The Sun right now
+            {mode === 'live' ? 'The Sun right now' : 'The Sun — timelapse'}
           </div>
           <div className="text-[11px] text-white/50">{img.description}</div>
         </div>
@@ -486,17 +532,125 @@ function SunImageCard({ imgIndex, setImgIndex }: { imgIndex: number; setImgIndex
           ))}
         </div>
       </div>
+
+      {/* Mode toggle */}
+      <div className="px-4 pb-2 flex items-center gap-2 text-[11px]">
+        <button
+          onClick={() => {
+            setMode('live');
+            setPlaying(false);
+          }}
+          className={`px-2 py-1 rounded-md transition-colors ${
+            mode === 'live'
+              ? 'bg-white/10 text-white border border-white/15'
+              : 'text-white/50 hover:text-white/80'
+          }`}
+        >
+          Live
+        </button>
+        <button
+          onClick={() => setMode('timelapse')}
+          className={`px-2 py-1 rounded-md transition-colors ${
+            mode === 'timelapse'
+              ? 'bg-white/10 text-white border border-white/15'
+              : 'text-white/50 hover:text-white/80'
+          }`}
+        >
+          Timelapse
+        </button>
+        {mode === 'timelapse' && (
+          <span className="text-white/40 ml-auto font-mono">
+            {currentDate.toLocaleString([], {
+              month: 'short',
+              day: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+            })}
+          </span>
+        )}
+      </div>
+
       <div className="bg-black flex items-center justify-center">
         <img
-          src={img.url}
-          alt={`Sun: ${img.description}`}
+          // Cache-bust by including the timestamp string in src; Helioviewer
+          // returns identical bytes for repeated requests so the browser
+          // keeps each frame cached after first fetch.
+          key={currentSrc}
+          src={currentSrc}
+          alt={`Sun: ${img.description}${mode === 'timelapse' ? ` · ${currentDate.toISOString()}` : ''}`}
           className="max-w-full h-auto max-h-[480px]"
           loading="lazy"
         />
       </div>
-      <div className="px-4 py-2 text-[10px] text-white/30 text-center">
-        NASA/SDO · refreshes every few minutes
-      </div>
+
+      {mode === 'timelapse' && (
+        <div className="px-4 py-3 space-y-2">
+          <input
+            type="range"
+            min={0}
+            max={SPAN_HOURS}
+            step={STEP_HOURS}
+            value={SPAN_HOURS - offsetHours}
+            onChange={(e) => {
+              setOffsetHours(SPAN_HOURS - Number(e.target.value));
+              setPlaying(false);
+            }}
+            className="w-full accent-amber-500"
+            aria-label="Timelapse position"
+          />
+          <div className="flex items-center gap-2 text-[11px]">
+            <button
+              onClick={() => setPlaying((p) => !p)}
+              className="px-3 py-1 rounded-md bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition-colors"
+            >
+              {playing ? '❚❚ Pause' : '▶ Play'}
+            </button>
+            <button
+              onClick={() => {
+                setOffsetHours(SPAN_HOURS);
+                setPlaying(false);
+              }}
+              className="px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-white/70 transition-colors"
+              title="Jump to oldest frame"
+            >
+              ⏮
+            </button>
+            <button
+              onClick={() => {
+                setOffsetHours(0);
+                setPlaying(false);
+              }}
+              className="px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-white/70 transition-colors"
+              title="Jump to newest frame"
+            >
+              ⏭
+            </button>
+            <div className="ml-auto flex items-center gap-1 text-white/50">
+              <span>Speed</span>
+              {[2, 4, 8, 16].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setSpeed(s)}
+                  className={`px-1.5 py-0.5 rounded ${
+                    speed === s ? 'bg-white/10 text-white' : 'hover:text-white/80'
+                  }`}
+                >
+                  {s}×
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="text-[10px] text-white/30 text-center">
+            14 days · {SPAN_HOURS - offsetHours + 1} of {SPAN_HOURS + 1} hourly frames · imagery via Helioviewer.org
+          </div>
+        </div>
+      )}
+
+      {mode === 'live' && (
+        <div className="px-4 py-2 text-[10px] text-white/30 text-center">
+          NASA/SDO · refreshes every few minutes
+        </div>
+      )}
     </div>
   );
 }
