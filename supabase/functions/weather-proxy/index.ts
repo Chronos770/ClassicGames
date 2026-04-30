@@ -109,11 +109,49 @@ Deno.serve(async (req) => {
         data = await nwsFetch(point.properties.forecastHourly);
         break;
       }
-      case 'nws-alerts':
-        data = await nwsFetch(
+      case 'nws-alerts': {
+        // Point queries only catch alerts whose polygon or zone literally
+        // contains the user's exact lat/lon. River flood warnings are
+        // usually issued against the county or forecast zone covering a
+        // broader area, so a station near (but not in) the polygon
+        // misses them. Run BOTH a point query and a zone-based query
+        // (county + forecast zone, derived from /points), then merge
+        // and dedupe by alert id.
+        const point = await getPoint(lat, lon);
+        const props = (point as any)?.properties ?? {};
+        // The /points response gives county and forecastZone as URLs
+        // like https://api.weather.gov/zones/county/MOC195. Extract the
+        // trailing zone code and pass to /alerts/active?zone=...
+        const zoneCodes: string[] = [];
+        for (const url of [props.county, props.forecastZone, props.fireWeatherZone]) {
+          if (typeof url === 'string') {
+            const m = url.match(/\/zones?\/[^/]+\/([A-Z]{2}[CZ]\d{3,})/);
+            if (m) zoneCodes.push(m[1]);
+          }
+        }
+
+        const pointAlertsP = nwsFetch(
           `${NWS_BASE}/alerts/active?point=${lat.toFixed(4)},${lon.toFixed(4)}`,
         );
+        const zoneAlertsP =
+          zoneCodes.length > 0
+            ? nwsFetch(
+                `${NWS_BASE}/alerts/active?zone=${zoneCodes.join(',')}`,
+              )
+            : Promise.resolve({ features: [] });
+        const [pa, za] = await Promise.all([pointAlertsP, zoneAlertsP]);
+
+        const seen = new Set<string>();
+        const merged: any[] = [];
+        for (const f of [...((pa as any)?.features ?? []), ...((za as any)?.features ?? [])]) {
+          const id = f?.id ?? f?.properties?.id;
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+          merged.push(f);
+        }
+        data = { ...(pa as any), features: merged };
         break;
+      }
       case 'rainviewer': {
         const res = await fetchWithRetry(RAINVIEWER_MAPS, {});
         data = await res.json();
