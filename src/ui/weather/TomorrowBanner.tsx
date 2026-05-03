@@ -10,13 +10,56 @@ interface Props {
   onOpen?: () => void;
 }
 
-interface TomorrowSummary {
-  day: NwsForecastPeriod | null;
-  night: NwsForecastPeriod | null;
+interface DaySummary {
+  // Best-effort "headline" period — the next daytime period that hasn't
+  // ended yet for "today", or tomorrow's daytime period for "tomorrow".
+  // Falls back to a nighttime period when daytime is unavailable.
+  primary: NwsForecastPeriod | null;
+  // Companion period — the night that follows the primary day, used to
+  // surface the overnight low temp.
+  companion: NwsForecastPeriod | null;
   label: string;
 }
 
-function findTomorrow(periods: NwsForecastPeriod[]): TomorrowSummary {
+// Pick the period that should headline "Today" right now.
+// Morning/afternoon: today's daytime period (e.g. "This Afternoon", "Today").
+// Evening/night: tonight's nighttime period.
+function findToday(periods: NwsForecastPeriod[]): DaySummary {
+  const now = new Date();
+  const todayKey = now.toDateString();
+  let day: NwsForecastPeriod | null = null;
+  let night: NwsForecastPeriod | null = null;
+  for (const p of periods) {
+    const startKey = new Date(p.startTime).toDateString();
+    const endTime = new Date(p.endTime).getTime();
+    if (endTime <= now.getTime()) continue; // already over
+    if (startKey === todayKey) {
+      if (p.isDaytime && !day) day = p;
+      if (!p.isDaytime && !night) night = p;
+    } else if (startKey === new Date(now.getTime() + 86400_000).toDateString()) {
+      // Spillover for the night that's "tonight" but technically wraps midnight
+      if (!p.isDaytime && !night && new Date(p.startTime).getTime() < now.getTime() + 12 * 3600_000)
+        night = p;
+    }
+    if (day && night) break;
+  }
+  // Headline is whichever is most current/upcoming.
+  let primary: NwsForecastPeriod | null;
+  if (day && new Date(day.startTime).getTime() <= now.getTime() + 6 * 3600_000) {
+    primary = day;
+  } else if (night) {
+    primary = night;
+  } else {
+    primary = day ?? null;
+  }
+  return {
+    primary,
+    companion: primary === day ? night : null,
+    label: primary?.name ?? 'Today',
+  };
+}
+
+function findTomorrow(periods: NwsForecastPeriod[]): DaySummary {
   const now = new Date();
   const tomorrow = new Date(now);
   tomorrow.setDate(now.getDate() + 1);
@@ -39,8 +82,8 @@ function findTomorrow(periods: NwsForecastPeriod[]): TomorrowSummary {
     }
   }
   return {
-    day,
-    night,
+    primary: day,
+    companion: night,
     label: day?.name ?? night?.name ?? 'Tomorrow',
   };
 }
@@ -60,50 +103,70 @@ function toneFor(period: NwsForecastPeriod | null): { bg: string; border: string
   return { bg, border: 'border-white/10', accent: 'text-white/80' };
 }
 
-export default function TomorrowBanner({ station, tick, onOpen }: Props) {
-  const forecast = useNwsForecast(station?.latitude ?? null, station?.longitude ?? null, tick);
-  const periods = forecast.data?.properties.periods ?? null;
-  const summary = useMemo(() => (periods ? findTomorrow(periods) : null), [periods]);
-
-  if (forecast.loading && !summary) return null;
-  if (forecast.error) return null;
-  if (!summary || !summary.day) return null;
-
-  const day = summary.day;
-  const night = summary.night;
-  const tone = toneFor(day);
-  const conditionKey = forecastConditionKey(day.shortForecast, day.isDaytime);
-
-  const rainPct = day.probabilityOfPrecipitation.value ?? 0;
+function Banner({
+  summary,
+  onOpen,
+}: {
+  summary: DaySummary;
+  onOpen?: () => void;
+}) {
+  const primary = summary.primary;
+  if (!primary) return null;
+  const companion = summary.companion;
+  const tone = toneFor(primary);
+  const conditionKey = forecastConditionKey(primary.shortForecast, primary.isDaytime);
+  const rainPct = primary.probabilityOfPrecipitation.value ?? 0;
   const showRain = rainPct >= 10;
 
   const bits: string[] = [];
-  bits.push(`High ${day.temperature}°${day.temperatureUnit}`);
-  if (night && night.temperature !== null && night.temperature !== undefined) {
-    bits.push(`Low ${night.temperature}°${night.temperatureUnit}`);
+  if (primary.isDaytime) {
+    bits.push(`High ${primary.temperature}°${primary.temperatureUnit}`);
+    if (companion && companion.temperature !== null && companion.temperature !== undefined) {
+      bits.push(`Low ${companion.temperature}°${companion.temperatureUnit}`);
+    }
+  } else {
+    bits.push(`Low ${primary.temperature}°${primary.temperatureUnit}`);
   }
   if (showRain) bits.push(`Rain ${rainPct}%`);
-  if (day.windSpeed) {
-    const wd = day.windDirection ? ` ${day.windDirection}` : '';
-    bits.push(`Wind${wd} ${day.windSpeed}`);
+  if (primary.windSpeed) {
+    const wd = primary.windDirection ? ` ${primary.windDirection}` : '';
+    bits.push(`Wind${wd} ${primary.windSpeed}`);
   }
 
   return (
     <button
       type="button"
       onClick={onOpen}
-      className={`w-full rounded-xl border p-3 ${tone.bg} ${tone.border} flex items-center gap-3 mb-4 hover:bg-slate-800/70 transition-colors text-left`}
+      className={`w-full rounded-xl border p-3 ${tone.bg} ${tone.border} flex items-center gap-3 hover:bg-slate-800/70 transition-colors text-left`}
     >
       <div className="flex-shrink-0">
-        <AnimatedWeatherIcon conditionKey={conditionKey} isDay={day.isDaytime} size={44} />
+        <AnimatedWeatherIcon conditionKey={conditionKey} isDay={primary.isDaytime} size={44} />
       </div>
       <div className="flex-1 min-w-0">
         <div className={`text-sm font-semibold ${tone.accent}`}>
-          {summary.label}: {day.shortForecast}
+          {summary.label}: {primary.shortForecast}
         </div>
         <div className="text-[11px] text-white/60 mt-0.5 truncate">{bits.join(' · ')}</div>
       </div>
       <span className="text-white/40 text-xs flex-shrink-0" aria-hidden>›</span>
     </button>
+  );
+}
+
+export default function TomorrowBanner({ station, tick, onOpen }: Props) {
+  const forecast = useNwsForecast(station?.latitude ?? null, station?.longitude ?? null, tick);
+  const periods = forecast.data?.properties.periods ?? null;
+  const today = useMemo(() => (periods ? findToday(periods) : null), [periods]);
+  const tomorrow = useMemo(() => (periods ? findTomorrow(periods) : null), [periods]);
+
+  if (forecast.loading && !today && !tomorrow) return null;
+  if (forecast.error) return null;
+  if (!today?.primary && !tomorrow?.primary) return null;
+
+  return (
+    <div className="space-y-2 mb-4">
+      {today?.primary && <Banner summary={today} onOpen={onOpen} />}
+      {tomorrow?.primary && <Banner summary={tomorrow} onOpen={onOpen} />}
+    </div>
   );
 }
