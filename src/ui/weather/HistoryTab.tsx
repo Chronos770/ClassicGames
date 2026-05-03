@@ -43,9 +43,10 @@ const METRICS: { id: Metric; label: string; group: string }[] = [
   { id: 'battery', label: 'Battery', group: 'Station' },
 ];
 
-// Max number of rows we'll fetch before downsampling. Large ranges (1y+) would
-// otherwise be far too many rows for an inline SVG chart.
-const MAX_POINTS = 2000;
+// Max number of rows we'll plot before downsampling. Big enough that
+// any chart at typical phone width is at sub-pixel resolution; chart
+// only triggers a perf hit on very long ranges (90d/1y/All).
+const MAX_POINTS = 10_000;
 
 // Downsample by bucketing consecutive rows. Most metrics are averaged, but
 // cumulative-counter fields (which reset at day/month/year boundaries) are
