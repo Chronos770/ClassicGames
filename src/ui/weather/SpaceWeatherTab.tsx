@@ -489,6 +489,28 @@ function SunImageCard({ imgIndex, setImgIndex }: { imgIndex: number; setImgIndex
     setOffsetHours(SPAN_HOURS); // start at oldest so play moves toward present
   }, [mode]);
 
+  // Prefetch the next ~20 frames into the browser cache whenever the
+  // playhead moves. Helioviewer's first-time render of a screenshot
+  // takes 0.5–2s; if we only request a frame at the moment we want to
+  // display it, the next src change aborts that in-flight request and
+  // we never see anything. By pre-warming the cache, the visible
+  // <img>'s src swaps hit instantly. `new Image()` lets the browser
+  // start loading without inserting anything into the DOM.
+  useEffect(() => {
+    if (mode !== 'timelapse') return;
+    const PREFETCH = 20;
+    for (let i = 1; i <= PREFETCH; i++) {
+      const futureOffset = offsetHours - i;
+      if (futureOffset < 0) break;
+      const url = helioviewerImageUrl(
+        img.helioviewerSourceId,
+        new Date(endRef - futureOffset * HOUR_MS),
+      );
+      const pre = new window.Image();
+      pre.src = url;
+    }
+  }, [mode, offsetHours, endRef, img.helioviewerSourceId]);
+
   // Playback tick.
   useEffect(() => {
     if (!playing || mode !== 'timelapse') return;
@@ -581,15 +603,6 @@ function SunImageCard({ imgIndex, setImgIndex }: { imgIndex: number; setImgIndex
           src={currentSrc}
           alt={`Sun: ${img.description}${mode === 'timelapse' ? ` · ${currentDate.toISOString()}` : ''}`}
           className="max-w-full h-auto max-h-[480px]"
-          loading="lazy"
-          onError={(e) => {
-            // Hide broken-image icon if Helioviewer 404s a particular
-            // timestamp. The frame just stays as the previous good one.
-            (e.currentTarget as HTMLImageElement).style.visibility = 'hidden';
-          }}
-          onLoad={(e) => {
-            (e.currentTarget as HTMLImageElement).style.visibility = 'visible';
-          }}
         />
       </div>
 
