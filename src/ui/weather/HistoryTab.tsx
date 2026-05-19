@@ -473,8 +473,115 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
         ) : view === 'table' ? (
           <StatsTable readings={rawReadings} />
         ) : (
-          <StatsSummary readings={rawReadings} />
+          <div className="space-y-4">
+            <RecordsCard readings={rawReadings} />
+            <StatsSummary readings={rawReadings} />
+          </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// Records callout shown at the top of the Summary view. Surfaces the
+// peak extremes (with timestamp + duration "ago") for the visible
+// range. When the History tab's preset is "All", these are the all-
+// time records since ingest began.
+function RecordsCard({ readings }: { readings: WeatherReading[] }) {
+  const tempU = useWeatherUnitsStore((s) => s.temp);
+  const windU = useWeatherUnitsStore((s) => s.wind);
+  const pressU = useWeatherUnitsStore((s) => s.pressure);
+  const precU = useWeatherUnitsStore((s) => s.precip);
+  const windLabel = windU === 'ms' ? 'm/s' : windU;
+  const precLabel = precU === 'in' ? '"' : 'mm';
+  const tempLabel = `°${tempU}`;
+
+  const records = useMemo(() => {
+    type Rec = { label: string; value: string; when: string | null; tone: string };
+    const out: Rec[] = [];
+
+    const pick = (
+      label: string,
+      get: (r: WeatherReading) => number | null,
+      pickMax: boolean,
+      fmt: (v: number) => string,
+      tone: string,
+    ): Rec | null => {
+      let best: WeatherReading | null = null;
+      let bestV = pickMax ? -Infinity : Infinity;
+      for (const r of readings) {
+        const v = get(r);
+        if (v === null || !Number.isFinite(v)) continue;
+        if (pickMax ? v > bestV : v < bestV) {
+          bestV = v;
+          best = r;
+        }
+      }
+      if (!best) return null;
+      return { label, value: fmt(bestV), when: best.observed_at, tone };
+    };
+
+    const recs: (Rec | null)[] = [
+      pick('Hottest', (r) => convertTemp(r.temp, tempU), true, (v) => `${v.toFixed(1)}${tempLabel}`, 'text-red-300'),
+      pick('Coldest', (r) => convertTemp(r.temp, tempU), false, (v) => `${v.toFixed(1)}${tempLabel}`, 'text-sky-300'),
+      pick(
+        'Strongest gust',
+        (r) => convertWind(r.wind_speed_hi_last_10_min ?? r.wind_speed_last, windU),
+        true,
+        (v) => `${v.toFixed(1)} ${windLabel}`,
+        'text-amber-300',
+      ),
+      pick(
+        'Heaviest rain rate',
+        (r) => convertPrecip(r.rain_rate_hi_in ?? r.rain_rate_last_in, precU),
+        true,
+        (v) => `${v.toFixed(2)} ${precLabel}/hr`,
+        'text-blue-300',
+      ),
+      pick(
+        'Highest pressure',
+        (r) => convertPressure(r.bar_sea_level, pressU),
+        true,
+        (v) => `${v.toFixed(2)} ${pressU}`,
+        'text-emerald-300',
+      ),
+      pick(
+        'Lowest pressure',
+        (r) => convertPressure(r.bar_sea_level, pressU),
+        false,
+        (v) => `${v.toFixed(2)} ${pressU}`,
+        'text-purple-300',
+      ),
+    ];
+    for (const r of recs) if (r) out.push(r);
+    return out;
+  }, [readings, tempU, windU, pressU, precU, tempLabel, windLabel, precLabel]);
+
+  if (records.length === 0) return null;
+
+  return (
+    <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 overflow-hidden">
+      <div className="px-3 py-2 border-b border-white/10 bg-black/20 text-[10px] uppercase tracking-wide text-white/50 font-semibold">
+        Records · {readings.length.toLocaleString()} readings
+      </div>
+      <div className="grid grid-cols-2 gap-px bg-white/5">
+        {records.map((r) => (
+          <div key={r.label} className="bg-slate-900/85 p-3">
+            <div className="text-[10px] uppercase tracking-wide text-white/40">{r.label}</div>
+            <div className={`text-lg font-mono font-semibold tabular-nums ${r.tone}`}>{r.value}</div>
+            {r.when && (
+              <div className="text-[10px] text-white/40 font-mono mt-0.5">
+                {new Date(r.when).toLocaleString([], {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                })}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
