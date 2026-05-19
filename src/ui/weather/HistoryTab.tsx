@@ -471,7 +471,10 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
             <LineChart series={series} yUnit={yUnit} yDomain={yDomain} height={260} />
           )
         ) : view === 'table' ? (
-          <StatsTable readings={rawReadings} />
+          <div className="space-y-4">
+            <RecordsCard readings={rawReadings} />
+            <StatsTable readings={rawReadings} />
+          </div>
         ) : (
           <div className="space-y-4">
             <RecordsCard readings={rawReadings} />
@@ -557,13 +560,18 @@ function RecordsCard({ readings }: { readings: WeatherReading[] }) {
     return out;
   }, [readings, tempU, windU, pressU, precU, tempLabel, windLabel, precLabel]);
 
-  if (records.length === 0) return null;
-
   return (
     <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 overflow-hidden">
       <div className="px-3 py-2 border-b border-white/10 bg-black/20 text-[10px] uppercase tracking-wide text-white/50 font-semibold">
         Records · {readings.length.toLocaleString()} readings
       </div>
+      {records.length === 0 ? (
+        <div className="p-6 text-center text-white/40 text-xs">
+          {readings.length === 0
+            ? 'Loading readings…'
+            : 'No record values available in this range (every reading had nulls for these fields).'}
+        </div>
+      ) : (
       <div className="grid grid-cols-2 gap-px bg-white/5">
         {records.map((r) => (
           <div key={r.label} className="bg-slate-900/85 p-3">
@@ -583,6 +591,7 @@ function RecordsCard({ readings }: { readings: WeatherReading[] }) {
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }
