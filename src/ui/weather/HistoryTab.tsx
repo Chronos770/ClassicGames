@@ -151,23 +151,6 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
   // date range. Console keeps a 15-min archive log even during gateway
   // outages — when the gateway reconnects, those buckets become available
   // in the WL API. Useful when ingest missed data due to a power outage.
-  // Zoom the chart to a single day. Called from RecordsCard when the
-  // user taps a record (Hottest / Coldest / Most Rain / etc.) so they
-  // can see the trend leading up to and after that day's peak.
-  const zoomToDay = (d: Date) => {
-    const date = new Date(d);
-    date.setHours(0, 0, 0, 0);
-    const start = date.toISOString().slice(0, 10);
-    const next = new Date(date);
-    next.setDate(next.getDate() + 1);
-    const end = next.toISOString().slice(0, 10);
-    setCustomStart(start);
-    setCustomEnd(end);
-    setPreset('custom');
-    setView('chart');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
   const handleBackfill = async () => {
     if (backfillBusy) return;
     setBackfillBusy(true);
@@ -489,12 +472,12 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
           )
         ) : view === 'table' ? (
           <div className="space-y-4">
-            <RecordsCard readings={rawReadings} onZoomToDay={(d) => zoomToDay(d)} />
+            <RecordsCard readings={rawReadings} />
             <StatsTable readings={rawReadings} />
           </div>
         ) : (
           <div className="space-y-4">
-            <RecordsCard readings={rawReadings} onZoomToDay={(d) => zoomToDay(d)} />
+            <RecordsCard readings={rawReadings} />
             <StatsSummary readings={rawReadings} />
           </div>
         )}
@@ -507,13 +490,7 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
 // peak extremes (with timestamp + duration "ago") for the visible
 // range. When the History tab's preset is "All", these are the all-
 // time records since ingest began.
-function RecordsCard({
-  readings,
-  onZoomToDay,
-}: {
-  readings: WeatherReading[];
-  onZoomToDay?: (when: Date) => void;
-}) {
+function RecordsCard({ readings }: { readings: WeatherReading[] }) {
   const tempU = useWeatherUnitsStore((s) => s.temp);
   const windU = useWeatherUnitsStore((s) => s.wind);
   const pressU = useWeatherUnitsStore((s) => s.pressure);
@@ -596,46 +573,23 @@ function RecordsCard({
         </div>
       ) : (
       <div className="grid grid-cols-2 gap-px bg-white/5">
-        {records.map((r) => {
-          const inner = (
-            <>
-              <div className="text-[10px] uppercase tracking-wide text-white/40">{r.label}</div>
-              <div className={`text-lg font-mono font-semibold tabular-nums ${r.tone}`}>{r.value}</div>
-              {r.when && (
-                <div className="text-[10px] text-white/40 font-mono mt-0.5">
-                  {new Date(r.when).toLocaleString([], {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                    hour: 'numeric',
-                    minute: '2-digit',
-                  })}
-                </div>
-              )}
-            </>
-          );
-          if (onZoomToDay && r.when) {
-            return (
-              <button
-                key={r.label}
-                type="button"
-                onClick={() => onZoomToDay(new Date(r.when!))}
-                className="bg-slate-900/85 p-3 text-left hover:bg-slate-800/85 transition-colors group"
-                title="Zoom chart to this day"
-              >
-                {inner}
-                <div className="text-[10px] text-white/30 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  Tap to view day →
-                </div>
-              </button>
-            );
-          }
-          return (
-            <div key={r.label} className="bg-slate-900/85 p-3">
-              {inner}
-            </div>
-          );
-        })}
+        {records.map((r) => (
+          <div key={r.label} className="bg-slate-900/85 p-3">
+            <div className="text-[10px] uppercase tracking-wide text-white/40">{r.label}</div>
+            <div className={`text-lg font-mono font-semibold tabular-nums ${r.tone}`}>{r.value}</div>
+            {r.when && (
+              <div className="text-[10px] text-white/40 font-mono mt-0.5">
+                {new Date(r.when).toLocaleString([], {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                })}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
       )}
     </div>
