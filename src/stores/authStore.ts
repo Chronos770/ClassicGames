@@ -167,9 +167,23 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       .single();
 
     if (data) {
+      // Only fall through to 'user' if the row's role is actually missing —
+      // a real fetched row with role='admin' stays 'admin'.
       set({ profile: { ...data, role: data.role ?? 'user' } });
-    } else if (error) {
-      // Fallback: role column may not exist yet (pre-migration)
+      return;
+    }
+
+    // The main query returned no data. If the previous profile is still
+    // intact, DO NOT clobber it — a transient fetch failure (network
+    // blip, RLS hiccup during token refresh, etc.) shouldn't downgrade
+    // an admin to a regular user mid-session. That was the cause of the
+    // intermittent "Admins only" banner that a page refresh would fix.
+    const prevProfile = get().profile;
+    if (prevProfile) return;
+
+    if (error) {
+      // No prior profile + main select errored — try the legacy fallback
+      // (role column may not exist yet on very old deployments).
       const { data: fallback } = await supabase
         .from('profiles')
         .select('display_name, avatar_emoji, avatar_url')

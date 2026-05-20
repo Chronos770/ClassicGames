@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import LineChart, { type Series } from './LineChart';
 import StormsList from './StormsList';
 import StatsTable, { StatsSummary } from './StatsTable';
-import { getReadingsRange, type WeatherReading } from '../../lib/weatherService';
+import RecordCards from './RecordCards';
+import { getReadingsRange, getStationDateRange, type WeatherReading } from '../../lib/weatherService';
 import { supabase } from '../../lib/supabase';
 import {
   convertPrecip,
@@ -43,9 +45,9 @@ const METRICS: { id: Metric; label: string; group: string }[] = [
   { id: 'battery', label: 'Battery', group: 'Station' },
 ];
 
-// Max number of rows we'll plot before downsampling. Big enough that
-// any chart at typical phone width is at sub-pixel resolution; chart
-// only triggers a perf hit on very long ranges (90d/1y/All).
+// Cap on chart points after downsampling. 10k still renders fine in SVG and
+// keeps short-range views (24h/7d) effectively un-downsampled, while long
+// ranges (1y/all) get bucketed enough to stay snappy.
 const MAX_POINTS = 10_000;
 
 // Downsample by bucketing consecutive rows. Most metrics are averaged, but
@@ -104,6 +106,12 @@ function downsample(rows: WeatherReading[], maxPoints: number): WeatherReading[]
 }
 
 export default function HistoryTab({ stationId, lastIngestTick }: { stationId: number; lastIngestTick: number }) {
+  const navigate = useNavigate();
+  const dayPickerRef = useRef<HTMLInputElement | null>(null);
+  const [dateBounds, setDateBounds] = useState<{ earliest: string | null; latest: string | null }>({
+    earliest: null,
+    latest: null,
+  });
   const [preset, setPreset] = useState<Preset>('7d');
   const [metric, setMetric] = useState<Metric>('temp');
   const [view, setView] = useState<View>('chart');
@@ -118,6 +126,20 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
   const [totalRows, setTotalRows] = useState(0);
   const [backfillBusy, setBackfillBusy] = useState(false);
   const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
+
+  // Earliest/latest dates with data — bounds the day-picker so users can't
+  // jump to dates that have no readings.
+  useEffect(() => {
+    let cancelled = false;
+    getStationDateRange(stationId)
+      .then((b) => {
+        if (!cancelled) setDateBounds(b);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [stationId, lastIngestTick]);
 
   useEffect(() => {
     let from: Date;
@@ -352,50 +374,99 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
 
   return (
     <div className="space-y-4">
-      <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-4">
-        {/* Preset + custom range + view toggle */}
-        <div className="flex flex-wrap items-center gap-2 mb-4">
-          <div className="flex gap-1 border border-white/10 rounded-lg p-0.5 flex-wrap">
+      {/* All-time record cards + quick day-picker */}
+      <div className="flex items-center justify-end gap-2 -mb-1 relative">
+        <button
+          type="button"
+          onClick={() => {
+            const el = dayPickerRef.current;
+            if (!el) return;
+            if (typeof (el as any).showPicker === 'function') (el as any).showPicker();
+            else { el.focus(); el.click(); }
+          }}
+          className="text-[11px] text-white/55 hover:text-white/85 transition-colors flex items-center gap-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-2.5 py-1.5"
+          title="View any day's drill-down"
+        >
+          <span aria-hidden>📅</span>
+          <span>Jump to a day</span>
+        </button>
+        <input
+          ref={dayPickerRef}
+          type="date"
+          min={dateBounds.earliest ?? undefined}
+          max={dateBounds.latest ?? new Date().toISOString().slice(0, 10)}
+          onChange={(e) => {
+            if (e.target.value) navigate(`/weather/day/${e.target.value}`);
+          }}
+          className="absolute right-0 top-full opacity-0 pointer-events-none w-0 h-0"
+          aria-label="Pick a day to view"
+        />
+      </div>
+      <RecordCards stationId={stationId} lastIngestTick={lastIngestTick} />
+
+      <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-3 sm:p-4">
+        {/* Top control row */}
+        {/* Mobile: native dropdowns side-by-side */}
+        <div className="grid grid-cols-2 gap-2 mb-3 sm:hidden">
+          <select
+            value={preset}
+            onChange={(e) => setPreset(e.target.value as Preset)}
+            className="bg-white/5 border border-white/15 rounded-lg px-3 py-2 text-sm text-white focus:border-amber-500/50 focus:outline-none appearance-none bg-no-repeat bg-right pr-8"
+            style={{
+              backgroundImage:
+                "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='rgba(255,255,255,0.5)' d='M6 8L0 0h12z'/></svg>\")",
+              backgroundPosition: 'right 10px center',
+            }}
+          >
+            {PRESETS.map((p) => (
+              <option key={p.id} value={p.id} className="bg-slate-900 text-white">
+                {p.label}
+              </option>
+            ))}
+          </select>
+          <select
+            value={view}
+            onChange={(e) => setView(e.target.value as View)}
+            className="bg-white/5 border border-white/15 rounded-lg px-3 py-2 text-sm text-amber-300 focus:border-amber-500/50 focus:outline-none appearance-none bg-no-repeat bg-right pr-8"
+            style={{
+              backgroundImage:
+                "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='rgba(255,255,255,0.5)' d='M6 8L0 0h12z'/></svg>\")",
+              backgroundPosition: 'right 10px center',
+            }}
+          >
+            <option value="chart" className="bg-slate-900 text-white">📈 Chart</option>
+            <option value="table" className="bg-slate-900 text-white">🗂 Table</option>
+            <option value="summary" className="bg-slate-900 text-white">📊 Summary</option>
+          </select>
+        </div>
+
+        {/* Desktop: button groups */}
+        <div className="hidden sm:flex sm:items-center gap-2 mb-3">
+          <div className="flex gap-1 border border-white/10 rounded-lg p-0.5">
             {PRESETS.map((p) => (
               <button
                 key={p.id}
                 onClick={() => setPreset(p.id)}
-                className={`text-xs px-2.5 py-1 rounded transition-colors ${
-                  preset === p.id ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white/80'
+                className={`text-xs px-2.5 py-1.5 rounded transition-colors whitespace-nowrap ${
+                  preset === p.id
+                    ? 'bg-white/10 text-white'
+                    : 'text-white/50 hover:text-white/80 active:text-white'
                 }`}
               >
                 {p.label}
               </button>
             ))}
           </div>
-          {preset === 'custom' && (
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={customStart}
-                onChange={(e) => setCustomStart(e.target.value)}
-                max={customEnd}
-                className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white focus:border-amber-500/50 focus:outline-none"
-              />
-              <span className="text-white/40 text-xs">to</span>
-              <input
-                type="date"
-                value={customEnd}
-                onChange={(e) => setCustomEnd(e.target.value)}
-                min={customStart}
-                max={new Date().toISOString().slice(0, 10)}
-                className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white focus:border-amber-500/50 focus:outline-none"
-              />
-            </div>
-          )}
           <div className="flex-1" />
           <div className="flex gap-1 border border-white/10 rounded-lg p-0.5">
             {(['chart', 'table', 'summary'] as View[]).map((v) => (
               <button
                 key={v}
                 onClick={() => setView(v)}
-                className={`text-xs px-2.5 py-1 rounded transition-colors capitalize ${
-                  view === v ? 'bg-amber-500/20 text-amber-400 font-medium' : 'text-white/50 hover:text-white/80'
+                className={`text-xs px-2.5 py-1.5 rounded transition-colors capitalize ${
+                  view === v
+                    ? 'bg-amber-500/20 text-amber-400 font-medium'
+                    : 'text-white/50 hover:text-white/80 active:text-white'
                 }`}
               >
                 {v === 'chart' ? '📈 Chart' : v === 'table' ? '🗂 Table' : '📊 Summary'}
@@ -403,6 +474,27 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
             ))}
           </div>
         </div>
+
+        {preset === 'custom' && (
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <input
+              type="date"
+              value={customStart}
+              onChange={(e) => setCustomStart(e.target.value)}
+              max={customEnd}
+              className="bg-white/5 border border-white/10 rounded px-2 py-1.5 text-xs text-white focus:border-amber-500/50 focus:outline-none"
+            />
+            <span className="text-white/40 text-xs">to</span>
+            <input
+              type="date"
+              value={customEnd}
+              onChange={(e) => setCustomEnd(e.target.value)}
+              min={customStart}
+              max={new Date().toISOString().slice(0, 10)}
+              className="bg-white/5 border border-white/10 rounded px-2 py-1.5 text-xs text-white focus:border-amber-500/50 focus:outline-none"
+            />
+          </div>
+        )}
 
         {/* Backfill control — pulls 15-min archive buckets from
             WeatherLink for the visible range. Useful after power
@@ -422,53 +514,88 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
           )}
         </div>
 
-        {/* Metric tabs (only for chart view) */}
+        {/* Metric selector (only for chart view) */}
         {view === 'chart' && (
-          <div className="flex flex-wrap gap-3 mb-4">
-            {Object.entries(grouped).map(([group, items]) => (
-              <div key={group} className="flex flex-col gap-1">
-                <div className="text-[10px] uppercase tracking-wider text-white/30 font-semibold">{group}</div>
-                <div className="flex flex-wrap gap-1">
+          <div className="mb-3">
+            {/* Mobile: native select with optgroups for the categories */}
+            <select
+              value={metric}
+              onChange={(e) => setMetric(e.target.value as Metric)}
+              className="sm:hidden w-full bg-white/5 border border-white/15 rounded-lg px-3 py-2 text-sm text-amber-300 focus:border-amber-500/50 focus:outline-none appearance-none bg-no-repeat pr-8"
+              style={{
+                backgroundImage:
+                  "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='rgba(255,255,255,0.5)' d='M6 8L0 0h12z'/></svg>\")",
+                backgroundPosition: 'right 10px center',
+              }}
+            >
+              {Object.entries(grouped).map(([group, items]) => (
+                <optgroup key={group} label={group}>
                   {items.map((m) => (
-                    <button
-                      key={m.id}
-                      onClick={() => setMetric(m.id)}
-                      className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${
-                        metric === m.id
-                          ? 'bg-amber-500/20 text-amber-400 font-medium'
-                          : 'text-white/50 hover:text-white/80 hover:bg-white/5'
-                      }`}
-                    >
+                    <option key={m.id} value={m.id} className="bg-slate-900 text-white">
                       {m.label}
-                    </button>
+                    </option>
                   ))}
+                </optgroup>
+              ))}
+            </select>
+
+            {/* Desktop: grouped wrap of buttons */}
+            <div className="hidden sm:flex flex-wrap gap-x-4 gap-y-2">
+              {Object.entries(grouped).map(([group, items]) => (
+                <div key={group} className="flex flex-col gap-1">
+                  <div className="text-[10px] uppercase tracking-wider text-white/30 font-semibold">{group}</div>
+                  <div className="flex flex-wrap gap-1">
+                    {items.map((m) => (
+                      <button
+                        key={m.id}
+                        onClick={() => setMetric(m.id)}
+                        className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${
+                          metric === m.id
+                            ? 'bg-amber-500/20 text-amber-400 font-medium'
+                            : 'text-white/50 hover:text-white/80 hover:bg-white/5'
+                        }`}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
 
-        <div className="text-xs text-white/40 mb-3 flex items-center justify-between">
+        {/* Range/count line — on mobile it stacks; on desktop one row */}
+        <div className="text-[11px] text-white/40 mb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5">
           <span>
-            {totalRows.toLocaleString()} readings
-            {view === 'chart' && totalRows > readings.length && ` · downsampled to ${readings.length.toLocaleString()}`}
+            <span className="text-white/60 font-medium">{totalRows.toLocaleString()}</span> readings
+            {view === 'chart' && totalRows > readings.length && (
+              <span className="text-white/30"> · downsampled to {readings.length.toLocaleString()}</span>
+            )}
           </span>
-          <span>
-            {new Date(fromIso).toLocaleDateString()} — {new Date(toIso).toLocaleDateString()}
+          <span className="text-white/35">
+            {new Date(fromIso).toLocaleDateString()} → {new Date(toIso).toLocaleDateString()}
           </span>
         </div>
 
         {loading ? (
-          <div className="h-[260px] flex items-center justify-center text-white/30 text-sm">Loading...</div>
+          <div className="h-[260px] sm:h-[300px] flex items-center justify-center text-white/30 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-full border-2 border-white/20 border-t-amber-400 animate-spin" />
+              Loading…
+            </div>
+          </div>
         ) : view === 'chart' ? (
           metric === 'storms' ? (
             <StormsList stationId={stationId} fromIso={fromIso} toIso={toIso} lastIngestTick={lastIngestTick} />
           ) : !hasData ? (
-            <div className="h-[260px] flex items-center justify-center text-white/30 text-sm">
+            <div className="h-[260px] sm:h-[300px] flex items-center justify-center text-white/30 text-sm">
               No data for this range yet.
             </div>
           ) : (
-            <LineChart series={series} yUnit={yUnit} yDomain={yDomain} height={260} />
+            <div className="h-[260px] sm:h-[300px]">
+              <LineChart series={series} yUnit={yUnit} yDomain={yDomain} height={260} />
+            </div>
           )
         ) : view === 'table' ? (
           <StatsTable readings={rawReadings} />

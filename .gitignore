@@ -10,5 +10,6 @@ nul
 tsconfig.tsbuildinfo
 supabase/.temp/
 .vercel
+.claude/
 public/models/*.glb
 public/games/*.jsdos

@@ -67,6 +67,10 @@ export default function WeatherBackground({ condition, windMph }: Props) {
     type Tree = { x: number; baseY: number; size: number; jitter: number };
     type Pond = { cx: number; cy: number; rx: number; ry: number };
     type Ripple = { x: number; y: number; r: number; a: number };
+    // Fish that periodically arcs out of the pond. We track its origin x on
+    // the pond surface, an apex height, and a parametric t (0→1) along the
+    // arc. When t crosses 1 it splashes back in and spawns a ripple.
+    type Fish = { startX: number; surfaceY: number; t: number; duration: number; apex: number; dir: 1 | -1 };
 
     const rain: Drop[] = [];
     const splashes: Splash[] = [];
@@ -85,6 +89,8 @@ export default function WeatherBackground({ condition, windMph }: Props) {
     let pond: Pond | null = null;
     const trees: Tree[] = [];
     const ripples: Ripple[] = [];
+    const fish: Fish[] = [];
+    let nextFishAt = 0;
     let nextCometAt = 0;
     let nebulaPhase = 0;
     let nextFlashAt = 0;
@@ -100,6 +106,9 @@ export default function WeatherBackground({ condition, windMph }: Props) {
       rain.length = splashes.length = flakes.length = stars.length = clouds.length = 0;
       rays.length = mist.length = streaks.length = leaves.length = comets.length = 0;
       ripples.length = trees.length = 0;
+      fish.length = 0;
+      // First fish appears 3-8s after seed
+      nextFishAt = performance.now() + 3000 + Math.random() * 5000;
       mountains = treeline = pond = null;
 
       // SCENE — silhouette landscape that the weather plays out over. Skipped
@@ -141,20 +150,26 @@ export default function WeatherBackground({ condition, windMph }: Props) {
           ry: 18,
         };
 
-        // Foreground trees flanking the pond.
-        const treeCount = isMobile ? 5 : 9;
+        // Foreground forest — denser stand of trees on both flanks of the
+        // pond. Vary size/baseY a bit so it reads as a real treeline rather
+        // than evenly-spaced pickets.
+        const treeCount = isMobile ? 12 : 22;
         for (let i = 0; i < treeCount; i++) {
           const onLeft = i % 2 === 0;
           const x = onLeft
-            ? 20 + Math.random() * (W * 0.35 - 40)
-            : W * 0.65 + Math.random() * (W * 0.35 - 40);
+            ? 8 + Math.random() * (W * 0.40 - 16)
+            : W * 0.60 + Math.random() * (W * 0.40 - 16);
           trees.push({
             x,
-            baseY: H * 0.90 + Math.random() * 14,
-            size: 36 + Math.random() * 28,
+            // Layer depth: some trees tuck back behind others (higher up)
+            // and some push forward at the very bottom for a fuller scene.
+            baseY: H * 0.86 + Math.random() * 22,
+            size: 30 + Math.random() * 44,
             jitter: Math.random() * Math.PI * 2,
           });
         }
+        // Sort back-to-front so taller foreground trees overlap distant ones
+        trees.sort((a, b) => a.baseY - b.baseY);
       }
 
       // SPACE — dense starfield, no other particles
@@ -319,60 +334,61 @@ export default function WeatherBackground({ condition, windMph }: Props) {
 
     // ── Scene palette per condition ────────────────────────────────────────
     // Returns {mountain, treeline, tree, pond, snowy, frozen, lightFlash}.
+    // Brighter scene palette — silhouettes need to stand out against the dark
+    // page background. Previous values blended in too well; bumped RGBs and
+    // alphas across the board so mountains/trees/pond all read clearly.
     const scenePalette = () => {
       const isDay = condition.isDay;
       switch (k) {
         case 'thunderstorm':
-          return { mtn: 'rgba(15, 23, 42, 0.70)', tl: 'rgba(8, 12, 24, 0.78)', tree: 'rgba(5, 10, 16, 0.85)', pond: 'rgba(2, 6, 23, 0.78)', snowy: false, frozen: false, lightFlash: true };
+          return { mtn: 'rgba(60, 75, 105, 0.92)', tl: 'rgba(40, 55, 80, 0.95)', tree: 'rgba(28, 50, 45, 0.95)', pond: 'rgba(45, 70, 110, 0.85)', snowy: false, frozen: false, lightFlash: true };
         case 'heavyRain':
-          return { mtn: 'rgba(30, 41, 59, 0.60)', tl: 'rgba(20, 30, 45, 0.70)', tree: 'rgba(12, 22, 25, 0.78)', pond: 'rgba(15, 23, 42, 0.72)', snowy: false, frozen: false, lightFlash: false };
+          return { mtn: 'rgba(75, 95, 125, 0.90)', tl: 'rgba(55, 75, 100, 0.95)', tree: 'rgba(35, 65, 55, 0.95)', pond: 'rgba(60, 95, 135, 0.85)', snowy: false, frozen: false, lightFlash: false };
         case 'rain':
-          return { mtn: 'rgba(40, 55, 75, 0.55)', tl: 'rgba(25, 38, 50, 0.65)', tree: 'rgba(18, 32, 30, 0.75)', pond: 'rgba(20, 35, 60, 0.65)', snowy: false, frozen: false, lightFlash: false };
+          return { mtn: 'rgba(95, 120, 150, 0.88)', tl: 'rgba(70, 95, 120, 0.92)', tree: 'rgba(45, 80, 65, 0.95)', pond: 'rgba(80, 130, 175, 0.82)', snowy: false, frozen: false, lightFlash: false };
         case 'drizzle':
-          return { mtn: 'rgba(60, 80, 100, 0.50)', tl: 'rgba(40, 60, 70, 0.60)', tree: 'rgba(30, 55, 50, 0.70)', pond: 'rgba(56, 100, 140, 0.55)', snowy: false, frozen: false, lightFlash: false };
+          return { mtn: 'rgba(115, 140, 170, 0.85)', tl: 'rgba(85, 115, 140, 0.90)', tree: 'rgba(55, 110, 80, 0.92)', pond: 'rgba(110, 165, 200, 0.82)', snowy: false, frozen: false, lightFlash: false };
         case 'snow':
-          return { mtn: 'rgba(100, 116, 139, 0.55)', tl: 'rgba(80, 95, 110, 0.65)', tree: 'rgba(50, 70, 65, 0.70)', pond: 'rgba(186, 230, 253, 0.55)', snowy: true, frozen: true, lightFlash: false };
+          return { mtn: 'rgba(180, 195, 220, 0.92)', tl: 'rgba(150, 170, 195, 0.95)', tree: 'rgba(70, 100, 90, 0.95)', pond: 'rgba(186, 230, 253, 0.85)', snowy: true, frozen: true, lightFlash: false };
         case 'fog':
-          return { mtn: 'rgba(148, 163, 184, 0.20)', tl: 'rgba(120, 135, 150, 0.32)', tree: 'rgba(95, 110, 120, 0.45)', pond: 'rgba(148, 163, 184, 0.30)', snowy: false, frozen: false, lightFlash: false };
+          return { mtn: 'rgba(165, 180, 200, 0.55)', tl: 'rgba(140, 160, 180, 0.65)', tree: 'rgba(105, 130, 130, 0.78)', pond: 'rgba(165, 180, 200, 0.62)', snowy: false, frozen: false, lightFlash: false };
         case 'cold':
-          return { mtn: 'rgba(51, 65, 85, 0.55)', tl: 'rgba(40, 55, 70, 0.65)', tree: 'rgba(30, 50, 50, 0.70)', pond: 'rgba(99, 102, 241, 0.45)', snowy: false, frozen: false, lightFlash: false };
+          return { mtn: 'rgba(110, 130, 160, 0.88)', tl: 'rgba(85, 110, 140, 0.92)', tree: 'rgba(50, 90, 90, 0.95)', pond: 'rgba(125, 145, 215, 0.78)', snowy: false, frozen: false, lightFlash: false };
         case 'cloudy':
-          return { mtn: 'rgba(71, 85, 105, 0.50)', tl: 'rgba(55, 70, 85, 0.60)', tree: 'rgba(40, 55, 50, 0.70)', pond: 'rgba(71, 85, 105, 0.55)', snowy: false, frozen: false, lightFlash: false };
+          return { mtn: 'rgba(125, 145, 170, 0.85)', tl: 'rgba(95, 120, 145, 0.92)', tree: 'rgba(60, 105, 90, 0.95)', pond: 'rgba(115, 145, 175, 0.82)', snowy: false, frozen: false, lightFlash: false };
         case 'partlyCloudy':
           return isDay
-            ? { mtn: 'rgba(82, 100, 130, 0.45)', tl: 'rgba(55, 80, 90, 0.55)', tree: 'rgba(36, 70, 50, 0.65)', pond: 'rgba(80, 150, 200, 0.50)', snowy: false, frozen: false, lightFlash: false }
-            : { mtn: 'rgba(20, 28, 50, 0.60)', tl: 'rgba(10, 18, 35, 0.70)', tree: 'rgba(8, 15, 22, 0.75)', pond: 'rgba(15, 23, 50, 0.65)', snowy: false, frozen: false, lightFlash: false };
+            ? { mtn: 'rgba(130, 160, 200, 0.85)', tl: 'rgba(95, 140, 160, 0.92)', tree: 'rgba(55, 130, 90, 0.95)', pond: 'rgba(125, 195, 240, 0.85)', snowy: false, frozen: false, lightFlash: false }
+            : { mtn: 'rgba(70, 90, 130, 0.90)', tl: 'rgba(50, 70, 105, 0.95)', tree: 'rgba(30, 60, 65, 0.95)', pond: 'rgba(60, 90, 145, 0.85)', snowy: false, frozen: false, lightFlash: false };
         case 'hot':
-          return { mtn: 'rgba(120, 75, 60, 0.50)', tl: 'rgba(100, 60, 50, 0.60)', tree: 'rgba(60, 65, 35, 0.65)', pond: 'rgba(180, 120, 80, 0.50)', snowy: false, frozen: false, lightFlash: false };
+          return { mtn: 'rgba(180, 130, 105, 0.88)', tl: 'rgba(150, 105, 90, 0.92)', tree: 'rgba(105, 125, 65, 0.95)', pond: 'rgba(220, 160, 120, 0.82)', snowy: false, frozen: false, lightFlash: false };
         case 'sunny':
           return isDay
-            ? { mtn: 'rgba(85, 110, 145, 0.45)', tl: 'rgba(55, 90, 100, 0.55)', tree: 'rgba(34, 80, 55, 0.65)', pond: 'rgba(100, 180, 220, 0.55)', snowy: false, frozen: false, lightFlash: false }
-            : { mtn: 'rgba(15, 23, 50, 0.60)', tl: 'rgba(8, 15, 35, 0.70)', tree: 'rgba(5, 12, 20, 0.78)', pond: 'rgba(15, 30, 70, 0.65)', snowy: false, frozen: false, lightFlash: false };
+            ? { mtn: 'rgba(135, 165, 200, 0.85)', tl: 'rgba(100, 145, 160, 0.92)', tree: 'rgba(60, 140, 95, 0.95)', pond: 'rgba(130, 210, 250, 0.85)', snowy: false, frozen: false, lightFlash: false }
+            : { mtn: 'rgba(65, 85, 130, 0.90)', tl: 'rgba(45, 65, 100, 0.95)', tree: 'rgba(25, 55, 55, 0.95)', pond: 'rgba(60, 90, 145, 0.85)', snowy: false, frozen: false, lightFlash: false };
         case 'clear':
         default:
           return isDay
-            ? { mtn: 'rgba(100, 130, 160, 0.45)', tl: 'rgba(60, 95, 110, 0.55)', tree: 'rgba(34, 75, 50, 0.65)', pond: 'rgba(110, 180, 220, 0.55)', snowy: false, frozen: false, lightFlash: false }
-            : { mtn: 'rgba(20, 28, 55, 0.55)', tl: 'rgba(12, 20, 40, 0.65)', tree: 'rgba(8, 14, 22, 0.75)', pond: 'rgba(20, 35, 70, 0.60)', snowy: false, frozen: false, lightFlash: false };
+            ? { mtn: 'rgba(140, 175, 210, 0.85)', tl: 'rgba(100, 150, 165, 0.92)', tree: 'rgba(60, 135, 90, 0.95)', pond: 'rgba(140, 210, 250, 0.85)', snowy: false, frozen: false, lightFlash: false }
+            : { mtn: 'rgba(70, 90, 135, 0.90)', tl: 'rgba(50, 70, 105, 0.95)', tree: 'rgba(30, 55, 60, 0.95)', pond: 'rgba(70, 100, 155, 0.85)', snowy: false, frozen: false, lightFlash: false };
       }
     };
 
+    let lastSceneTime = 0;
     const drawScene = (now: number) => {
       if (k === 'space' || !mountains || !treeline || !pond) return;
+      const sceneDt = lastSceneTime ? Math.min(0.05, (now - lastSceneTime) / 1000) : 0.016;
+      lastSceneTime = now;
       const W = w();
       const H = h();
       const pal = scenePalette();
       // If a lightning flash is active, briefly brighten the whole scene.
       const flashBoost = pal.lightFlash && flashAlpha > 0.4 ? Math.min(0.35, flashAlpha * 0.35) : 0;
 
-      // Distant mountains
-      ctx.fillStyle = pal.mtn;
-      ctx.beginPath();
-      ctx.moveTo(mountains.points[0][0], mountains.points[0][1]);
-      for (const p of mountains.points) ctx.lineTo(p[0], p[1]);
-      ctx.closePath();
-      ctx.fill();
+      // Mountains removed per user request — pure forest + pond scene.
+      // pal.mtn is still defined but we no longer paint the ridge.
 
-      // Closer treeline silhouette
+      // Forest treeline silhouette (closer hills with trees)
       ctx.fillStyle = pal.tl;
       ctx.beginPath();
       ctx.moveTo(treeline.points[0][0], treeline.points[0][1]);
@@ -456,6 +472,74 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         lf.addColorStop(1, `rgba(226, 232, 240, 0)`);
         ctx.fillStyle = lf;
         ctx.fillRect(0, H * 0.55, W, H * 0.45);
+      }
+
+      // Spawn a jumping fish at random intervals (skip when frozen / heavy
+      // weather where it'd look out of place).
+      if (!pal.frozen && k !== 'thunderstorm' && k !== 'heavyRain') {
+        if (now >= nextFishAt && fish.length < 2) {
+          // Pick a random spot along the pond surface (avoid the very edges)
+          const rel = (Math.random() - 0.5) * 1.4; // -0.7 → 0.7
+          const startX = pond.cx + rel * pond.rx * 0.9;
+          // Subtle Y offset so the fish appears to come from inside the pond
+          const surfaceY = pond.cy - pond.ry * 0.55;
+          fish.push({
+            startX,
+            surfaceY,
+            t: 0,
+            duration: 1.2 + Math.random() * 0.4,
+            apex: 22 + Math.random() * 18,
+            dir: Math.random() < 0.5 ? -1 : 1,
+          });
+          // Schedule the next jump 6-18s out
+          nextFishAt = now + 6000 + Math.random() * 12000;
+        }
+      }
+
+      // Update and draw each active fish
+      const fishColor = pal.tree; // matches the silhouette feel
+      for (let i = fish.length - 1; i >= 0; i--) {
+        const f = fish[i];
+        f.t += sceneDt / f.duration;
+        if (f.t >= 1) {
+          // Splash back into pond
+          ripples.push({ x: f.startX + f.dir * 14, y: f.surfaceY, r: 2, a: 0.95 });
+          splashes.push({ x: f.startX + f.dir * 14, y: f.surfaceY, r: 2, a: 0.85 });
+          fish.splice(i, 1);
+          continue;
+        }
+        // Parametric arc — y = apex * 4*t*(1-t) (parabola, 0 at endpoints,
+        // peak at t=0.5). x slides f.dir * ~28px across.
+        const arcY = -f.apex * 4 * f.t * (1 - f.t);
+        const arcX = f.dir * 28 * f.t;
+        const cx = f.startX + arcX;
+        const cy = f.surfaceY + arcY;
+        // Tilt: derivative of position. Body angled along velocity.
+        const dy = -f.apex * 4 * (1 - 2 * f.t);
+        const dx = f.dir * 28;
+        const angle = Math.atan2(dy, dx);
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(angle);
+        // Body: small lens shape
+        ctx.fillStyle = fishColor;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 7, 2.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Tail: triangle behind the body
+        ctx.beginPath();
+        ctx.moveTo(-6, 0);
+        ctx.lineTo(-11, -3);
+        ctx.lineTo(-11, 3);
+        ctx.closePath();
+        ctx.fill();
+        // Tiny eye
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.beginPath();
+        ctx.arc(3, -0.5, 0.7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       }
     };
 

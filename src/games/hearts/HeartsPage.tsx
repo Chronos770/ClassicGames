@@ -314,13 +314,16 @@ export default function HeartsPage() {
     const seat = mySeatRef.current;
     const rotated = rotateStateForSeat(s, seat);
     rendererRef.current?.render(rotated, new Set());
-    // Broadcast sanitized state (hands hidden) + send each player their real hand
-    adapterRef.current?.sendMove({ type: 'game-state', state: sanitizeStateForBroadcast(s) });
+    // Send each player their real hand FIRST so myHandRef is up-to-date
+    // before the sanitized game-state arrives and gets merged.
+    // (Reverse order caused dummy ace-of-spades cards to leak into the
+    // joiner's display at the start of every round.)
     for (let i = 0; i < 4; i++) {
       if (i !== seat && !aiSeatsRef.current.has(i)) {
         adapterRef.current?.sendMove({ type: 'your-hand', seat: i, hand: s.hands[i] });
       }
     }
+    adapterRef.current?.sendMove({ type: 'game-state', state: sanitizeStateForBroadcast(s) });
   }, []);
 
   /** Host sends an event message to trigger animations/feedback on non-host */
@@ -412,9 +415,20 @@ export default function HeartsPage() {
       // A new player announces themselves
       if (isHost) {
         setLobbyPlayerIds((prev) => {
+          // Already seated? Re-send their seat-assign in case the original was lost
+          // (joiner retries player-info every 2s until they receive a seat-assign).
+          if (prev.includes(data.userId)) {
+            const existingSeat = prev.indexOf(data.userId);
+            adapterRef.current?.sendMove({
+              type: 'seat-assign',
+              userId: data.userId,
+              seat: existingSeat,
+              allSeats: prev,
+              allNames: seatNamesRef.current,
+            });
+            return prev;
+          }
           const next = [...prev];
-          // Deduplicate: if this userId is already seated, ignore
-          if (next.includes(data.userId)) return prev;
           // Find first empty seat
           const emptySeat = next.findIndex((p, i) => i > 0 && p === null);
           if (emptySeat === -1) {
@@ -467,19 +481,24 @@ export default function HeartsPage() {
       if (!isHost) {
         setPassSubmitted(false);
         setNextRoundRequested(false);
-        animatingRef.current = true;
         pendingStateRef.current = null;
         const handSizes: number[] = data.handSizes || [13, 13, 13, 13];
-        rendererRef.current?.playDealAnimation(handSizes, () => {
-          SoundManager.getInstance().play('card-deal');
-          animatingRef.current = false;
-          // Apply any queued state
-          if (pendingStateRef.current) {
-            const s = pendingStateRef.current;
-            pendingStateRef.current = null;
-            applyRemoteState(s);
-          }
-        });
+        // Only enter animating state if renderer is actually ready —
+        // otherwise animatingRef would get stuck at true and queue all
+        // future state updates forever.
+        if (rendererRef.current) {
+          animatingRef.current = true;
+          rendererRef.current.playDealAnimation(handSizes, () => {
+            SoundManager.getInstance().play('card-deal');
+            animatingRef.current = false;
+            // Apply any queued state
+            if (pendingStateRef.current) {
+              const s = pendingStateRef.current;
+              pendingStateRef.current = null;
+              applyRemoteState(s);
+            }
+          });
+        }
       }
     } else if (data.type === 'card-played') {
       // Host says a card was played — animate on non-host
@@ -600,6 +619,7 @@ export default function HeartsPage() {
         // Check if all passes are in
         if (s.passingCards.every((p) => p.length === 3)) {
           game.executePass();
+          setPassSubmitted(false);
           broadcastEvent({ type: 'pass-execute' });
           broadcastState(game);
           const newS = game.getState();
@@ -707,6 +727,7 @@ export default function HeartsPage() {
       if (isHost && game && game.getState().phase === 'round-over') {
         game.startNextRound();
         setSelectedCards(new Set());
+        setPassSubmitted(false);
         setMessage('');
 
         const s = game.getState();
@@ -1127,6 +1148,8 @@ export default function HeartsPage() {
         for (const c of hostPassCards) {
           game.selectPassCard(mySeatNow, c);
         }
+        // Lock the button so host can't double-submit while waiting for others
+        setPassSubmitted(true);
         // Broadcast who has submitted so far
         const updated = game.getState();
         const submitted = updated.passingCards.map((p) => p.length >= 3);
@@ -1137,6 +1160,7 @@ export default function HeartsPage() {
           game.executePass();
           selectedCardsRef.current = new Set();
           setSelectedCards(new Set());
+          setPassSubmitted(false);
           broadcastEvent({ type: 'pass-execute' });
           broadcastState(game);
           const newS = game.getState();
@@ -1203,6 +1227,7 @@ export default function HeartsPage() {
     if (isMultiplayer && isHost) {
       game.startNextRound();
       setSelectedCards(new Set());
+      setPassSubmitted(false);
       setMessage('');
       rendererRef.current?.clearBubble();
 
@@ -1280,6 +1305,7 @@ export default function HeartsPage() {
 
     game.initialize();
     setSelectedCards(new Set());
+    setPassSubmitted(false);
     setMessage('Select 3 cards to pass');
 
     if (isMultiplayer && isHost) {

@@ -104,13 +104,20 @@ export interface IngestResult {
   error?: string;
 }
 
+// WeatherLink reports a wrong elevation for our station; override at the
+// source so every consumer (display, derived calcs) sees the correct value.
+const ELEVATION_OVERRIDE_FT = 777;
+
 export async function getStations(): Promise<WeatherStation[]> {
   const { data, error } = await supabase
     .from('weather_stations')
     .select('*')
     .order('station_name');
   if (error) throw error;
-  return (data as WeatherStation[]) ?? [];
+  return ((data as WeatherStation[]) ?? []).map((s) => ({
+    ...s,
+    elevation: ELEVATION_OVERRIDE_FT,
+  }));
 }
 
 export async function getLatestReading(stationId: number): Promise<WeatherReading | null> {
@@ -160,6 +167,174 @@ export async function getReadingsRange(
     from += CHUNK_SIZE;
   }
   return all;
+}
+
+export interface RecordHit {
+  v: number;
+  observed_at: string;
+  // Optional storm-specific timestamps
+  start_at?: string | null;
+}
+
+export interface WeatherRecords {
+  hottest: RecordHit | null;
+  coldest: RecordHit | null;
+  wettestDay: RecordHit | null;
+  biggestStorm: RecordHit | null;
+  strongestGust: RecordHit | null;
+  mostYearlyRain: RecordHit | null;
+  highestPressure: RecordHit | null;
+  lowestPressure: RecordHit | null;
+}
+
+/**
+ * All-time records for a station. One small `.order().limit(1)` query per
+ * record (run in parallel) — much cheaper than pulling the full history
+ * and reducing client-side, which would shovel hundreds of thousands of
+ * rows over the wire just to find a few maxima.
+ */
+export async function getAllTimeRecords(stationId: number): Promise<WeatherRecords> {
+  if (!supabase) {
+    return {
+      hottest: null,
+      coldest: null,
+      wettestDay: null,
+      biggestStorm: null,
+      strongestGust: null,
+      mostYearlyRain: null,
+      highestPressure: null,
+      lowestPressure: null,
+    };
+  }
+
+  const top = async (
+    column: string,
+    direction: 'asc' | 'desc',
+    extraColumns: string = '',
+  ): Promise<any | null> => {
+    const cols = `${column},observed_at${extraColumns ? ',' + extraColumns : ''}`;
+    const { data } = await supabase!
+      .from('weather_readings')
+      .select(cols)
+      .eq('station_id', stationId)
+      .not(column, 'is', null)
+      .order(column, { ascending: direction === 'asc' })
+      .limit(1)
+      .maybeSingle();
+    return data;
+  };
+
+  const [
+    hottestRow,
+    coldestRow,
+    wettestDayRow,
+    biggestStormLastRow,
+    biggestStormCurrentRow,
+    strongestGust10Row,
+    strongestGust2Row,
+    mostYearlyRainRow,
+    highestPressureRow,
+    lowestPressureRow,
+  ] = await Promise.all([
+    top('temp', 'desc'),
+    top('temp', 'asc'),
+    top('rainfall_day_in', 'desc'),
+    top('rain_storm_last_in', 'desc', 'rain_storm_last_start_at'),
+    top('rain_storm_current_in', 'desc', 'rain_storm_current_start_at'),
+    top('wind_speed_hi_last_10_min', 'desc'),
+    top('wind_speed_hi_last_2_min', 'desc'),
+    top('rainfall_year_in', 'desc'),
+    top('bar_sea_level', 'desc'),
+    top('bar_sea_level', 'asc'),
+  ]);
+
+  // Pick the larger of last-storm vs current-storm
+  let biggestStorm: RecordHit | null = null;
+  const last = biggestStormLastRow?.rain_storm_last_in ?? null;
+  const cur = biggestStormCurrentRow?.rain_storm_current_in ?? null;
+  if (last !== null && (cur === null || last >= cur)) {
+    biggestStorm = {
+      v: last,
+      observed_at: biggestStormLastRow.observed_at,
+      start_at: biggestStormLastRow.rain_storm_last_start_at ?? null,
+    };
+  } else if (cur !== null) {
+    biggestStorm = {
+      v: cur,
+      observed_at: biggestStormCurrentRow.observed_at,
+      start_at: biggestStormCurrentRow.rain_storm_current_start_at ?? null,
+    };
+  }
+
+  // Pick the larger of 10-min vs 2-min gust
+  let strongestGust: RecordHit | null = null;
+  const g10 = strongestGust10Row?.wind_speed_hi_last_10_min ?? null;
+  const g2 = strongestGust2Row?.wind_speed_hi_last_2_min ?? null;
+  if (g10 !== null && (g2 === null || g10 >= g2)) {
+    strongestGust = { v: g10, observed_at: strongestGust10Row.observed_at };
+  } else if (g2 !== null) {
+    strongestGust = { v: g2, observed_at: strongestGust2Row.observed_at };
+  }
+
+  return {
+    hottest: hottestRow ? { v: hottestRow.temp, observed_at: hottestRow.observed_at } : null,
+    coldest: coldestRow ? { v: coldestRow.temp, observed_at: coldestRow.observed_at } : null,
+    wettestDay: wettestDayRow
+      ? { v: wettestDayRow.rainfall_day_in, observed_at: wettestDayRow.observed_at }
+      : null,
+    biggestStorm,
+    strongestGust,
+    mostYearlyRain: mostYearlyRainRow
+      ? { v: mostYearlyRainRow.rainfall_year_in, observed_at: mostYearlyRainRow.observed_at }
+      : null,
+    highestPressure: highestPressureRow
+      ? { v: highestPressureRow.bar_sea_level, observed_at: highestPressureRow.observed_at }
+      : null,
+    lowestPressure: lowestPressureRow
+      ? { v: lowestPressureRow.bar_sea_level, observed_at: lowestPressureRow.observed_at }
+      : null,
+  };
+}
+
+/**
+ * Earliest and latest reading dates (YYYY-MM-DD, local timezone) for a
+ * station. Used to bound the day-picker so users can't pick dates with no
+ * data. Cheap — two `.order().limit(1)` queries against the indexed
+ * (station_id, observed_at) covering index.
+ */
+export async function getStationDateRange(
+  stationId: number,
+): Promise<{ earliest: string | null; latest: string | null }> {
+  if (!supabase) return { earliest: null, latest: null };
+
+  const [first, last] = await Promise.all([
+    supabase
+      .from('weather_readings')
+      .select('observed_at')
+      .eq('station_id', stationId)
+      .order('observed_at', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('weather_readings')
+      .select('observed_at')
+      .eq('station_id', stationId)
+      .order('observed_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const fmt = (iso: string | null | undefined): string | null => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  return {
+    earliest: fmt(first.data?.observed_at as string | undefined),
+    latest: fmt(last.data?.observed_at as string | undefined),
+  };
 }
 
 export async function triggerIngest(): Promise<{ ingested_at: string; results: IngestResult[] }> {

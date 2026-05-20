@@ -15,6 +15,7 @@ const MessagesPage = lazy(() => import('./ui/MessagesPage'));
 const HelpPage = lazy(() => import('./ui/HelpPage'));
 const AdminPage = lazy(() => import('./ui/AdminPage'));
 const WeatherPage = lazy(() => import('./ui/WeatherPage'));
+const WeatherDayPage = lazy(() => import('./ui/WeatherDayPage'));
 
 // Game pages (heaviest — each pulls in PixiJS renderer + game logic)
 const SolitairePage = lazy(() => import('./games/solitaire/SolitairePage'));
@@ -69,6 +70,7 @@ export default function App() {
           <Route path="play/grandprix" element={<Suspense fallback={<PageLoader />}><GrandPrixPage /></Suspense>} />
           <Route path="admin" element={<Suspense fallback={<PageLoader />}><AdminPage /></Suspense>} />
           <Route path="weather" element={<Suspense fallback={<PageLoader />}><WeatherPage /></Suspense>} />
+          <Route path="weather/day/:date" element={<Suspense fallback={<PageLoader />}><WeatherDayPage /></Suspense>} />
         </Route>
       </Routes>
     </AnimatePresence>

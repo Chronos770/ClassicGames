@@ -399,18 +399,21 @@ export class HeartsRenderer {
 
     this.mainContainer.addChild(indicator);
 
-    // Animate pulse
+    // Animate pulse. Reuse a single slot in pendingRAFs instead of pushing
+    // a new id every frame (the previous frame's id has already fired by
+    // the time the next one is scheduled, so it just bloated the array).
     let pulseUp = true;
     let alpha = 0.6;
+    const slot = this.pendingRAFs.length;
     const pulse = () => {
       if (this.destroyed) return;
       alpha += pulseUp ? 0.015 : -0.015;
       if (alpha >= 0.9) pulseUp = false;
       if (alpha <= 0.3) pulseUp = true;
       indicator.alpha = alpha;
-      this.pendingRAFs.push(requestAnimationFrame(pulse));
+      this.pendingRAFs[slot] = requestAnimationFrame(pulse);
     };
-    this.pendingRAFs.push(requestAnimationFrame(pulse));
+    this.pendingRAFs[slot] = requestAnimationFrame(pulse);
   }
 
   /** Render actual card sprites of collected point cards near each player */

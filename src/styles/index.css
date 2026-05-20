@@ -97,3 +97,13 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.25);
 }
+
+/* Hide scrollbar utility — used for horizontally-scrolling control rows
+   on mobile so they don't show a chunky chrome scrollbar. */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
