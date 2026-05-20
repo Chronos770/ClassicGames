@@ -329,9 +329,11 @@ export default function WeatherPage() {
         <WeatherAlertsBanner station={station} tick={lastIngestTick} />
         <TomorrowBanner station={station} tick={lastIngestTick} onOpen={() => setTab('forecast')} />
 
-        {/* Tab bar — wraps on small screens, labels collapse to icon-only
-            below 'sm' so all tabs fit without horizontal scroll. */}
-        <div className="flex flex-wrap gap-1 mb-5 pb-1">
+        {/* Tab bar — wrapped in the same card chrome as every other panel
+            (slate/85 + backdrop-blur + border) so it reads as part of the
+            UI instead of floating on top of the canvas. Labels collapse
+            to icon-only below 'sm' so all tabs fit without overflow. */}
+        <div className="bg-slate-900/85 backdrop-blur-sm border border-white/10 rounded-xl p-1.5 mb-5 flex flex-wrap gap-1">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -340,7 +342,7 @@ export default function WeatherPage() {
               className={`px-2.5 sm:px-3.5 py-2 text-sm rounded-lg whitespace-nowrap transition-colors flex items-center gap-1.5 flex-shrink-0 ${
                 tab === t.id
                   ? 'bg-amber-500/20 text-amber-400 font-medium'
-                  : 'text-white/50 hover:text-white/80 hover:bg-white/5'
+                  : 'text-white/55 hover:text-white/85 hover:bg-white/5'
               }`}
             >
               <span className="text-base">{t.icon}</span>
