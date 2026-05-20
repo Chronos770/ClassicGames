@@ -71,6 +71,14 @@ export default function WeatherBackground({ condition, windMph }: Props) {
     // the pond surface, an apex height, and a parametric t (0→1) along the
     // arc. When t crosses 1 it splashes back in and spawns a ripple.
     type Fish = { startX: number; surfaceY: number; t: number; duration: number; apex: number; dir: 1 | -1 };
+    // Ground details (grass blades + rocks + flowers) — seeded once per
+    // resize so they don't shimmer each frame.
+    type Grass = { x: number; y: number; h: number; lean: number; blades: number };
+    type Rock = { x: number; y: number; w: number; h: number; tone: 'gray' | 'brown' };
+    type Flower = { x: number; y: number; color: string; stemH: number };
+    // Distant background trees on the horizon — smaller, lighter, drawn
+    // in atmospheric haze for depth.
+    type FarTree = { x: number; y: number; size: number };
 
     const rain: Drop[] = [];
     const splashes: Splash[] = [];
@@ -88,6 +96,10 @@ export default function WeatherBackground({ condition, windMph }: Props) {
     let treeline: Ridge | null = null;
     let pond: Pond | null = null;
     const trees: Tree[] = [];
+    const farTrees: FarTree[] = [];
+    const grass: Grass[] = [];
+    const rocks: Rock[] = [];
+    const flowers: Flower[] = [];
     const ripples: Ripple[] = [];
     const fish: Fish[] = [];
     let nextFishAt = 0;
@@ -106,70 +118,128 @@ export default function WeatherBackground({ condition, windMph }: Props) {
       rain.length = splashes.length = flakes.length = stars.length = clouds.length = 0;
       rays.length = mist.length = streaks.length = leaves.length = comets.length = 0;
       ripples.length = trees.length = 0;
+      farTrees.length = grass.length = rocks.length = flowers.length = 0;
       fish.length = 0;
       // First fish appears 3-8s after seed
       nextFishAt = performance.now() + 3000 + Math.random() * 5000;
       mountains = treeline = pond = null;
 
-      // SCENE — silhouette landscape that the weather plays out over. Skipped
-      // for the pure space view; that one keeps its starfield-only background.
+      // SCENE — half-sky, half-ground composition. Skipped for the pure
+      // space view; that one keeps its starfield-only background.
       if (k !== 'space') {
-        // Distant mountain ridge — jagged polyline near horizon.
-        const mtnY = H * 0.62;
-        const mtnPts: Array<[number, number]> = [[-20, H + 20]];
-        for (let i = 0; i <= 18; i++) {
-          const x = (i / 18) * (W + 40) - 20;
-          const peak = mtnY
-            + Math.sin(i * 0.7) * 22
-            + Math.sin(i * 1.9 + 1.3) * 14
-            + (Math.random() - 0.5) * 18;
-          mtnPts.push([x, peak]);
-        }
-        mtnPts.push([W + 20, H + 20]);
-        mountains = { points: mtnPts };
+        // Horizon at ~52% — gives roughly half sky / half ground, with a
+        // slight ground bias since the foreground reads better with a bit
+        // more real estate.
+        const horizonY = H * 0.52;
 
-        // Closer hills / treeline silhouette — taller bumps, more frequent.
-        const tlY = H * 0.80;
-        const tlPts: Array<[number, number]> = [[-20, H + 20]];
-        for (let i = 0; i <= 32; i++) {
-          const x = (i / 32) * (W + 40) - 20;
-          const peak = tlY
-            + Math.sin(i * 1.2) * 10
-            + (i % 3 === 0 ? -10 - Math.random() * 14 : 0)
-            + (Math.random() - 0.5) * 6;
+        // Treeline — the wavy edge where ground meets sky. Acts as both a
+        // distant-treetops silhouette and the top boundary of the ground
+        // fill. Bumps are gentle (this is a meadow, not jagged hills).
+        const tlPts: Array<[number, number]> = [[-20, H + 20], [-20, horizonY]];
+        for (let i = 0; i <= 40; i++) {
+          const x = (i / 40) * (W + 40) - 20;
+          const peak = horizonY
+            + Math.sin(i * 0.9) * 8
+            + Math.sin(i * 2.3 + 1.1) * 4
+            + (i % 4 === 0 ? -6 - Math.random() * 10 : 0)
+            + (Math.random() - 0.5) * 4;
           tlPts.push([x, peak]);
         }
-        tlPts.push([W + 20, H + 20]);
+        tlPts.push([W + 20, horizonY], [W + 20, H + 20]);
         treeline = { points: tlPts };
 
-        // Pond — wide ellipse centered horizontally near the bottom.
+        // Distant background trees just behind the horizon — small,
+        // softened color for atmospheric haze. Drawn before the ground
+        // fill so they only peek out above the treeline.
+        const farTreeCount = isMobile ? 8 : 16;
+        for (let i = 0; i < farTreeCount; i++) {
+          farTrees.push({
+            x: 10 + Math.random() * (W - 20),
+            y: horizonY - 4 - Math.random() * 8,
+            size: 10 + Math.random() * 14,
+          });
+        }
+
+        // Pond — sits in the middle-lower portion so foreground trees can
+        // flank AND poke past it. Slightly off-center.
         pond = {
-          cx: W * 0.5,
-          cy: H * 0.93,
-          rx: Math.min(W * 0.32, 360),
-          ry: 18,
+          cx: W * 0.5 + (Math.random() - 0.5) * 60,
+          cy: H * 0.80,
+          rx: Math.min(W * 0.30, 320),
+          ry: 22,
         };
 
-        // Foreground forest — denser stand of trees on both flanks of the
-        // pond. Vary size/baseY a bit so it reads as a real treeline rather
-        // than evenly-spaced pickets.
-        const treeCount = isMobile ? 12 : 22;
+        // Foreground forest — trees scattered through the whole lower
+        // half, both behind and in front of the pond. Sizes correlate with
+        // depth (smaller = farther back / higher up).
+        const treeCount = isMobile ? 16 : 28;
         for (let i = 0; i < treeCount; i++) {
-          const onLeft = i % 2 === 0;
-          const x = onLeft
-            ? 8 + Math.random() * (W * 0.40 - 16)
-            : W * 0.60 + Math.random() * (W * 0.40 - 16);
-          trees.push({
-            x,
-            // Layer depth: some trees tuck back behind others (higher up)
-            // and some push forward at the very bottom for a fuller scene.
-            baseY: H * 0.86 + Math.random() * 22,
-            size: 30 + Math.random() * 44,
-            jitter: Math.random() * Math.PI * 2,
-          });
+          // Bias x toward the sides but allow some across the middle
+          const side = Math.random() < 0.5 ? -1 : 1;
+          const x = side < 0
+            ? Math.random() * W * 0.42
+            : W * 0.58 + Math.random() * W * 0.42;
+          const baseY = H * 0.62 + Math.random() * (H * 0.32);
+          // Scale by depth — trees lower on canvas (closer) are larger
+          const depthFactor = (baseY - H * 0.62) / (H * 0.32);
+          const size = 30 + depthFactor * 50 + Math.random() * 14;
+          trees.push({ x, baseY, size, jitter: Math.random() * Math.PI * 2 });
         }
         // Sort back-to-front so taller foreground trees overlap distant ones
         trees.sort((a, b) => a.baseY - b.baseY);
+
+        // Grass tufts scattered across the ground. More density toward
+        // the foreground for a fuller-looking lawn.
+        const grassCount = isMobile ? 60 : 110;
+        for (let i = 0; i < grassCount; i++) {
+          // Bias y toward the bottom (foreground density)
+          const ty = horizonY + 12 + Math.pow(Math.random(), 0.6) * (H - horizonY - 16);
+          grass.push({
+            x: Math.random() * W,
+            y: ty,
+            // Bigger blades closer to the camera
+            h: 4 + ((ty - horizonY) / (H - horizonY)) * 10 + Math.random() * 4,
+            lean: (Math.random() - 0.5) * 0.6,
+            blades: 3 + Math.floor(Math.random() * 3),
+          });
+        }
+
+        // Rocks — small scatter, mostly clustered around the pond edge
+        // but a few elsewhere on the ground.
+        const rockCount = isMobile ? 8 : 14;
+        for (let i = 0; i < rockCount; i++) {
+          const nearPond = Math.random() < 0.6;
+          let rx: number, ry: number;
+          if (nearPond) {
+            // Tuck rocks around the pond rim
+            const ang = Math.random() * Math.PI * 2;
+            rx = pond.cx + Math.cos(ang) * (pond.rx + 8 + Math.random() * 14);
+            ry = pond.cy + Math.sin(ang) * (pond.ry + 4 + Math.random() * 8);
+          } else {
+            rx = Math.random() * W;
+            ry = horizonY + 20 + Math.random() * (H - horizonY - 30);
+          }
+          rocks.push({
+            x: rx,
+            y: ry,
+            w: 6 + Math.random() * 14,
+            h: 4 + Math.random() * 8,
+            tone: Math.random() < 0.5 ? 'gray' : 'brown',
+          });
+        }
+
+        // Wildflowers — tiny pops of color scattered through the meadow.
+        const flowerPalette = ['#fde68a', '#f9a8d4', '#fbcfe8', '#fef3c7', '#ddd6fe'];
+        const flowerCount = isMobile ? 22 : 40;
+        for (let i = 0; i < flowerCount; i++) {
+          const fy = horizonY + 14 + Math.pow(Math.random(), 0.5) * (H - horizonY - 18);
+          flowers.push({
+            x: Math.random() * W,
+            y: fy,
+            color: flowerPalette[Math.floor(Math.random() * flowerPalette.length)],
+            stemH: 3 + Math.random() * 5,
+          });
+        }
       }
 
       // SPACE — dense starfield, no other particles
@@ -379,6 +449,10 @@ export default function WeatherBackground({ condition, windMph }: Props) {
       pond: string;
       pondDark: string;
       pondRim: string;
+      groundNear: string;
+      groundFar: string;
+      grassColor: string;
+      grassHighlight: string;
       snowy: boolean;
       frozen: boolean;
       lightFlash: boolean;
@@ -396,20 +470,50 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         return `rgba(${r}, ${g}, ${b}, ${a})`;
       };
       const make = (
-        opts: { tl: string; treeRgb: string; pondRgb: string; pondDarkRgb: string; snowy?: boolean; frozen?: boolean; lightFlash?: boolean },
-      ): ScenePal => ({
-        mtn: opts.tl,
-        tl: opts.tl,
-        tree: tree(opts.treeRgb, 0.96),
-        treeHighlight: lighten(opts.treeRgb, 0.28),
-        treeShadow: 'rgba(46, 30, 18, 0.85)',
-        pond: tree(opts.pondRgb, 0.88),
-        pondDark: tree(opts.pondDarkRgb, 0.92),
-        pondRim: darken(opts.pondDarkRgb, 0.6),
-        snowy: !!opts.snowy,
-        frozen: !!opts.frozen,
-        lightFlash: !!opts.lightFlash,
-      });
+        opts: {
+          tl: string;
+          treeRgb: string;
+          pondRgb: string;
+          pondDarkRgb: string;
+          groundFarRgb?: string;
+          groundNearRgb?: string;
+          snowy?: boolean;
+          frozen?: boolean;
+          lightFlash?: boolean;
+        },
+      ): ScenePal => {
+        // Default ground tones derived from the tree color (washed-out
+        // version) — keeps the meadow visually tied to the trees.
+        const groundFarRgb = opts.groundFarRgb ?? lightenRgb(opts.treeRgb, 30);
+        const groundNearRgb = opts.groundNearRgb ?? darkenRgb(opts.treeRgb, 8);
+        return {
+          mtn: opts.tl,
+          tl: opts.tl,
+          tree: tree(opts.treeRgb, 0.96),
+          treeHighlight: lighten(opts.treeRgb, 0.28),
+          treeShadow: 'rgba(46, 30, 18, 0.85)',
+          pond: tree(opts.pondRgb, 0.88),
+          pondDark: tree(opts.pondDarkRgb, 0.92),
+          pondRim: darken(opts.pondDarkRgb, 0.6),
+          groundNear: `rgba(${groundNearRgb}, 0.95)`,
+          groundFar: `rgba(${groundFarRgb}, 0.95)`,
+          grassColor: lighten(opts.treeRgb, 0.85),
+          grassHighlight: `rgba(${lightenRgb(opts.treeRgb, 60)}, 0.95)`,
+          snowy: !!opts.snowy,
+          frozen: !!opts.frozen,
+          lightFlash: !!opts.lightFlash,
+        };
+      };
+      // Helpers returning a raw "r, g, b" triple so they can be re-used in
+      // gradients (CSS rgba() syntax needs a comma between rgb and alpha).
+      function lightenRgb(rgb: string, by = 50): string {
+        const [r, g, b] = rgb.split(',').map((n) => Math.min(255, Number(n.trim()) + by));
+        return `${r}, ${g}, ${b}`;
+      }
+      function darkenRgb(rgb: string, by = 35): string {
+        const [r, g, b] = rgb.split(',').map((n) => Math.max(0, Number(n.trim()) - by));
+        return `${r}, ${g}, ${b}`;
+      }
       switch (k) {
         case 'thunderstorm':
           return make({ tl: 'rgba(40, 55, 80, 0.95)', treeRgb: '28, 50, 45', pondRgb: '40, 60, 95', pondDarkRgb: '20, 35, 65', lightFlash: true });
@@ -456,16 +560,53 @@ export default function WeatherBackground({ condition, windMph }: Props) {
       // If a lightning flash is active, briefly brighten the whole scene.
       const flashBoost = pal.lightFlash && flashAlpha > 0.4 ? Math.min(0.35, flashAlpha * 0.35) : 0;
 
-      // Mountains removed per user request — pure forest + pond scene.
-      // pal.mtn is still defined but we no longer paint the ridge.
+      // Horizon Y — recompute from the second treeline point (the first
+      // point is the off-canvas anchor at bottom-left for the fill polygon).
+      const horizonY = treeline.points[1][1];
 
-      // Forest treeline silhouette (closer hills with trees)
-      ctx.fillStyle = pal.tl;
+      // ── Distant background trees (peek above the horizon) ────────
+      // Drawn BEFORE the ground fill so they only appear in the sky band
+      // above the treeline silhouette. Lighter color for atmospheric haze.
+      for (const ft of farTrees) {
+        ctx.fillStyle = pal.treeHighlight;
+        ctx.beginPath();
+        const tw = ft.size * 0.55;
+        const th = ft.size;
+        ctx.moveTo(ft.x - tw, ft.y);
+        ctx.bezierCurveTo(ft.x - tw * 1.1, ft.y - th * 0.5, ft.x - tw * 0.4, ft.y - th, ft.x, ft.y - th);
+        ctx.bezierCurveTo(ft.x + tw * 0.4, ft.y - th, ft.x + tw * 1.1, ft.y - th * 0.5, ft.x + tw, ft.y);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // ── Ground fill ──────────────────────────────────────────────
+      // Gradient from horizon (lighter, hazy) down to bottom (richer/darker).
+      // The treeline polyline forms the top edge so the meadow meets the
+      // sky in a wavy silhouette rather than a flat horizon line.
+      const groundG = ctx.createLinearGradient(0, horizonY, 0, H);
+      groundG.addColorStop(0, pal.groundFar);
+      groundG.addColorStop(1, pal.groundNear);
+      ctx.fillStyle = groundG;
       ctx.beginPath();
-      ctx.moveTo(treeline.points[0][0], treeline.points[0][1]);
-      for (const p of treeline.points) ctx.lineTo(p[0], p[1]);
+      ctx.moveTo(treeline.points[1][0], treeline.points[1][1]);
+      // Trace the wavy top edge (skip the off-canvas anchor points)
+      for (let i = 1; i < treeline.points.length - 1; i++) {
+        ctx.lineTo(treeline.points[i][0], treeline.points[i][1]);
+      }
+      // Close along the right edge → bottom → left edge
+      ctx.lineTo(W + 20, H + 20);
+      ctx.lineTo(-20, H + 20);
       ctx.closePath();
       ctx.fill();
+
+      // Subtle haze band right at the horizon — softens the ground/sky
+      // transition so it doesn't read as a hard color step.
+      const hazeG = ctx.createLinearGradient(0, horizonY - 6, 0, horizonY + 30);
+      hazeG.addColorStop(0, 'rgba(255, 255, 255, 0)');
+      hazeG.addColorStop(0.5, pal.tl);
+      hazeG.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.fillStyle = hazeG;
+      ctx.fillRect(0, horizonY - 6, W, 36);
 
       // ── Pond ──────────────────────────────────────────────────────
       // Irregular organic outline + gradient + subtle reedy edge instead
@@ -520,6 +661,84 @@ export default function WeatherBackground({ condition, windMph }: Props) {
           ctx.lineTo(sx + (Math.random() - 0.5) * 30, pond.cy + pond.ry * 0.7);
           ctx.stroke();
         }
+      }
+
+      // ── Ground details: rocks + grass + flowers ──────────────────
+      // Rocks first (bottom layer) — irregular bezier blobs in gray or
+      // brown, with a darker base shadow for grounding.
+      for (const rk of rocks) {
+        const rgb = rk.tone === 'gray' ? '128, 128, 132' : '120, 96, 72';
+        // Shadow
+        ctx.fillStyle = `rgba(${rgb}, 0.4)`;
+        ctx.beginPath();
+        ctx.ellipse(rk.x, rk.y + rk.h * 0.35, rk.w * 0.9, rk.h * 0.35, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Main rock body — bezier blob, mostly round but a bit irregular
+        ctx.fillStyle = `rgba(${rgb}, 0.92)`;
+        ctx.beginPath();
+        ctx.moveTo(rk.x - rk.w, rk.y);
+        ctx.bezierCurveTo(rk.x - rk.w * 1.05, rk.y - rk.h * 0.7, rk.x - rk.w * 0.3, rk.y - rk.h, rk.x + rk.w * 0.1, rk.y - rk.h * 0.9);
+        ctx.bezierCurveTo(rk.x + rk.w * 0.7, rk.y - rk.h * 0.85, rk.x + rk.w, rk.y - rk.h * 0.5, rk.x + rk.w, rk.y);
+        ctx.bezierCurveTo(rk.x + rk.w * 0.6, rk.y + rk.h * 0.1, rk.x - rk.w * 0.4, rk.y + rk.h * 0.15, rk.x - rk.w, rk.y);
+        ctx.closePath();
+        ctx.fill();
+        // Top highlight
+        ctx.fillStyle = `rgba(255, 255, 255, 0.18)`;
+        ctx.beginPath();
+        ctx.ellipse(rk.x - rk.w * 0.2, rk.y - rk.h * 0.55, rk.w * 0.35, rk.h * 0.18, -0.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Grass tufts — each tuft is a small cluster of curved blades.
+      // Blades sway slightly with wind.
+      const grassSway = windFactor * 0.06;
+      for (const g of grass) {
+        const bladeColor = pal.grassColor;
+        const bladeHi = pal.grassHighlight;
+        const swayPhase = Math.sin(now / 800 + g.x * 0.02) * grassSway;
+        for (let i = 0; i < g.blades; i++) {
+          const offset = (i - (g.blades - 1) / 2) * 2.2;
+          const lean = g.lean + swayPhase + (Math.random() - 0.5) * 0.001;
+          const tipX = g.x + offset + lean * g.h;
+          const tipY = g.y - g.h;
+          ctx.strokeStyle = i === 0 ? bladeHi : bladeColor;
+          ctx.lineWidth = 1.1;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(g.x + offset, g.y);
+          ctx.quadraticCurveTo(
+            g.x + offset + lean * g.h * 0.5,
+            g.y - g.h * 0.4,
+            tipX,
+            tipY,
+          );
+          ctx.stroke();
+        }
+      }
+
+      // Wildflowers — short stem + small petal cluster. Tiny color pops
+      // scattered through the meadow.
+      for (const fl of flowers) {
+        // Stem
+        ctx.strokeStyle = pal.grassColor;
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(fl.x, fl.y);
+        ctx.lineTo(fl.x, fl.y - fl.stemH);
+        ctx.stroke();
+        // Petals (5 tiny dots in a ring + a center dot)
+        const cy = fl.y - fl.stemH;
+        ctx.fillStyle = fl.color;
+        for (let i = 0; i < 5; i++) {
+          const ang = (i / 5) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.arc(fl.x + Math.cos(ang) * 1.6, cy + Math.sin(ang) * 1.6, 1.1, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = '#fef9c3';
+        ctx.beginPath();
+        ctx.arc(fl.x, cy, 0.8, 0, Math.PI * 2);
+        ctx.fill();
       }
 
       // ── Foreground trees ──────────────────────────────────────────
@@ -579,16 +798,24 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         drawCluster(-trunkH - s * 0.80, s * 0.22, s * 0.22, pal.tree);
         ctx.restore();
 
-        // Highlight pass — same cluster shapes nudged left, in a lighter
-        // green/blue tint, just on the upper edge. Creates a directional
-        // light feel without explicit gradients per cluster.
-        ctx.globalCompositeOperation = 'source-atop';
-        ctx.fillStyle = treeHi;
-        // Quick lighter overlay across all clusters (clipped to the existing foliage by source-atop)
-        ctx.beginPath();
-        ctx.ellipse(-s * 0.18, -trunkH - s * 0.55, s * 0.35, s * 0.55, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalCompositeOperation = 'source-over';
+        // Highlight: small lighter cluster nudged to the sunlit side of
+        // each existing cluster, drawn as proper foliage shapes so it
+        // doesn't bleed into the surrounding sky like a source-atop hack
+        // would. (Previous source-atop pass was visible as a translucent
+        // ellipse hovering over each tree.)
+        const drawHighlight = (cy: number, w: number, h: number) => {
+          ctx.fillStyle = treeHi;
+          ctx.beginPath();
+          // Smaller crescent on the upper-left of the cluster
+          ctx.moveTo(-w * 0.55, cy - h * 0.15);
+          ctx.bezierCurveTo(-w * 0.75, cy - h * 0.7, -w * 0.2, cy - h * 0.95, w * 0.05, cy - h * 0.7);
+          ctx.bezierCurveTo(-w * 0.15, cy - h * 0.6, -w * 0.35, cy - h * 0.35, -w * 0.55, cy - h * 0.15);
+          ctx.closePath();
+          ctx.fill();
+        };
+        drawHighlight(-trunkH - s * 0.05, s * 0.55, s * 0.32);
+        drawHighlight(-trunkH - s * 0.32, s * 0.46, s * 0.30);
+        drawHighlight(-trunkH - s * 0.58, s * 0.35, s * 0.28);
 
         // Snowy variant — light dusting of snow on the upper foliage
         if (pal.snowy) {
