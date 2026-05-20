@@ -551,7 +551,10 @@ export default function WeatherBackground({ condition, windMph }: Props) {
 
     let lastSceneTime = 0;
     const drawScene = (now: number) => {
-      if (k === 'space' || !mountains || !treeline || !pond) return;
+      // Mountains were removed from the scene but the guard still required
+      // them — that meant `mountains === null` returned early before any
+      // ground rendering ran, and the user saw no ground at all.
+      if (k === 'space' || !treeline || !pond) return;
       const sceneDt = lastSceneTime ? Math.min(0.05, (now - lastSceneTime) / 1000) : 0.016;
       lastSceneTime = now;
       const W = w();
