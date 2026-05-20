@@ -307,15 +307,47 @@ export default function WeatherBackground({ condition, windMph }: Props) {
     let prev = performance.now();
 
     const drawPuffyCloud = (cx: number, cy: number, s: number, a: number) => {
+      // Build a single continuous bezier path that traces the cloud's outer
+      // silhouette. The previous implementation stacked 5 ellipses in one
+      // path which left visible "creases" where their edges overlapped —
+      // those creases looked like little triangles, especially at low alpha.
+      ctx.save();
       ctx.globalAlpha = a;
-      ctx.fillStyle = condition.isDay ? '#ffffff' : '#94a3b8';
+
+      // Soft drop shadow beneath the cloud for a hint of depth.
+      const shadowG = ctx.createRadialGradient(cx, cy + 14 * s, 4 * s, cx, cy + 14 * s, 60 * s);
+      shadowG.addColorStop(0, 'rgba(0, 0, 0, 0.18)');
+      shadowG.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = shadowG;
+      ctx.fillRect(cx - 70 * s, cy, 140 * s, 30 * s);
+
+      // Build the cloud silhouette as one closed bezier path. Points trace
+      // a series of bumps along the top edge and a smooth flat-ish bottom.
+      ctx.fillStyle = condition.isDay ? '#fdfeff' : '#9aa8c2';
       ctx.beginPath();
-      ctx.ellipse(cx, cy, 50 * s, 22 * s, 0, 0, Math.PI * 2);
-      ctx.ellipse(cx - 28 * s, cy + 6 * s, 32 * s, 16 * s, 0, 0, Math.PI * 2);
-      ctx.ellipse(cx + 28 * s, cy + 4 * s, 38 * s, 18 * s, 0, 0, Math.PI * 2);
-      ctx.ellipse(cx - 10 * s, cy - 10 * s, 24 * s, 14 * s, 0, 0, Math.PI * 2);
-      ctx.ellipse(cx + 14 * s, cy - 8 * s, 22 * s, 12 * s, 0, 0, Math.PI * 2);
+      // Start at left edge, go counter-clockwise around the outline.
+      ctx.moveTo(cx - 50 * s, cy + 4 * s);
+      // Bump 1 (left lobe)
+      ctx.bezierCurveTo(cx - 60 * s, cy - 14 * s, cx - 36 * s, cy - 22 * s, cx - 20 * s, cy - 14 * s);
+      // Bump 2 (mid-left)
+      ctx.bezierCurveTo(cx - 14 * s, cy - 26 * s, cx + 4 * s, cy - 28 * s, cx + 12 * s, cy - 18 * s);
+      // Bump 3 (mid-right, taller)
+      ctx.bezierCurveTo(cx + 18 * s, cy - 30 * s, cx + 38 * s, cy - 26 * s, cx + 42 * s, cy - 12 * s);
+      // Bump 4 (right lobe)
+      ctx.bezierCurveTo(cx + 58 * s, cy - 18 * s, cx + 62 * s, cy + 4 * s, cx + 48 * s, cy + 10 * s);
+      // Smooth flat bottom
+      ctx.bezierCurveTo(cx + 30 * s, cy + 18 * s, cx - 30 * s, cy + 18 * s, cx - 50 * s, cy + 4 * s);
+      ctx.closePath();
       ctx.fill();
+
+      // Subtle highlight along the top edge for volume
+      const hlG = ctx.createLinearGradient(0, cy - 28 * s, 0, cy + 10 * s);
+      hlG.addColorStop(0, condition.isDay ? 'rgba(255, 255, 255, 0.55)' : 'rgba(203, 213, 225, 0.35)');
+      hlG.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      ctx.fillStyle = hlG;
+      ctx.fill(); // re-fill the same path with the highlight gradient
+
+      ctx.restore();
       ctx.globalAlpha = 1;
     };
     const drawWispCloud = (cx: number, cy: number, s: number, a: number) => {
@@ -334,43 +366,82 @@ export default function WeatherBackground({ condition, windMph }: Props) {
 
     // ── Scene palette per condition ────────────────────────────────────────
     // Returns {mountain, treeline, tree, pond, snowy, frozen, lightFlash}.
-    // Brighter scene palette — silhouettes need to stand out against the dark
-    // page background. Previous values blended in too well; bumped RGBs and
-    // alphas across the board so mountains/trees/pond all read clearly.
-    const scenePalette = () => {
+    // Scene palette per condition. Each entry returns colors for the
+    // treeline/foliage + pond (with gradient stops + rim) and weather
+    // modifiers (snowy/frozen/lightFlash). `mtn` is no longer painted but
+    // kept on the type for backward compatibility.
+    type ScenePal = {
+      mtn: string;
+      tl: string;
+      tree: string;
+      treeHighlight: string;
+      treeShadow: string;
+      pond: string;
+      pondDark: string;
+      pondRim: string;
+      snowy: boolean;
+      frozen: boolean;
+      lightFlash: boolean;
+    };
+    const scenePalette = (): ScenePal => {
       const isDay = condition.isDay;
+      // Helpers to build the derived shades from one base "tree" color
+      const tree = (rgb: string, a = 1): ScenePal['tree'] => `rgba(${rgb}, ${a})`;
+      const lighten = (rgb: string, a = 0.4) => {
+        const [r, g, b] = rgb.split(',').map((n) => Math.min(255, Number(n.trim()) + 50));
+        return `rgba(${r}, ${g}, ${b}, ${a})`;
+      };
+      const darken = (rgb: string, a = 1) => {
+        const [r, g, b] = rgb.split(',').map((n) => Math.max(0, Number(n.trim()) - 35));
+        return `rgba(${r}, ${g}, ${b}, ${a})`;
+      };
+      const make = (
+        opts: { tl: string; treeRgb: string; pondRgb: string; pondDarkRgb: string; snowy?: boolean; frozen?: boolean; lightFlash?: boolean },
+      ): ScenePal => ({
+        mtn: opts.tl,
+        tl: opts.tl,
+        tree: tree(opts.treeRgb, 0.96),
+        treeHighlight: lighten(opts.treeRgb, 0.28),
+        treeShadow: 'rgba(46, 30, 18, 0.85)',
+        pond: tree(opts.pondRgb, 0.88),
+        pondDark: tree(opts.pondDarkRgb, 0.92),
+        pondRim: darken(opts.pondDarkRgb, 0.6),
+        snowy: !!opts.snowy,
+        frozen: !!opts.frozen,
+        lightFlash: !!opts.lightFlash,
+      });
       switch (k) {
         case 'thunderstorm':
-          return { mtn: 'rgba(60, 75, 105, 0.92)', tl: 'rgba(40, 55, 80, 0.95)', tree: 'rgba(28, 50, 45, 0.95)', pond: 'rgba(45, 70, 110, 0.85)', snowy: false, frozen: false, lightFlash: true };
+          return make({ tl: 'rgba(40, 55, 80, 0.95)', treeRgb: '28, 50, 45', pondRgb: '40, 60, 95', pondDarkRgb: '20, 35, 65', lightFlash: true });
         case 'heavyRain':
-          return { mtn: 'rgba(75, 95, 125, 0.90)', tl: 'rgba(55, 75, 100, 0.95)', tree: 'rgba(35, 65, 55, 0.95)', pond: 'rgba(60, 95, 135, 0.85)', snowy: false, frozen: false, lightFlash: false };
+          return make({ tl: 'rgba(55, 75, 100, 0.95)', treeRgb: '35, 65, 55', pondRgb: '55, 85, 125', pondDarkRgb: '30, 55, 95' });
         case 'rain':
-          return { mtn: 'rgba(95, 120, 150, 0.88)', tl: 'rgba(70, 95, 120, 0.92)', tree: 'rgba(45, 80, 65, 0.95)', pond: 'rgba(80, 130, 175, 0.82)', snowy: false, frozen: false, lightFlash: false };
+          return make({ tl: 'rgba(70, 95, 120, 0.92)', treeRgb: '45, 80, 65', pondRgb: '75, 120, 165', pondDarkRgb: '45, 90, 135' });
         case 'drizzle':
-          return { mtn: 'rgba(115, 140, 170, 0.85)', tl: 'rgba(85, 115, 140, 0.90)', tree: 'rgba(55, 110, 80, 0.92)', pond: 'rgba(110, 165, 200, 0.82)', snowy: false, frozen: false, lightFlash: false };
+          return make({ tl: 'rgba(85, 115, 140, 0.90)', treeRgb: '55, 110, 80', pondRgb: '105, 155, 195', pondDarkRgb: '70, 120, 165' });
         case 'snow':
-          return { mtn: 'rgba(180, 195, 220, 0.92)', tl: 'rgba(150, 170, 195, 0.95)', tree: 'rgba(70, 100, 90, 0.95)', pond: 'rgba(186, 230, 253, 0.85)', snowy: true, frozen: true, lightFlash: false };
+          return make({ tl: 'rgba(150, 170, 195, 0.95)', treeRgb: '70, 100, 90', pondRgb: '186, 230, 253', pondDarkRgb: '140, 195, 230', snowy: true, frozen: true });
         case 'fog':
-          return { mtn: 'rgba(165, 180, 200, 0.55)', tl: 'rgba(140, 160, 180, 0.65)', tree: 'rgba(105, 130, 130, 0.78)', pond: 'rgba(165, 180, 200, 0.62)', snowy: false, frozen: false, lightFlash: false };
+          return make({ tl: 'rgba(140, 160, 180, 0.65)', treeRgb: '105, 130, 130', pondRgb: '165, 180, 200', pondDarkRgb: '130, 150, 175' });
         case 'cold':
-          return { mtn: 'rgba(110, 130, 160, 0.88)', tl: 'rgba(85, 110, 140, 0.92)', tree: 'rgba(50, 90, 90, 0.95)', pond: 'rgba(125, 145, 215, 0.78)', snowy: false, frozen: false, lightFlash: false };
+          return make({ tl: 'rgba(85, 110, 140, 0.92)', treeRgb: '50, 90, 90', pondRgb: '110, 135, 200', pondDarkRgb: '70, 100, 160' });
         case 'cloudy':
-          return { mtn: 'rgba(125, 145, 170, 0.85)', tl: 'rgba(95, 120, 145, 0.92)', tree: 'rgba(60, 105, 90, 0.95)', pond: 'rgba(115, 145, 175, 0.82)', snowy: false, frozen: false, lightFlash: false };
+          return make({ tl: 'rgba(95, 120, 145, 0.92)', treeRgb: '60, 105, 90', pondRgb: '105, 140, 170', pondDarkRgb: '70, 105, 140' });
         case 'partlyCloudy':
           return isDay
-            ? { mtn: 'rgba(130, 160, 200, 0.85)', tl: 'rgba(95, 140, 160, 0.92)', tree: 'rgba(55, 130, 90, 0.95)', pond: 'rgba(125, 195, 240, 0.85)', snowy: false, frozen: false, lightFlash: false }
-            : { mtn: 'rgba(70, 90, 130, 0.90)', tl: 'rgba(50, 70, 105, 0.95)', tree: 'rgba(30, 60, 65, 0.95)', pond: 'rgba(60, 90, 145, 0.85)', snowy: false, frozen: false, lightFlash: false };
+            ? make({ tl: 'rgba(95, 140, 160, 0.92)', treeRgb: '55, 130, 90', pondRgb: '120, 195, 240', pondDarkRgb: '80, 155, 205' })
+            : make({ tl: 'rgba(50, 70, 105, 0.95)', treeRgb: '30, 60, 65', pondRgb: '55, 85, 140', pondDarkRgb: '30, 55, 105' });
         case 'hot':
-          return { mtn: 'rgba(180, 130, 105, 0.88)', tl: 'rgba(150, 105, 90, 0.92)', tree: 'rgba(105, 125, 65, 0.95)', pond: 'rgba(220, 160, 120, 0.82)', snowy: false, frozen: false, lightFlash: false };
+          return make({ tl: 'rgba(150, 105, 90, 0.92)', treeRgb: '105, 125, 65', pondRgb: '215, 160, 125', pondDarkRgb: '175, 120, 90' });
         case 'sunny':
           return isDay
-            ? { mtn: 'rgba(135, 165, 200, 0.85)', tl: 'rgba(100, 145, 160, 0.92)', tree: 'rgba(60, 140, 95, 0.95)', pond: 'rgba(130, 210, 250, 0.85)', snowy: false, frozen: false, lightFlash: false }
-            : { mtn: 'rgba(65, 85, 130, 0.90)', tl: 'rgba(45, 65, 100, 0.95)', tree: 'rgba(25, 55, 55, 0.95)', pond: 'rgba(60, 90, 145, 0.85)', snowy: false, frozen: false, lightFlash: false };
+            ? make({ tl: 'rgba(100, 145, 160, 0.92)', treeRgb: '60, 140, 95', pondRgb: '125, 210, 250', pondDarkRgb: '80, 170, 220' })
+            : make({ tl: 'rgba(45, 65, 100, 0.95)', treeRgb: '25, 55, 55', pondRgb: '55, 85, 140', pondDarkRgb: '30, 55, 105' });
         case 'clear':
         default:
           return isDay
-            ? { mtn: 'rgba(140, 175, 210, 0.85)', tl: 'rgba(100, 150, 165, 0.92)', tree: 'rgba(60, 135, 90, 0.95)', pond: 'rgba(140, 210, 250, 0.85)', snowy: false, frozen: false, lightFlash: false }
-            : { mtn: 'rgba(70, 90, 135, 0.90)', tl: 'rgba(50, 70, 105, 0.95)', tree: 'rgba(30, 55, 60, 0.95)', pond: 'rgba(70, 100, 155, 0.85)', snowy: false, frozen: false, lightFlash: false };
+            ? make({ tl: 'rgba(100, 150, 165, 0.92)', treeRgb: '60, 135, 90', pondRgb: '135, 210, 250', pondDarkRgb: '90, 170, 220' })
+            : make({ tl: 'rgba(50, 70, 105, 0.95)', treeRgb: '30, 55, 60', pondRgb: '60, 95, 150', pondDarkRgb: '35, 70, 115' });
       }
     };
 
@@ -396,19 +467,47 @@ export default function WeatherBackground({ condition, windMph }: Props) {
       ctx.closePath();
       ctx.fill();
 
-      // Pond surface
-      ctx.fillStyle = pal.pond;
-      ctx.beginPath();
-      ctx.ellipse(pond.cx, pond.cy, pond.rx, pond.ry, 0, 0, Math.PI * 2);
+      // ── Pond ──────────────────────────────────────────────────────
+      // Irregular organic outline + gradient + subtle reedy edge instead
+      // of a flat ellipse — reads as actual water rather than a paint blob.
+      const p = pond; // narrow once for the closure
+      const pondPath = () => {
+        ctx.beginPath();
+        // Trace an ellipse but jitter each control point slightly so the
+        // shoreline isn't perfectly mathematical.
+        const steps = 32;
+        for (let i = 0; i <= steps; i++) {
+          const ang = (i / steps) * Math.PI * 2;
+          const wob = 1 + Math.sin(ang * 3 + p.cx * 0.01) * 0.04
+                       + Math.sin(ang * 5 + p.cy * 0.013) * 0.02;
+          const x = p.cx + Math.cos(ang) * p.rx * wob;
+          const y = p.cy + Math.sin(ang) * p.ry * wob;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+      };
+      // Base water — vertical gradient (lighter near the back, darker
+      // toward the foreground for that "looking across water" feel)
+      const pondG = ctx.createLinearGradient(pond.cx, pond.cy - pond.ry, pond.cx, pond.cy + pond.ry);
+      pondG.addColorStop(0, pal.pond);
+      pondG.addColorStop(1, pal.pondDark);
+      ctx.fillStyle = pondG;
+      pondPath();
       ctx.fill();
-      // Subtle highlight on top half of pond for shape
+      // Bright skyline reflection band along the back edge
       const reflG = ctx.createLinearGradient(pond.cx, pond.cy - pond.ry, pond.cx, pond.cy);
-      reflG.addColorStop(0, 'rgba(255, 255, 255, 0.10)');
+      reflG.addColorStop(0, 'rgba(255, 255, 255, 0.18)');
       reflG.addColorStop(1, 'rgba(255, 255, 255, 0)');
       ctx.fillStyle = reflG;
       ctx.beginPath();
-      ctx.ellipse(pond.cx, pond.cy - pond.ry * 0.25, pond.rx * 0.95, pond.ry * 0.5, 0, 0, Math.PI * 2);
+      ctx.ellipse(pond.cx, pond.cy - pond.ry * 0.3, pond.rx * 0.93, pond.ry * 0.55, 0, 0, Math.PI * 2);
       ctx.fill();
+      // Dark waterline rim along the front edge for depth
+      ctx.strokeStyle = pal.pondRim;
+      ctx.lineWidth = 1.2;
+      pondPath();
+      ctx.stroke();
 
       // Frozen pond — faint hairline cracks
       if (pal.frozen) {
@@ -423,8 +522,14 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         }
       }
 
-      // Foreground trees — pine-style, 3 stacked triangles per tree.
-      // Sway: trees on cyclic motion driven by wind speed and per-tree jitter.
+      // ── Foreground trees ──────────────────────────────────────────
+      // Organic clustered foliage instead of stacked triangles. Each tree:
+      //   • tapered trunk drawn as a gradient-shaded shape
+      //   • multiple overlapping rounded foliage clusters in bezier curves
+      //   • a soft highlight on the sunlit side for depth
+      // Sway: cyclic motion driven by wind speed and per-tree jitter.
+      const treeHi = pal.treeHighlight;
+      const treeShadow = pal.treeShadow;
       for (const tr of trees) {
         const tBase = (now / 1000);
         const swayAmount = (Math.abs(windFactor) * 0.08 + 0.012)
@@ -434,34 +539,71 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         ctx.translate(tr.x, tr.baseY);
         ctx.rotate(swayAmount);
 
-        // Trunk
-        ctx.fillStyle = 'rgba(46, 30, 18, 0.78)';
-        ctx.fillRect(-tr.size * 0.06, -tr.size * 0.18, tr.size * 0.12, tr.size * 0.22);
+        const s = tr.size;
+        // Trunk: tapered (wider at base, narrower at top), with a darker
+        // base shadow. Drawn as a closed bezier-edged shape.
+        const trunkW = s * 0.10;
+        const trunkH = s * 0.28;
+        ctx.fillStyle = treeShadow;
+        ctx.beginPath();
+        ctx.moveTo(-trunkW * 0.5, 0);
+        ctx.bezierCurveTo(-trunkW * 0.5, -trunkH * 0.3, -trunkW * 0.35, -trunkH * 0.8, -trunkW * 0.3, -trunkH);
+        ctx.lineTo(trunkW * 0.3, -trunkH);
+        ctx.bezierCurveTo(trunkW * 0.35, -trunkH * 0.8, trunkW * 0.5, -trunkH * 0.3, trunkW * 0.5, 0);
+        ctx.closePath();
+        ctx.fill();
 
-        // 3 layered triangles, top → bottom
-        const layers = 3;
-        for (let i = 0; i < layers; i++) {
-          const baseW = tr.size * (0.95 - i * 0.18);
-          const triH = tr.size * 0.42;
-          const yTop = -tr.size * 0.18 - (layers - 1 - i) * tr.size * 0.30;
-          ctx.fillStyle = pal.tree;
+        // Foliage: 4 overlapping rounded clusters from bottom (wide) to top (narrow).
+        // Each cluster is an irregular rounded shape via bezier curves.
+        const drawCluster = (cy: number, w: number, h: number, fill: string) => {
+          ctx.fillStyle = fill;
           ctx.beginPath();
-          ctx.moveTo(0, yTop);
-          ctx.lineTo(-baseW, yTop + triH);
-          ctx.lineTo(baseW, yTop + triH);
+          ctx.moveTo(-w, cy);
+          ctx.bezierCurveTo(-w * 1.1, cy - h * 0.4, -w * 0.6, cy - h, 0, cy - h);
+          ctx.bezierCurveTo(w * 0.6, cy - h, w * 1.1, cy - h * 0.4, w, cy);
+          ctx.bezierCurveTo(w * 0.9, cy + h * 0.18, w * 0.4, cy + h * 0.22, 0, cy + h * 0.18);
+          ctx.bezierCurveTo(-w * 0.4, cy + h * 0.22, -w * 0.9, cy + h * 0.18, -w, cy);
           ctx.closePath();
           ctx.fill();
-          if (pal.snowy) {
-            // Snow cap on the top portion of each triangle
-            ctx.fillStyle = 'rgba(248, 250, 252, 0.85)';
-            ctx.beginPath();
-            ctx.moveTo(0, yTop);
-            ctx.lineTo(-baseW * 0.42, yTop + triH * 0.32);
-            ctx.lineTo(baseW * 0.42, yTop + triH * 0.32);
-            ctx.closePath();
-            ctx.fill();
-          }
+        };
+
+        // Bottom cluster (largest, widest)
+        drawCluster(-trunkH - s * 0.05, s * 0.55, s * 0.32, pal.tree);
+        // Mid cluster
+        drawCluster(-trunkH - s * 0.32, s * 0.46, s * 0.30, pal.tree);
+        // Upper cluster
+        drawCluster(-trunkH - s * 0.58, s * 0.35, s * 0.28, pal.tree);
+        // Top tuft (small, slightly off-center for a less symmetric look)
+        ctx.save();
+        ctx.translate(s * 0.05, 0);
+        drawCluster(-trunkH - s * 0.80, s * 0.22, s * 0.22, pal.tree);
+        ctx.restore();
+
+        // Highlight pass — same cluster shapes nudged left, in a lighter
+        // green/blue tint, just on the upper edge. Creates a directional
+        // light feel without explicit gradients per cluster.
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.fillStyle = treeHi;
+        // Quick lighter overlay across all clusters (clipped to the existing foliage by source-atop)
+        ctx.beginPath();
+        ctx.ellipse(-s * 0.18, -trunkH - s * 0.55, s * 0.35, s * 0.55, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalCompositeOperation = 'source-over';
+
+        // Snowy variant — light dusting of snow on the upper foliage
+        if (pal.snowy) {
+          ctx.fillStyle = 'rgba(248, 250, 252, 0.9)';
+          ctx.beginPath();
+          ctx.ellipse(0, -trunkH - s * 0.78, s * 0.18, s * 0.10, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.ellipse(-s * 0.15, -trunkH - s * 0.58, s * 0.16, s * 0.08, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.ellipse(s * 0.18, -trunkH - s * 0.40, s * 0.15, s * 0.07, 0, 0, Math.PI * 2);
+          ctx.fill();
         }
+
         ctx.restore();
       }
 
