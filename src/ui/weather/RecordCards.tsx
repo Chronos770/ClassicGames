@@ -203,6 +203,17 @@ export default function RecordCards({ stationId, lastIngestTick }: Props) {
         icon: '🌪️',
       });
     }
+    if (recs.peakRainRate && recs.peakRainRate.v > 0) {
+      out.push({
+        key: 'peak-rain-rate',
+        label: 'Peak Rain Rate',
+        value: (convertPrecip(recs.peakRainRate.v, precU) ?? recs.peakRainRate.v).toFixed(2),
+        unit: `${rU}/hr`,
+        when: recs.peakRainRate.observed_at,
+        accent: 'rain',
+        icon: '🌊',
+      });
+    }
     return out;
   }, [recs, tempU, windU, pressU, precU, tU, wU, rU, pU]);
 

@@ -185,6 +185,7 @@ export interface WeatherRecords {
   mostYearlyRain: RecordHit | null;
   highestPressure: RecordHit | null;
   lowestPressure: RecordHit | null;
+  peakRainRate: RecordHit | null;
 }
 
 /**
@@ -204,6 +205,7 @@ export async function getAllTimeRecords(stationId: number): Promise<WeatherRecor
       mostYearlyRain: null,
       highestPressure: null,
       lowestPressure: null,
+      peakRainRate: null,
     };
   }
 
@@ -235,6 +237,7 @@ export async function getAllTimeRecords(stationId: number): Promise<WeatherRecor
     mostYearlyRainRow,
     highestPressureRow,
     lowestPressureRow,
+    peakRainRateRow,
   ] = await Promise.all([
     top('temp', 'desc'),
     top('temp', 'asc'),
@@ -246,6 +249,7 @@ export async function getAllTimeRecords(stationId: number): Promise<WeatherRecor
     top('rainfall_year_in', 'desc'),
     top('bar_sea_level', 'desc'),
     top('bar_sea_level', 'asc'),
+    top('rain_rate_hi_in', 'desc'),
   ]);
 
   // Pick the larger of last-storm vs current-storm
@@ -292,6 +296,9 @@ export async function getAllTimeRecords(stationId: number): Promise<WeatherRecor
       : null,
     lowestPressure: lowestPressureRow
       ? { v: lowestPressureRow.bar_sea_level, observed_at: lowestPressureRow.observed_at }
+      : null,
+    peakRainRate: peakRainRateRow
+      ? { v: peakRainRateRow.rain_rate_hi_in, observed_at: peakRainRateRow.observed_at }
       : null,
   };
 }

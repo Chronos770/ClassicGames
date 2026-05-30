@@ -4,6 +4,7 @@ import LineChart, { type Series } from './LineChart';
 import StormsList from './StormsList';
 import StatsTable, { StatsSummary } from './StatsTable';
 import RecordCards from './RecordCards';
+import DroughtMap from './DroughtMap';
 import { getReadingsRange, getStationDateRange, type WeatherReading } from '../../lib/weatherService';
 import { supabase } from '../../lib/supabase';
 import {
@@ -403,6 +404,7 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
         />
       </div>
       <RecordCards stationId={stationId} lastIngestTick={lastIngestTick} />
+      <DroughtMap />
 
       <div className="bg-black/30 backdrop-blur-md rounded-xl border border-white/10 p-3 sm:p-4">
         {/* Top control row */}
