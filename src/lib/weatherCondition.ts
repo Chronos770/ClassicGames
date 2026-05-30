@@ -115,7 +115,7 @@ export function classifyCondition(
       label: 'Thunderstorm',
       emoji: '\u{26C8}\u{FE0F}',
       gradient: gradient('from-indigo-500/20', 'via-purple-500/10', 'to-transparent'),
-      pageBg: 'from-indigo-950 via-purple-950 to-slate-950',
+      pageBg: 'from-slate-700 via-indigo-800 to-slate-800',
       isDay,
     };
   }
@@ -126,7 +126,7 @@ export function classifyCondition(
       label: 'Heavy Rain',
       emoji: '\u{1F327}\u{FE0F}',
       gradient: gradient('from-blue-600/20', 'via-slate-500/10', 'to-transparent'),
-      pageBg: 'from-blue-950 via-slate-900 to-blue-950',
+      pageBg: 'from-slate-500 via-cyan-700 to-slate-600',
       isDay,
     };
   }
@@ -137,7 +137,7 @@ export function classifyCondition(
       label: 'Rain',
       emoji: '\u{1F327}\u{FE0F}',
       gradient: gradient('from-blue-500/15', 'via-slate-500/10', 'to-transparent'),
-      pageBg: 'from-slate-900 via-blue-950 to-slate-900',
+      pageBg: 'from-cyan-700 via-slate-500 to-cyan-800',
       isDay,
     };
   }
@@ -148,7 +148,7 @@ export function classifyCondition(
       label: 'Drizzle',
       emoji: '\u{1F326}\u{FE0F}',
       gradient: gradient('from-sky-500/15', 'via-slate-500/5', 'to-transparent'),
-      pageBg: 'from-slate-900 via-sky-950 to-slate-800',
+      pageBg: 'from-cyan-600 via-slate-500 to-cyan-700',
       isDay,
     };
   }

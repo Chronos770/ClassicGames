@@ -215,7 +215,7 @@ export default function WeatherPage() {
     }
     return (
       <div className="relative min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-6">
-        <div className="bg-slate-900/85 backdrop-blur-sm border border-white/10 rounded-2xl p-6 max-w-sm w-full text-center">
+        <div className="bg-black/30 backdrop-blur-md border border-white/10 rounded-2xl p-6 max-w-sm w-full text-center">
           <div className="text-2xl mb-2">{icon}</div>
           <div className="text-white text-base font-display font-semibold mb-1">{title}</div>
           <div className="text-white/60 text-xs mb-4">{body}</div>
@@ -333,7 +333,7 @@ export default function WeatherPage() {
             (slate/85 + backdrop-blur + border) so it reads as part of the
             UI instead of floating on top of the canvas. Labels collapse
             to icon-only below 'sm' so all tabs fit without overflow. */}
-        <div className="bg-slate-900/85 backdrop-blur-sm border border-white/10 rounded-xl p-1.5 mb-5 flex flex-wrap gap-1">
+        <div className="bg-black/30 backdrop-blur-md border border-white/10 rounded-xl p-1.5 mb-5 flex flex-wrap gap-1">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -434,7 +434,7 @@ function FreshnessPill({
 
 function EmptyState({ onRefresh, busy }: { onRefresh: () => void; busy: boolean }) {
   return (
-    <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-8 text-center">
+    <div className="bg-black/30 backdrop-blur-md rounded-xl border border-white/10 p-8 text-center">
       <div className="text-white/60 text-lg mb-2">No readings yet</div>
       <div className="text-white/40 text-sm mb-4">
         Trigger the first ingestion to pull current conditions from WeatherLink.

@@ -53,7 +53,7 @@ export default function WeatherBackground({ condition, windMph }: Props) {
     const wind = Math.max(-50, Math.min(50, windMph));
     const windFactor = wind / 10;
 
-    type Drop = { x: number; y: number; vy: number; vx: number; len: number; a: number };
+    type Drop = { x: number; y: number; vy: number; vx: number; len: number; a: number; layer: 1|2|3 };
     type Splash = { x: number; y: number; r: number; a: number };
     type Flake = { x: number; y: number; vy: number; phase: number; size: number; a: number };
     type Star = { x: number; y: number; a: number; phase: number; speed: number };
@@ -259,20 +259,31 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         return;
       }
 
-      // RAIN
+      // RAIN — three depth layers: far (1), mid (2), near (3).
+      // Near drops are longer/brighter with a teardrop leading dot;
+      // far drops are faint/short to simulate atmospheric depth.
       if (k === 'rain' || k === 'heavyRain' || k === 'drizzle' || k === 'thunderstorm') {
         const base = k === 'drizzle' ? 140 : k === 'rain' ? 280 : 460;
         const density = Math.round(base * densityScale);
         const speedRange = k === 'drizzle' ? [400, 700] : k === 'heavyRain' || k === 'thunderstorm' ? [900, 1300] : [700, 1000];
         for (let i = 0; i < density; i++) {
           const isHeavy = k === 'heavyRain' || k === 'thunderstorm';
+          const r = Math.random();
+          const layer: 1|2|3 = r < 0.38 ? 1 : r < 0.72 ? 2 : 3;
+          const baseLen = k === 'drizzle' ? 10 + Math.random() * 14 : isHeavy ? 26 + Math.random() * 32 : 20 + Math.random() * 26;
+          const baseA = k === 'drizzle' ? 0.35 + Math.random() * 0.25 : isHeavy ? 0.60 + Math.random() * 0.30 : 0.50 + Math.random() * 0.30;
+          const baseVy = speedRange[0] + Math.random() * (speedRange[1] - speedRange[0]);
+          const lenScale = layer === 1 ? 0.42 : layer === 2 ? 0.70 : 1.0;
+          const aScale   = layer === 1 ? 0.28 : layer === 2 ? 0.58 : 1.0;
+          const vyScale  = layer === 1 ? 1.28 : layer === 2 ? 1.0  : 0.82;
           rain.push({
             x: Math.random() * (W + 200) - 100,
             y: Math.random() * H,
-            vy: speedRange[0] + Math.random() * (speedRange[1] - speedRange[0]),
+            vy: baseVy * vyScale,
             vx: windFactor * 70 + (Math.random() - 0.5) * 25,
-            len: k === 'drizzle' ? 10 + Math.random() * 14 : isHeavy ? 26 + Math.random() * 32 : 20 + Math.random() * 26,
-            a: k === 'drizzle' ? 0.35 + Math.random() * 0.25 : isHeavy ? 0.60 + Math.random() * 0.30 : 0.50 + Math.random() * 0.30,
+            len: baseLen * lenScale,
+            a: baseA * aScale,
+            layer,
           });
         }
       }
@@ -1320,63 +1331,105 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         ctx.fillRect(0, 0, W, H);
       }
 
-      // Rain (with splashes near bottom + pond ripples). Drops landing in
-      // the pond ellipse spawn a circular ripple instead of a ground splash.
-      // Density of rain already scales with intensity (drizzle/rain/heavy),
-      // so ripple frequency naturally tracks the rainfall amount.
+      // Atmospheric rain mist — large translucent radial blobs that drift
+      // slowly, simulating wet-air haze and adding perceived depth.
+      if (k === 'rain' || k === 'heavyRain' || k === 'thunderstorm' || k === 'drizzle') {
+        const mAlpha = k === 'drizzle' ? 0.052 : k === 'heavyRain' || k === 'thunderstorm' ? 0.098 : 0.072;
+        const drift = (t / 22000) * W;
+        const mistPts: [number, number][] = [
+          [(W * 0.25 + drift) % (W * 1.5) - W * 0.25, H * 0.28],
+          [(W * 0.70 + drift * 1.4) % (W * 1.5) - W * 0.25, H * 0.62],
+          [(W * 0.05 + drift * 0.75) % (W * 1.5) - W * 0.25, H * 0.88],
+        ];
+        for (const [mx, my] of mistPts) {
+          const mg = ctx.createRadialGradient(mx, my, 0, mx, my, W * 0.52);
+          mg.addColorStop(0, `rgba(210, 240, 255, ${mAlpha})`);
+          mg.addColorStop(1, 'rgba(210, 240, 255, 0)');
+          ctx.fillStyle = mg;
+          ctx.fillRect(0, 0, W, H);
+        }
+      }
+
+      // Rain — 3-layer depth system. Positions update first (decoupled from
+      // draw) so we can batch-draw back-to-front by layer. Near drops (layer 3)
+      // get a small bright leading dot for a bead-of-water feel.
       if (rain.length) {
-        ctx.strokeStyle = k === 'heavyRain' || k === 'thunderstorm'
-          ? 'rgba(200, 235, 255, 0.80)'
-          : k === 'drizzle'
-            ? 'rgba(210, 240, 255, 0.62)'
-            : 'rgba(205, 235, 255, 0.72)';
-        ctx.lineWidth = k === 'heavyRain' || k === 'thunderstorm' ? 1.4 : k === 'drizzle' ? 0.9 : 1.1;
+        const isHeavy = k === 'heavyRain' || k === 'thunderstorm';
         const rippleSpawnChance =
           k === 'heavyRain' || k === 'thunderstorm' ? 0.55 :
           k === 'rain' ? 0.35 :
           0.18; // drizzle
+
+        // Position + collision update (separate from draw)
         for (const d of rain) {
-          {
-            d.y += d.vy * dt;
-            d.x += d.vx * dt;
-          }
-          // Pond hit detection — drop ends its life when it meets the water.
-          // Compares (x - cx)^2 / rx^2 + (y - cy)^2 / ry^2 <= 1, but only
-          // accepts hits on the upper half of the ellipse (water surface).
+          d.y += d.vy * dt;
+          d.x += d.vx * dt;
           if (pond) {
-            const dx = (d.x - pond.cx) / pond.rx;
-            const dy = (d.y - pond.cy) / pond.ry;
-            if (dx * dx + dy * dy <= 1 && d.y <= pond.cy) {
+            const ddx = (d.x - pond.cx) / pond.rx;
+            const ddy = (d.y - pond.cy) / pond.ry;
+            if (ddx * ddx + ddy * ddy <= 1 && d.y <= pond.cy) {
               if (Math.random() < rippleSpawnChance) {
-                ripples.push({
-                  x: d.x,
-                  y: pond.cy + (d.y - pond.cy) * 0.3,
-                  r: 0.8,
-                  a: 0.6 + Math.random() * 0.25,
-                });
+                ripples.push({ x: d.x, y: pond.cy + (d.y - pond.cy) * 0.3, r: 0.8, a: 0.6 + Math.random() * 0.25 });
               }
               d.y = -20;
               d.x = Math.random() * (W + 200) - 100;
             }
           }
           if (d.y > H - 4) {
-            // Splash on ground
             if (Math.random() < 0.3) splashes.push({ x: d.x, y: H - 6, r: 1, a: 0.6 });
             d.y = -20;
             d.x = Math.random() * (W + 200) - 100;
           }
           if (d.x > W + 50) d.x = -20;
           if (d.x < -50) d.x = W + 20;
+        }
+
+        ctx.lineCap = 'round';
+
+        // Layer 1 — far rain: thin, very faint
+        ctx.lineWidth = k === 'drizzle' ? 0.52 : isHeavy ? 0.72 : 0.62;
+        for (const d of rain) {
+          if (d.layer !== 1) continue;
           ctx.globalAlpha = d.a;
+          ctx.strokeStyle = 'rgba(205, 238, 255, 1)';
           ctx.beginPath();
           ctx.moveTo(d.x, d.y);
           ctx.lineTo(d.x - (d.vx / d.vy) * d.len, d.y - d.len);
           ctx.stroke();
         }
+
+        // Layer 2 — midground rain
+        ctx.lineWidth = k === 'drizzle' ? 0.78 : isHeavy ? 1.08 : 0.90;
+        for (const d of rain) {
+          if (d.layer !== 2) continue;
+          ctx.globalAlpha = d.a;
+          ctx.strokeStyle = isHeavy ? 'rgba(200, 232, 255, 1)' : 'rgba(212, 242, 255, 1)';
+          ctx.beginPath();
+          ctx.moveTo(d.x, d.y);
+          ctx.lineTo(d.x - (d.vx / d.vy) * d.len, d.y - d.len);
+          ctx.stroke();
+        }
+
+        // Layer 3 — foreground rain: wider + bright teardrop leading dot
+        const nearW = k === 'drizzle' ? 0.95 : isHeavy ? 1.48 : 1.22;
+        ctx.lineWidth = nearW;
+        for (const d of rain) {
+          if (d.layer !== 3) continue;
+          ctx.globalAlpha = d.a;
+          ctx.strokeStyle = 'rgba(230, 248, 255, 1)';
+          ctx.beginPath();
+          ctx.moveTo(d.x, d.y);
+          ctx.lineTo(d.x - (d.vx / d.vy) * d.len, d.y - d.len);
+          ctx.stroke();
+          ctx.fillStyle = `rgba(245, 252, 255, ${d.a * 0.88})`;
+          ctx.beginPath();
+          ctx.arc(d.x, d.y, nearW * 1.15, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
         ctx.globalAlpha = 1;
 
-        // Pond ripples — concentric ovals fading out. Drawn after the rain
-        // so they appear to be on the water surface.
+        // Pond ripples
         if (ripples.length) {
           ctx.strokeStyle = 'rgba(186, 230, 253, 0.75)';
           ctx.lineWidth = 1;
@@ -1384,32 +1437,23 @@ export default function WeatherBackground({ condition, windMph }: Props) {
             const rp = ripples[i];
             rp.r += dt * 28;
             rp.a -= dt * 1.0;
-            if (rp.a <= 0) {
-              ripples.splice(i, 1);
-              continue;
-            }
+            if (rp.a <= 0) { ripples.splice(i, 1); continue; }
             ctx.globalAlpha = rp.a;
             ctx.beginPath();
-            // Compress vertically since the pond is an ellipse seen at an angle
             ctx.ellipse(rp.x, rp.y, rp.r, rp.r * 0.4, 0, 0, Math.PI * 2);
             ctx.stroke();
           }
           ctx.globalAlpha = 1;
         }
 
-        // Splashes
+        // Ground splashes
         ctx.strokeStyle = 'rgba(186, 230, 253, 0.7)';
         ctx.lineWidth = 1;
         for (let i = splashes.length - 1; i >= 0; i--) {
           const s = splashes[i];
-          {
-            s.r += dt * 60;
-            s.a -= dt * 1.8;
-          }
-          if (s.a <= 0) {
-            splashes.splice(i, 1);
-            continue;
-          }
+          s.r += dt * 60;
+          s.a -= dt * 1.8;
+          if (s.a <= 0) { splashes.splice(i, 1); continue; }
           ctx.globalAlpha = s.a;
           ctx.beginPath();
           ctx.arc(s.x, s.y, s.r, 0, Math.PI);
