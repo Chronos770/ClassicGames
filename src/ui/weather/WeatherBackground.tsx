@@ -265,13 +265,14 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         const density = Math.round(base * densityScale);
         const speedRange = k === 'drizzle' ? [400, 700] : k === 'heavyRain' || k === 'thunderstorm' ? [900, 1300] : [700, 1000];
         for (let i = 0; i < density; i++) {
+          const isHeavy = k === 'heavyRain' || k === 'thunderstorm';
           rain.push({
             x: Math.random() * (W + 200) - 100,
             y: Math.random() * H,
             vy: speedRange[0] + Math.random() * (speedRange[1] - speedRange[0]),
-            vx: windFactor * 60 + (Math.random() - 0.5) * 30,
-            len: k === 'drizzle' ? 4 + Math.random() * 6 : 12 + Math.random() * 18,
-            a: k === 'drizzle' ? 0.45 + Math.random() * 0.25 : 0.55 + Math.random() * 0.35,
+            vx: windFactor * 70 + (Math.random() - 0.5) * 25,
+            len: k === 'drizzle' ? 10 + Math.random() * 14 : isHeavy ? 26 + Math.random() * 32 : 20 + Math.random() * 26,
+            a: k === 'drizzle' ? 0.35 + Math.random() * 0.25 : isHeavy ? 0.60 + Math.random() * 0.30 : 0.50 + Math.random() * 0.30,
           });
         }
       }
@@ -516,13 +517,13 @@ export default function WeatherBackground({ condition, windMph }: Props) {
       }
       switch (k) {
         case 'thunderstorm':
-          return make({ tl: 'rgba(40, 55, 80, 0.95)', treeRgb: '28, 50, 45', pondRgb: '40, 60, 95', pondDarkRgb: '20, 35, 65', lightFlash: true });
+          return make({ tl: 'rgba(35, 50, 78, 0.96)', treeRgb: '22, 44, 42', pondRgb: '30, 55, 88', pondDarkRgb: '16, 32, 60', groundFarRgb: '55, 80, 82', groundNearRgb: '32, 52, 55', lightFlash: true });
         case 'heavyRain':
-          return make({ tl: 'rgba(55, 75, 100, 0.95)', treeRgb: '35, 65, 55', pondRgb: '55, 85, 125', pondDarkRgb: '30, 55, 95' });
+          return make({ tl: 'rgba(48, 72, 98, 0.95)', treeRgb: '30, 62, 60', pondRgb: '48, 82, 118', pondDarkRgb: '26, 52, 92', groundFarRgb: '60, 88, 88', groundNearRgb: '38, 62, 64' });
         case 'rain':
-          return make({ tl: 'rgba(70, 95, 120, 0.92)', treeRgb: '45, 80, 65', pondRgb: '75, 120, 165', pondDarkRgb: '45, 90, 135' });
+          return make({ tl: 'rgba(62, 92, 115, 0.92)', treeRgb: '40, 78, 72', pondRgb: '68, 118, 155', pondDarkRgb: '40, 88, 130', groundFarRgb: '72, 105, 105', groundNearRgb: '48, 80, 82' });
         case 'drizzle':
-          return make({ tl: 'rgba(85, 115, 140, 0.90)', treeRgb: '55, 110, 80', pondRgb: '105, 155, 195', pondDarkRgb: '70, 120, 165' });
+          return make({ tl: 'rgba(80, 112, 138, 0.90)', treeRgb: '52, 108, 92', pondRgb: '98, 150, 188', pondDarkRgb: '65, 115, 160', groundFarRgb: '88, 120, 118', groundNearRgb: '58, 98, 98' });
         case 'snow':
           return make({ tl: 'rgba(150, 170, 195, 0.95)', treeRgb: '70, 100, 90', pondRgb: '186, 230, 253', pondDarkRgb: '140, 195, 230', snowy: true, frozen: true });
         case 'fog':
@@ -837,6 +838,104 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         ctx.restore();
       }
 
+      // Person-with-umbrella silhouette for rainy conditions — stands on
+      // the right side of the horizon, like Apple Weather's character.
+      const isRainy = k === 'rain' || k === 'heavyRain' || k === 'thunderstorm' || k === 'drizzle';
+      if (isRainy) {
+        const fx = W * 0.72;
+        const fy = horizonY + 2;
+        // Figure height scales with viewport, capped so it doesn't dwarf the scene
+        const figH = Math.min(160, Math.max(80, H * 0.17));
+        const u = figH / 9; // unit size
+        const silColor = 'rgba(14, 26, 42, 0.90)';
+
+        ctx.save();
+
+        // Legs — two tapering strokes
+        ctx.strokeStyle = silColor;
+        ctx.lineCap = 'round';
+        ctx.lineWidth = u * 0.55;
+        ctx.beginPath();
+        ctx.moveTo(fx - u * 0.25, fy - u * 3.4);
+        ctx.quadraticCurveTo(fx - u * 0.4, fy - u * 1.6, fx - u * 0.3, fy);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(fx + u * 0.25, fy - u * 3.4);
+        ctx.quadraticCurveTo(fx + u * 0.4, fy - u * 1.6, fx + u * 0.5, fy);
+        ctx.stroke();
+
+        // Torso
+        ctx.fillStyle = silColor;
+        ctx.beginPath();
+        ctx.moveTo(fx - u * 0.72, fy - u * 5.8);
+        ctx.lineTo(fx + u * 0.72, fy - u * 5.8);
+        ctx.lineTo(fx + u * 0.55, fy - u * 3.4);
+        ctx.lineTo(fx - u * 0.55, fy - u * 3.4);
+        ctx.closePath();
+        ctx.fill();
+
+        // Head
+        ctx.beginPath();
+        ctx.arc(fx, fy - u * 6.6, u * 0.58, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Arm raising umbrella (right arm, bent up)
+        ctx.strokeStyle = silColor;
+        ctx.lineWidth = u * 0.42;
+        ctx.beginPath();
+        ctx.moveTo(fx + u * 0.65, fy - u * 5.4);
+        ctx.quadraticCurveTo(fx + u * 1.4, fy - u * 6.2, fx + u * 1.1, fy - u * 7.4);
+        ctx.stroke();
+
+        // Left arm (hanging down naturally)
+        ctx.beginPath();
+        ctx.moveTo(fx - u * 0.65, fy - u * 5.4);
+        ctx.quadraticCurveTo(fx - u * 1.3, fy - u * 4.2, fx - u * 1.0, fy - u * 3.0);
+        ctx.stroke();
+
+        // Umbrella handle (vertical stick)
+        ctx.lineWidth = u * 0.22;
+        ctx.beginPath();
+        ctx.moveTo(fx + u * 1.1, fy - u * 7.4);
+        ctx.lineTo(fx + u * 1.1, fy - u * 9.2);
+        ctx.stroke();
+
+        // Umbrella dome — a smooth arc with a scalloped hem
+        const ux = fx + u * 1.1;
+        const uy = fy - u * 9.2;
+        const ur = u * 2.6;
+        ctx.fillStyle = k === 'thunderstorm'
+          ? 'rgba(38, 60, 105, 0.94)'
+          : 'rgba(42, 90, 148, 0.94)';
+        ctx.beginPath();
+        ctx.moveTo(ux - ur, uy);
+        ctx.bezierCurveTo(ux - ur, uy - ur * 0.75, ux - ur * 0.28, uy - ur, ux, uy - ur * 0.88);
+        ctx.bezierCurveTo(ux + ur * 0.28, uy - ur, ux + ur, uy - ur * 0.75, ux + ur, uy);
+        // Scalloped hem — five small downward bumps
+        const hemSegs = 5;
+        for (let si = 0; si < hemSegs; si++) {
+          const x0 = ux - ur + (si / hemSegs) * ur * 2;
+          const x1 = ux - ur + ((si + 0.5) / hemSegs) * ur * 2;
+          const x2 = ux - ur + ((si + 1) / hemSegs) * ur * 2;
+          ctx.quadraticCurveTo(x1, uy + u * 0.55, x2, uy);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // Umbrella ribs (subtle darker lines)
+        ctx.strokeStyle = k === 'thunderstorm' ? 'rgba(25, 45, 85, 0.70)' : 'rgba(28, 68, 118, 0.70)';
+        ctx.lineWidth = 0.9;
+        for (let ri = 0; ri <= 4; ri++) {
+          const ang = Math.PI + (ri / 4) * Math.PI;
+          ctx.beginPath();
+          ctx.moveTo(ux, uy);
+          ctx.lineTo(ux + Math.cos(ang) * ur, uy + Math.sin(ang) * ur * 0.45);
+          ctx.stroke();
+        }
+
+        ctx.restore();
+      }
+
       // Lightning flash boost — overlay a soft white wash on the scene area
       if (flashBoost > 0) {
         const lf = ctx.createLinearGradient(0, H * 0.55, 0, H);
@@ -941,15 +1040,17 @@ export default function WeatherBackground({ condition, windMph }: Props) {
       // gradient sympathetic to the condition.
       const wash = ctx.createLinearGradient(0, 0, 0, H);
       if (k === 'thunderstorm') {
-        wash.addColorStop(0, 'rgba(67, 56, 202, 0.22)');
-        wash.addColorStop(0.6, 'rgba(30, 27, 75, 0.18)');
-        wash.addColorStop(1, 'rgba(15, 23, 42, 0.10)');
+        wash.addColorStop(0, 'rgba(45, 42, 165, 0.24)');
+        wash.addColorStop(0.4, 'rgba(25, 55, 90, 0.20)');
+        wash.addColorStop(0.6, 'rgba(20, 30, 65, 0.18)');
+        wash.addColorStop(1, 'rgba(10, 18, 38, 0.10)');
       } else if (k === 'heavyRain' || k === 'rain') {
-        wash.addColorStop(0, 'rgba(30, 64, 175, 0.18)');
-        wash.addColorStop(1, 'rgba(15, 23, 42, 0.05)');
+        wash.addColorStop(0, 'rgba(20, 75, 100, 0.28)');
+        wash.addColorStop(0.55, 'rgba(30, 90, 110, 0.16)');
+        wash.addColorStop(1, 'rgba(10, 30, 48, 0.08)');
       } else if (k === 'drizzle') {
-        wash.addColorStop(0, 'rgba(56, 189, 248, 0.10)');
-        wash.addColorStop(1, 'rgba(15, 23, 42, 0.04)');
+        wash.addColorStop(0, 'rgba(55, 120, 148, 0.18)');
+        wash.addColorStop(1, 'rgba(20, 50, 70, 0.06)');
       } else if (k === 'snow') {
         wash.addColorStop(0, 'rgba(186, 230, 253, 0.14)');
         wash.addColorStop(1, 'rgba(241, 245, 249, 0.06)');
@@ -1224,8 +1325,12 @@ export default function WeatherBackground({ condition, windMph }: Props) {
       // Density of rain already scales with intensity (drizzle/rain/heavy),
       // so ripple frequency naturally tracks the rainfall amount.
       if (rain.length) {
-        ctx.strokeStyle = 'rgba(186, 230, 253, 0.85)';
-        ctx.lineWidth = k === 'heavyRain' || k === 'thunderstorm' ? 1.5 : 1;
+        ctx.strokeStyle = k === 'heavyRain' || k === 'thunderstorm'
+          ? 'rgba(200, 235, 255, 0.80)'
+          : k === 'drizzle'
+            ? 'rgba(210, 240, 255, 0.62)'
+            : 'rgba(205, 235, 255, 0.72)';
+        ctx.lineWidth = k === 'heavyRain' || k === 'thunderstorm' ? 1.4 : k === 'drizzle' ? 0.9 : 1.1;
         const rippleSpawnChance =
           k === 'heavyRain' || k === 'thunderstorm' ? 0.55 :
           k === 'rain' ? 0.35 :
