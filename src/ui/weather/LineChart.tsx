@@ -311,7 +311,7 @@ export default function LineChart({
         {/* Hover tooltip */}
         {hoverX !== null && hoverPoints && hoverPoints.some((hp) => hp.point) && (
           <div
-            className="absolute pointer-events-none bg-slate-900/95 backdrop-blur-sm border border-white/10 rounded-lg px-3 py-2 text-[11px] whitespace-nowrap shadow-xl"
+            className="absolute pointer-events-none bg-black/75 backdrop-blur-md border border-white/10 rounded-lg px-3 py-2 text-[11px] whitespace-nowrap shadow-xl"
             style={{
               left: Math.min(Math.max(hoverX + 12, 8), Math.max(width - 200, 8)),
               top: 6,

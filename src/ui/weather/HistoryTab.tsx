@@ -404,7 +404,7 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
       </div>
       <RecordCards stationId={stationId} lastIngestTick={lastIngestTick} />
 
-      <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-3 sm:p-4">
+      <div className="bg-black/30 backdrop-blur-md rounded-xl border border-white/10 p-3 sm:p-4">
         {/* Top control row */}
         {/* Mobile: native dropdowns side-by-side */}
         <div className="grid grid-cols-2 gap-2 mb-3 sm:hidden">

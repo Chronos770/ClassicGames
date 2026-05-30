@@ -92,7 +92,7 @@ function toneFor(period: NwsForecastPeriod | null): { bg: string; border: string
   // Opaque slate base so the canvas can't bleed through; only the border
   // and accent text carry the per-condition color cue (paired with the
   // icon already shown in the banner).
-  const bg = 'bg-slate-900/85 backdrop-blur-sm';
+  const bg = 'bg-black/30 backdrop-blur-md';
   if (!period) return { bg, border: 'border-white/10', accent: 'text-white/80' };
   const s = period.shortForecast.toLowerCase();
   if (/thunder/.test(s)) return { bg, border: 'border-purple-500/30', accent: 'text-purple-200' };
@@ -137,7 +137,7 @@ function Banner({
     <button
       type="button"
       onClick={onOpen}
-      className={`w-full rounded-xl border p-3 ${tone.bg} ${tone.border} flex items-center gap-3 hover:bg-slate-800/70 transition-colors text-left`}
+      className={`w-full rounded-xl border p-3 ${tone.bg} ${tone.border} flex items-center gap-3 hover:bg-white/10 transition-colors text-left`}
     >
       <div className="flex-shrink-0">
         <AnimatedWeatherIcon conditionKey={conditionKey} isDay={primary.isDaytime} size={44} />

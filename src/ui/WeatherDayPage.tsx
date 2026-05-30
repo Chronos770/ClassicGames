@@ -317,14 +317,14 @@ export default function WeatherDayPage() {
       </motion.div>
 
       {loading ? (
-        <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-12 text-center text-white/40 text-sm">
+        <div className="bg-black/30 backdrop-blur-md rounded-xl border border-white/10 p-12 text-center text-white/40 text-sm">
           <div className="inline-flex items-center gap-2">
             <span className="inline-block w-3 h-3 rounded-full border-2 border-white/20 border-t-amber-400 animate-spin" />
             Loading day…
           </div>
         </div>
       ) : readings.length === 0 ? (
-        <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-12 text-center text-white/40 text-sm">
+        <div className="bg-black/30 backdrop-blur-md rounded-xl border border-white/10 p-12 text-center text-white/40 text-sm">
           No readings recorded on {dayLabel}.
         </div>
       ) : (
@@ -334,7 +334,7 @@ export default function WeatherDayPage() {
             {stats.map((s) => (
               <div
                 key={s.label}
-                className="rounded-xl border border-white/10 bg-slate-900/85 backdrop-blur-sm p-3"
+                className="rounded-xl border border-white/10 bg-black/30 backdrop-blur-md p-3"
               >
                 <div className="text-[10px] uppercase tracking-wider text-white/45 font-semibold mb-1">
                   {s.label}
@@ -368,7 +368,7 @@ function ChartCard({ title, series, yUnit }: { title: string; series: Series[]; 
   const hasData = series.some((s) => s.points.some((p) => p.v !== null));
   if (!hasData) return null;
   return (
-    <div className="bg-slate-900/85 backdrop-blur-sm rounded-xl border border-white/10 p-3 sm:p-4">
+    <div className="bg-black/30 backdrop-blur-md rounded-xl border border-white/10 p-3 sm:p-4">
       <div className="text-[11px] uppercase tracking-wider text-white/55 font-semibold mb-2">
         {title}
       </div>
