@@ -374,7 +374,7 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
   const hasData = series.some((s) => s.points.some((p) => p.v !== null && p.v !== undefined));
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-8">
       {/* All-time record cards + quick day-picker */}
       <div className="flex items-center justify-end gap-2 -mb-1 relative">
         <button
@@ -595,9 +595,7 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
               No data for this range yet.
             </div>
           ) : (
-            <div className="h-[260px] sm:h-[300px]">
-              <LineChart series={series} yUnit={yUnit} yDomain={yDomain} height={260} />
-            </div>
+            <LineChart series={series} yUnit={yUnit} yDomain={yDomain} height={260} />
           )
         ) : view === 'table' ? (
           <StatsTable readings={rawReadings} />
