@@ -6,7 +6,7 @@ import StatsTable, { StatsSummary } from './StatsTable';
 import RecordCards from './RecordCards';
 import DroughtMap from './DroughtMap';
 import DroughtContextCard from './DroughtContextCard';
-import { getReadingsRange, getStationDateRange, type WeatherReading } from '../../lib/weatherService';
+import { getReadingsRange, getStationDateRange, type WeatherReading, type WeatherStation } from '../../lib/weatherService';
 import { supabase } from '../../lib/supabase';
 import {
   convertPrecip,
@@ -107,7 +107,7 @@ function downsample(rows: WeatherReading[], maxPoints: number): WeatherReading[]
   return out;
 }
 
-export default function HistoryTab({ stationId, lastIngestTick }: { stationId: number; lastIngestTick: number }) {
+export default function HistoryTab({ stationId, lastIngestTick, station }: { stationId: number; lastIngestTick: number; station: WeatherStation | null }) {
   const navigate = useNavigate();
   const dayPickerRef = useRef<HTMLInputElement | null>(null);
   const [dateBounds, setDateBounds] = useState<{ earliest: string | null; latest: string | null }>({
@@ -406,7 +406,7 @@ export default function HistoryTab({ stationId, lastIngestTick }: { stationId: n
       </div>
       <RecordCards stationId={stationId} lastIngestTick={lastIngestTick} />
       <DroughtMap />
-      <DroughtContextCard stationId={stationId} tick={lastIngestTick} />
+      <DroughtContextCard station={station} tick={lastIngestTick} />
 
       <div className="bg-black/30 backdrop-blur-md rounded-xl border border-white/10 p-3 sm:p-4">
         {/* Top control row */}

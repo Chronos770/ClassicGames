@@ -1,398 +1,330 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getReadingsRange } from '../../lib/weatherService';
-import {
-  convertPrecip,
-  convertTemp,
-  useWeatherUnitsStore,
-} from '../../lib/weatherUnits';
+import type { WeatherStation } from '../../lib/weatherService';
+import { convertPrecip, useWeatherUnitsStore } from '../../lib/weatherUnits';
 
-interface MonthStat {
-  month: string; // YYYY-MM
-  totalRainIn: number | null;
-  avgTempRaw: number | null; // °F raw from DB
-  ytdIn: number | null;     // last rainfall_year_in seen in this month
+// ── helpers ────────────────────────────────────────────────────
+
+function ordinal(n: number): string {
+  if (n <= 0) return String(n);
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
 }
 
-function monthKey(iso: string) { return iso.slice(0, 7); }
-
-function monthShort(key: string) {
-  const [y, m] = key.split('-').map(Number);
-  return new Date(y, m - 1).toLocaleDateString([], { month: 'short' });
+function monthName(month0: number) {
+  return new Date(2000, month0).toLocaleString('default', { month: 'long' });
 }
 
-async function fetchMonthlyStats(stationId: number): Promise<MonthStat[]> {
-  const from = new Date();
-  from.setMonth(from.getMonth() - 13);
-  from.setDate(1);
-  from.setHours(0, 0, 0, 0);
+// ── types ──────────────────────────────────────────────────────
 
-  const rows = await getReadingsRange(
-    stationId,
-    from.toISOString(),
-    new Date().toISOString(),
-    'observed_at,rainfall_month_in,rainfall_year_in,temp',
-  );
+interface MonthRecord {
+  year: number;
+  precipMm: number;
+  avgTempC: number | null;
+}
 
-  const byMonth: Record<string, { rains: number[]; temps: number[]; ytd: number | null }> = {};
-  for (const r of rows) {
-    const k = monthKey(r.observed_at);
-    if (!byMonth[k]) byMonth[k] = { rains: [], temps: [], ytd: null };
-    if (r.rainfall_month_in !== null) byMonth[k].rains.push(r.rainfall_month_in);
-    if (r.temp !== null) byMonth[k].temps.push(r.temp);
-    if (r.rainfall_year_in !== null) byMonth[k].ytd = r.rainfall_year_in;
+// ── API fetchers ────────────────────────────────────────────────
+
+async function fetchCountyName(lat: number, lon: number): Promise<string | null> {
+  try {
+    const r = await fetch(
+      `https://geo.fcc.gov/api/census/block/find?latitude=${lat}&longitude=${lon}&format=json`,
+    );
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d?.County?.name ?? null;
+  } catch {
+    return null;
   }
-
-  return Object.entries(byMonth)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, d]) => ({
-      month,
-      totalRainIn: d.rains.length ? Math.max(...d.rains) : null,
-      avgTempRaw:
-        d.temps.length
-          ? d.temps.reduce((a, b) => a + b, 0) / d.temps.length
-          : null,
-      ytdIn: d.ytd,
-    }));
 }
+
+async function fetchClimateHistory(
+  lat: number,
+  lon: number,
+): Promise<{ times: string[]; precip: (number | null)[]; temps: (number | null)[] } | null> {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const url =
+      `https://archive-api.open-meteo.com/v1/archive` +
+      `?latitude=${lat}&longitude=${lon}` +
+      `&start_date=1959-01-01&end_date=${today}` +
+      `&daily=precipitation_sum,temperature_2m_mean` +
+      `&timezone=auto`;
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const d = await r.json();
+    return {
+      times: d.daily.time,
+      precip: d.daily.precipitation_sum,
+      temps: d.daily.temperature_2m_mean,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ── compute ────────────────────────────────────────────────────
+
+function buildMonthRecords(
+  times: string[],
+  precip: (number | null)[],
+  temps: (number | null)[],
+  targetMonth: number, // 0-indexed
+): MonthRecord[] {
+  const byYear: Record<number, { p: number; ts: number; tc: number }> = {};
+  for (let i = 0; i < times.length; i++) {
+    const t = times[i];
+    const mo = parseInt(t.slice(5, 7), 10) - 1;
+    if (mo !== targetMonth) continue;
+    const yr = parseInt(t.slice(0, 4), 10);
+    if (!byYear[yr]) byYear[yr] = { p: 0, ts: 0, tc: 0 };
+    byYear[yr].p += precip[i] ?? 0;
+    if (temps[i] !== null && temps[i] !== undefined) {
+      byYear[yr].ts += temps[i]!;
+      byYear[yr].tc++;
+    }
+  }
+  return Object.entries(byYear).map(([yr, v]) => ({
+    year: Number(yr),
+    precipMm: v.p,
+    avgTempC: v.tc > 0 ? v.ts / v.tc : null,
+  }));
+}
+
+function buildYtdRecords(
+  times: string[],
+  precip: (number | null)[],
+  upToMonth: number, // 0-indexed, inclusive
+): { year: number; precipMm: number }[] {
+  const byYear: Record<number, number> = {};
+  for (let i = 0; i < times.length; i++) {
+    const t = times[i];
+    const mo = parseInt(t.slice(5, 7), 10) - 1;
+    if (mo > upToMonth) continue;
+    const yr = parseInt(t.slice(0, 4), 10);
+    byYear[yr] = (byYear[yr] ?? 0) + (precip[i] ?? 0);
+  }
+  return Object.entries(byYear).map(([yr, p]) => ({ year: Number(yr), precipMm: p }));
+}
+
+function computeNormal(records: MonthRecord[], startYear = 1991, endYear = 2020): number | null {
+  const vals = records.filter((r) => r.year >= startYear && r.year <= endYear).map((r) => r.precipMm);
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+}
+
+function computeYtdNormal(
+  records: { year: number; precipMm: number }[],
+  startYear = 1991,
+  endYear = 2020,
+): number | null {
+  const vals = records.filter((r) => r.year >= startYear && r.year <= endYear).map((r) => r.precipMm);
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+}
+
+function rankWettest(records: MonthRecord[], currentMm: number, currentYear: number): { rank: number; total: number } {
+  const others = records.filter((r) => r.year !== currentYear);
+  const rank = others.filter((r) => r.precipMm > currentMm).length + 1;
+  return { rank, total: others.length + 1 }; // include current year
+}
+
+function rankYtdWettest(
+  records: { year: number; precipMm: number }[],
+  currentMm: number,
+  currentYear: number,
+): { rank: number; total: number } {
+  const others = records.filter((r) => r.year !== currentYear);
+  const rank = others.filter((r) => r.precipMm > currentMm).length + 1;
+  return { rank, total: others.length + 1 };
+}
+
+// ── component ──────────────────────────────────────────────────
 
 export default function DroughtContextCard({
-  stationId,
+  station,
   tick,
 }: {
-  stationId: number;
+  station: WeatherStation | null;
   tick: number;
 }) {
-  const [monthly, setMonthly] = useState<MonthStat[]>([]);
+  const [county, setCounty] = useState<string | null>(null);
+  const [climate, setClimate] = useState<{
+    times: string[];
+    precip: (number | null)[];
+    temps: (number | null)[];
+  } | null>(null);
   const [loading, setLoading] = useState(true);
 
   const precU = useWeatherUnitsStore((s) => s.precip);
-  const tempU = useWeatherUnitsStore((s) => s.temp);
+
+  const lat = station?.latitude;
+  const lon = station?.longitude;
 
   useEffect(() => {
+    if (!lat || !lon) { setLoading(false); return; }
     setLoading(true);
-    fetchMonthlyStats(stationId)
-      .then(setMonthly)
-      .catch(() => setMonthly([]))
-      .finally(() => setLoading(false));
-  }, [stationId, tick]);
+    Promise.all([
+      fetchCountyName(lat, lon),
+      fetchClimateHistory(lat, lon),
+    ]).then(([c, cl]) => {
+      setCounty(c);
+      setClimate(cl);
+    }).catch(() => {}).finally(() => setLoading(false));
+    // tick ignored intentionally — climate history doesn't change intra-session
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lat, lon]);
 
   const now = new Date();
-  const thisMonthKey = monthKey(now.toISOString());
-  const currentCalMonth = thisMonthKey.slice(5, 7); // MM
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth(); // 0-indexed
 
-  const thisMonth = monthly.find((m) => m.month === thisMonthKey);
-  const past = monthly.filter((m) => m.month < thisMonthKey);
+  const stats = useMemo(() => {
+    if (!climate) return null;
+    const { times, precip, temps } = climate;
 
-  // Historical same-calendar-month data from prior years
-  const sameCalMonths = past.filter((m) => m.month.slice(5, 7) === currentCalMonth);
+    const monthRecs = buildMonthRecords(times, precip, temps, curMonth);
+    const ytdRecs = buildYtdRecords(times, precip, curMonth);
 
-  const avgHistRainIn = useMemo(() => {
-    const vals = sameCalMonths.map((m) => m.totalRainIn).filter((v): v is number => v !== null);
-    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
-  }, [sameCalMonths]);
+    const curMonthRec = monthRecs.find((r) => r.year === curYear);
+    const curYtdRec = ytdRecs.find((r) => r.year === curYear);
 
-  const avgHistTempRaw = useMemo(() => {
-    const vals = sameCalMonths.map((m) => m.avgTempRaw).filter((v): v is number => v !== null);
-    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
-  }, [sameCalMonths]);
+    const monthNormalMm = computeNormal(monthRecs);
+    const ytdNormalMm = computeYtdNormal(ytdRecs);
 
-  // Bar chart: last 12 complete months
-  const bar12 = past.slice(-12);
-  const maxBarRain = Math.max(
-    ...bar12.map((m) => m.totalRainIn ?? 0),
-    avgHistRainIn ?? 0,
-    0.01,
-  );
+    const monthRank = curMonthRec ? rankWettest(monthRecs, curMonthRec.precipMm, curYear) : null;
+    const ytdRank = curYtdRec ? rankYtdWettest(ytdRecs, curYtdRec.precipMm, curYear) : null;
 
-  // Formatting helpers
-  const rainUnit = precU === 'in' ? '"' : ' mm';
-  const fmtRain = (v: number | null, decimals = 2) => {
+    return {
+      monthPrecipMm: curMonthRec?.precipMm ?? null,
+      ytdPrecipMm: curYtdRec?.precipMm ?? null,
+      monthNormalMm,
+      ytdNormalMm,
+      monthRank,
+      ytdRank,
+      yearsOfRecord: monthRecs.length,
+    };
+  }, [climate, curYear, curMonth]);
+
+  if (!lat || !lon) return null;
+
+  const fmtRain = (mm: number) => {
+    const v = convertPrecip(mm / 25.4, precU); // mm → inches first, then convert
     if (v === null) return '—';
-    const c = convertPrecip(v, precU);
-    return c === null ? '—' : `${c.toFixed(precU === 'in' ? decimals : 0)}${rainUnit}`;
-  };
-  const fmtTemp = (v: number | null) => {
-    if (v === null) return '—';
-    const c = convertTemp(v, tempU);
-    return c === null ? '—' : `${Math.round(c)}°${tempU}`;
+    return `${Math.abs(v).toFixed(2)}${precU === 'in' ? '"' : ' mm'}`;
   };
 
-  // Anomaly labels
-  const rainPct =
-    avgHistRainIn && avgHistRainIn > 0 && thisMonth?.totalRainIn != null
-      ? ((thisMonth.totalRainIn - avgHistRainIn) / avgHistRainIn) * 100
-      : null;
-  const wetDry = anomalyLabel(rainPct, [10, 30], ['Above Normal', 'Much Wetter'], ['Below Normal', 'Much Drier'], 'Near Normal');
-
-  const tempDelta =
-    avgHistTempRaw !== null && thisMonth?.avgTempRaw != null
-      ? thisMonth.avgTempRaw - avgHistTempRaw
-      : null;
-  const hotCool = anomalyLabel(
-    tempDelta !== null ? tempDelta * (tempU === 'C' ? 1 : 9 / 5) : null,
-    [1, 3],
-    ['Warmer Than Usual', 'Much Warmer'],
-    ['Cooler Than Usual', 'Much Cooler'],
-    'Near Normal',
-  );
-
-  const histYears = sameCalMonths.length;
-  const monthName = new Date(now.getFullYear(), now.getMonth()).toLocaleString('default', { month: 'long' });
+  const fmtDep = (currentMm: number | null, normalMm: number | null) => {
+    if (currentMm === null || normalMm === null) return null;
+    const depMm = currentMm - normalMm;
+    const v = convertPrecip(Math.abs(depMm) / 25.4, precU);
+    if (v === null) return null;
+    const sign = depMm >= 0 ? '↑' : '↓';
+    const tone = depMm >= 0 ? 'text-cyan-400' : 'text-amber-400';
+    return { sign, value: v.toFixed(2), unit: precU === 'in' ? '"' : ' mm', tone, above: depMm >= 0 };
+  };
 
   if (loading) {
     return (
-      <div className="bg-black/30 backdrop-blur-md rounded-xl border border-white/10 p-4">
-        <div className="text-xs uppercase tracking-wide text-white/40 mb-3 font-semibold">
-          Precipitation & Temperature Context
-        </div>
-        <div className="space-y-2">
-          {[75, 55, 65].map((w, i) => (
-            <div key={i} className="h-4 bg-white/10 rounded animate-pulse" style={{ width: `${w}%` }} />
-          ))}
-        </div>
+      <div className="space-y-3">
+        {[0, 1].map((i) => (
+          <div key={i} className="bg-black/30 backdrop-blur-md rounded-xl border border-white/10 p-5">
+            <div className="h-10 w-16 bg-white/10 rounded animate-pulse mb-2" />
+            <div className="h-3 w-48 bg-white/10 rounded animate-pulse mb-4" />
+            <div className="border-t border-white/10 pt-3 flex gap-3">
+              <div className="h-3 w-8 bg-white/10 rounded animate-pulse" />
+              <div className="h-3 w-24 bg-white/10 rounded animate-pulse" />
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
 
-  if (monthly.length === 0) return null;
+  if (!stats) return null;
+
+  const monthDep = fmtDep(stats.monthPrecipMm, stats.monthNormalMm);
+  const ytdDep = fmtDep(stats.ytdPrecipMm, stats.ytdNormalMm);
+  const mName = monthName(curMonth);
+  const ytdRange = curMonth > 0
+    ? `${monthName(0)}–${monthName(curMonth - 1)} ${curYear}`
+    : `${mName} ${curYear}`;
 
   return (
-    <div className="bg-black/30 backdrop-blur-md rounded-xl border border-white/10 p-4 space-y-4">
-      <div className="flex items-baseline justify-between flex-wrap gap-1">
-        <div className="text-xs uppercase tracking-wide text-white/40 font-semibold">
-          Precipitation &amp; Temperature Context
-        </div>
-        {histYears > 0 && (
-          <div className="text-[10px] text-white/25">
-            vs {histYears} prior {monthName}{histYears > 1 ? 's' : ''} on record
-          </div>
-        )}
-      </div>
-
-      {/* Stat tiles */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <ContextTile
-          label="Month Rain"
-          value={fmtRain(thisMonth?.totalRainIn ?? null)}
-          badge={wetDry}
-          sub={avgHistRainIn !== null ? `avg ${fmtRain(avgHistRainIn, 1)}` : null}
+    <div className="space-y-3">
+      {/* Monthly rank card */}
+      {stats.monthRank && (
+        <RankCard
+          rank={stats.monthRank.rank}
+          total={stats.monthRank.total}
+          rankLabel={`wettest ${mName} on record, over the past ${stats.monthRank.total} years`}
+          dryRankLabel={`driest ${mName} on record, over the past ${stats.monthRank.total} years`}
+          dep={monthDep}
+          county={county}
         />
-        <ContextTile
-          label="Year to Date"
-          value={fmtRain(thisMonth?.ytdIn ?? null)}
-          badge={null}
-          sub={null}
-        />
-        <ContextTile
-          label={`${monthName} Avg Temp`}
-          value={fmtTemp(thisMonth?.avgTempRaw ?? null)}
-          badge={hotCool}
-          sub={avgHistTempRaw !== null ? `avg ${fmtTemp(avgHistTempRaw)}` : null}
-        />
-        <ContextTile
-          label="Hottest Month"
-          value={fmtTemp(
-            past.length
-              ? Math.max(...past.map((m) => m.avgTempRaw ?? -999).filter((v) => v > -999))
-              : null,
-          )}
-          badge={null}
-          sub={
-            past.length
-              ? past.reduce((best, m) =>
-                  (m.avgTempRaw ?? -999) > (best.avgTempRaw ?? -999) ? m : best,
-                ).month
-              : null
-          }
-        />
-      </div>
-
-      {/* 12-month bar chart */}
-      {bar12.length > 0 && (
-        <div>
-          <div className="text-[10px] uppercase tracking-wide text-white/30 mb-2">
-            Monthly Rainfall — Last 12 Months
-          </div>
-          <div className="flex items-end gap-0.5 sm:gap-1" style={{ height: 80 }}>
-            {bar12.map((m) => {
-              const barH =
-                m.totalRainIn !== null ? (m.totalRainIn / maxBarRain) * 68 : 0;
-              const avgH =
-                avgHistRainIn !== null ? (avgHistRainIn / maxBarRain) * 68 : null;
-              const isCurrentCalMonth = m.month.slice(5, 7) === currentCalMonth;
-              return (
-                <div
-                  key={m.month}
-                  className="flex-1 flex flex-col items-center gap-0.5"
-                  title={`${monthShort(m.month)} ${m.month.slice(0, 4)}: ${fmtRain(m.totalRainIn)}`}
-                >
-                  <div className="w-full relative flex flex-col justify-end" style={{ height: 68 }}>
-                    {avgH !== null && (
-                      <div
-                        className="absolute left-0 right-0 border-t border-dashed border-white/25 pointer-events-none"
-                        style={{ bottom: avgH }}
-                      />
-                    )}
-                    <div
-                      className={`w-full rounded-t-sm transition-all duration-300 ${
-                        isCurrentCalMonth
-                          ? 'bg-cyan-400/80'
-                          : barH === 0
-                          ? 'bg-white/10'
-                          : 'bg-blue-400/55'
-                      }`}
-                      style={{ height: Math.max(barH, barH === 0 ? 2 : 0) }}
-                    />
-                  </div>
-                  <div className="text-[8px] text-white/30 text-center w-full truncate leading-tight">
-                    {monthShort(m.month)}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          {avgHistRainIn !== null && (
-            <div className="flex items-center gap-1.5 mt-1 text-[10px] text-white/35">
-              <div className="w-5 border-t border-dashed border-white/30" />
-              {monthName} average ({histYears} yr{histYears !== 1 ? 's' : ''})
-            </div>
-          )}
-        </div>
       )}
 
-      {/* Year-on-year temperature strip */}
-      {past.length >= 3 && (
-        <div>
-          <div className="text-[10px] uppercase tracking-wide text-white/30 mb-2">
-            Monthly Avg Temperature — Last 12 Months
-          </div>
-          <TempStrip months={bar12} tempU={tempU} avgHistTempRaw={avgHistTempRaw} />
-        </div>
+      {/* YTD rank card */}
+      {stats.ytdRank && curMonth > 0 && (
+        <RankCard
+          rank={stats.ytdRank.rank}
+          total={stats.ytdRank.total}
+          rankLabel={`wettest year to date over the past ${stats.ytdRank.total} years`}
+          dryRankLabel={`driest year to date over the past ${stats.ytdRank.total} years`}
+          dep={ytdDep}
+          county={county}
+          sub={`(${ytdRange})`}
+        />
       )}
     </div>
   );
 }
 
-// ── Helpers ────────────────────────────────────────────────────
+// ── sub-component ──────────────────────────────────────────────
 
-function anomalyLabel(
-  delta: number | null,
-  thresholds: [number, number],
-  above: [string, string],
-  below: [string, string],
-  neutral: string,
-): { label: string; tone: string } | null {
-  if (delta === null) return null;
-  if (delta > thresholds[1]) return { label: above[1], tone: 'cyan' };
-  if (delta > thresholds[0]) return { label: above[0], tone: 'blue' };
-  if (delta < -thresholds[1]) return { label: below[1], tone: 'orange' };
-  if (delta < -thresholds[0]) return { label: below[0], tone: 'amber' };
-  return { label: neutral, tone: 'green' };
-}
-
-const TONE: Record<string, string> = {
-  cyan:   'text-cyan-400',
-  blue:   'text-blue-300',
-  green:  'text-green-400',
-  amber:  'text-amber-400',
-  orange: 'text-orange-400',
-};
-
-function ContextTile({
-  label,
-  value,
-  badge,
+function RankCard({
+  rank,
+  total,
+  rankLabel,
+  dryRankLabel,
+  dep,
+  county,
   sub,
 }: {
-  label: string;
-  value: string;
-  badge: { label: string; tone: string } | null;
-  sub: string | null;
+  rank: number;
+  total: number;
+  rankLabel: string;
+  dryRankLabel: string;
+  dep: { sign: string; value: string; unit: string; tone: string; above: boolean } | null;
+  county: string | null;
+  sub?: string;
 }) {
+  const isWet = dep ? dep.above : rank <= total / 2;
+  const dryRank = total - rank + 1;
+  const displayRank = isWet ? rank : dryRank;
+  const label = isWet ? rankLabel : dryRankLabel;
+
   return (
-    <div className="bg-black/20 rounded-lg p-3">
-      <div className="text-[10px] uppercase tracking-wide text-white/40 mb-0.5">{label}</div>
-      <div className="text-lg font-mono font-semibold text-white tabular-nums leading-tight">{value}</div>
-      {badge && (
-        <div className={`text-[11px] font-medium mt-0.5 ${TONE[badge.tone] ?? 'text-white/60'}`}>
-          {badge.label}
-        </div>
+    <div className="bg-black/30 backdrop-blur-md rounded-xl border border-white/10 p-5">
+      {county && (
+        <div className="text-[10px] uppercase tracking-wide text-white/30 mb-2">{county}</div>
       )}
-      {sub && <div className="text-[10px] text-white/35 mt-0.5">{sub}</div>}
-    </div>
-  );
-}
+      <div className="text-5xl font-bold text-amber-400 leading-none mb-1 tabular-nums">
+        {ordinal(displayRank)}
+      </div>
+      <div className="text-sm text-white/60 leading-snug">
+        {label}
+        {sub && <span className="block text-xs text-white/35 mt-0.5">{sub}</span>}
+      </div>
 
-function TempStrip({
-  months,
-  tempU,
-  avgHistTempRaw,
-}: {
-  months: MonthStat[];
-  tempU: 'F' | 'C';
-  avgHistTempRaw: number | null;
-}) {
-  const temps = months.map((m) => m.avgTempRaw).filter((v): v is number => v !== null);
-  if (temps.length === 0) return null;
-
-  const minT = Math.min(...temps);
-  const maxT = Math.max(...temps);
-  const range = maxT - minT || 1;
-
-  const fmtT = (v: number) => {
-    const c = convertTemp(v, tempU);
-    return c === null ? '' : `${Math.round(c)}°`;
-  };
-
-  return (
-    <div className="flex items-end gap-0.5 sm:gap-1" style={{ height: 60 }}>
-      {months.map((m) => {
-        if (m.avgTempRaw === null) {
-          return (
-            <div key={m.month} className="flex-1 flex flex-col items-center gap-0.5">
-              <div style={{ height: 48 }} />
-              <div className="text-[8px] text-white/20 text-center w-full truncate">
-                {monthShort(m.month)}
-              </div>
-            </div>
-          );
-        }
-        const normalized = (m.avgTempRaw - minT) / range; // 0–1
-        const barH = 8 + normalized * 40; // 8–48 px
-        // Heat colour: cold=blue, warm=amber, hot=red
-        const hue = normalized < 0.5
-          ? `rgba(96,165,250,${0.4 + normalized * 0.6})` // blue
-          : `rgba(251,191,36,${0.3 + (normalized - 0.5) * 1.4})`; // amber→orange
-        const isAboveAvg = avgHistTempRaw !== null && m.avgTempRaw > avgHistTempRaw + 0.5;
-        const isBelowAvg = avgHistTempRaw !== null && m.avgTempRaw < avgHistTempRaw - 0.5;
-        return (
-          <div
-            key={m.month}
-            className="flex-1 flex flex-col items-center gap-0.5"
-            title={`${monthShort(m.month)} ${m.month.slice(0, 4)}: avg ${fmtT(m.avgTempRaw)}${tempU}`}
-          >
-            <div className="w-full relative flex flex-col justify-end" style={{ height: 48 }}>
-              {isAboveAvg && (
-                <div className="absolute top-0.5 left-0 right-0 flex justify-center">
-                  <span className="text-[6px] text-orange-400/70">▲</span>
-                </div>
-              )}
-              {isBelowAvg && (
-                <div className="absolute top-0.5 left-0 right-0 flex justify-center">
-                  <span className="text-[6px] text-blue-400/70">▼</span>
-                </div>
-              )}
-              <div
-                className="w-full rounded-t-sm"
-                style={{ height: barH, background: hue }}
-              />
-            </div>
-            <div className="text-[8px] text-white/30 text-center w-full truncate leading-tight">
-              {monthShort(m.month)}
-            </div>
+      {dep && (
+        <>
+          <div className="border-t border-white/10 mt-4 pt-3 flex items-baseline gap-2">
+            <span className={`text-2xl font-semibold tabular-nums ${dep.tone}`}>
+              {dep.sign} {dep.value}{dep.unit}
+            </span>
           </div>
-        );
-      })}
+          <div className="text-xs text-white/40 mt-0.5">from normal</div>
+        </>
+      )}
     </div>
   );
 }

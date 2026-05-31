@@ -372,7 +372,7 @@ export default function WeatherPage() {
             {tab === 'forecast' && (
               <ForecastTab station={station} tick={lastIngestTick} onBack={() => setTab('overview')} />
             )}
-            {tab === 'history' && <HistoryTab stationId={stationId} lastIngestTick={lastIngestTick} />}
+            {tab === 'history' && <HistoryTab stationId={stationId} lastIngestTick={lastIngestTick} station={station} />}
             {tab === 'radar' && <RadarTab station={station} />}
             {tab === 'space' && <SpaceWeatherTab station={station} tick={lastIngestTick} />}
             {tab === 'news' && <NewsTab tick={lastIngestTick} />}
