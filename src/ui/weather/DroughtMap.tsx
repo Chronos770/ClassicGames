@@ -47,7 +47,7 @@ export default function DroughtMap() {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
 
-  const imgUrl = `https://droughtmonitor.unl.edu/data/png/${dateStr}_usdm.png`;
+  const imgUrl = `https://droughtmonitor.unl.edu/data/png/${dateStr}/${dateStr}_usdm.png`;
 
   const handleError = () => {
     if (fallbacks < 3) {
