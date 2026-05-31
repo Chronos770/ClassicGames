@@ -340,13 +340,13 @@ export default function WeatherBackground({ condition, windMph }: Props) {
 
       // FOG
       if (k === 'fog') {
-        for (let i = 0; i < 20; i++) {
+        for (let i = 0; i < 40; i++) {
           mist.push({
             x: Math.random() * W,
-            y: H * 0.2 + Math.random() * H * 0.8,
-            r: 120 + Math.random() * 240,
-            a: 0.10 + Math.random() * 0.10,
-            speed: 6 + Math.random() * 10,
+            y: H * 0.1 + Math.random() * H * 0.9,
+            r: 160 + Math.random() * 320,
+            a: 0.06 + Math.random() * 0.09,
+            speed: 3 + Math.random() * 7,
           });
         }
       }
@@ -538,7 +538,7 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         case 'snow':
           return make({ tl: 'rgba(150, 170, 195, 0.95)', treeRgb: '70, 100, 90', pondRgb: '186, 230, 253', pondDarkRgb: '140, 195, 230', snowy: true, frozen: true });
         case 'fog':
-          return make({ tl: 'rgba(140, 160, 180, 0.65)', treeRgb: '105, 130, 130', pondRgb: '165, 180, 200', pondDarkRgb: '130, 150, 175' });
+          return make({ tl: 'rgba(55, 70, 90, 0.88)', treeRgb: '40, 56, 60', pondRgb: '65, 82, 100', pondDarkRgb: '38, 52, 72' });
         case 'cold':
           return make({ tl: 'rgba(85, 110, 140, 0.92)', treeRgb: '50, 90, 90', pondRgb: '110, 135, 200', pondDarkRgb: '70, 100, 160' });
         case 'cloudy':
@@ -968,8 +968,8 @@ export default function WeatherBackground({ condition, windMph }: Props) {
         wash.addColorStop(0, 'rgba(186, 230, 253, 0.14)');
         wash.addColorStop(1, 'rgba(241, 245, 249, 0.06)');
       } else if (k === 'fog') {
-        wash.addColorStop(0, 'rgba(203, 213, 225, 0.16)');
-        wash.addColorStop(1, 'rgba(148, 163, 184, 0.20)');
+        wash.addColorStop(0, 'rgba(40, 54, 72, 0.35)');
+        wash.addColorStop(1, 'rgba(28, 40, 58, 0.22)');
       } else if (k === 'windy') {
         wash.addColorStop(0, 'rgba(20, 184, 166, 0.10)');
         wash.addColorStop(1, 'rgba(15, 23, 42, 0.05)');
@@ -1220,15 +1220,16 @@ export default function WeatherBackground({ condition, windMph }: Props) {
           m.x += m.speed * dt;
           if (m.x - m.r > W) m.x = -m.r;
           const grad = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r);
-          grad.addColorStop(0, `rgba(226, 232, 240, ${m.a})`);
-          grad.addColorStop(1, 'rgba(226, 232, 240, 0)');
+          grad.addColorStop(0, `rgba(75, 92, 110, ${m.a})`);
+          grad.addColorStop(1, 'rgba(75, 92, 110, 0)');
           ctx.fillStyle = grad;
           ctx.fillRect(m.x - m.r, m.y - m.r, m.r * 2, m.r * 2);
         }
-        // Diffuse foreground veil so it actually feels foggy
-        const veil = ctx.createLinearGradient(0, H * 0.4, 0, H);
-        veil.addColorStop(0, 'rgba(226, 232, 240, 0)');
-        veil.addColorStop(1, 'rgba(226, 232, 240, 0.18)');
+        // Heavy ground-level veil — dark murky band at bottom of scene
+        const veil = ctx.createLinearGradient(0, H * 0.25, 0, H);
+        veil.addColorStop(0, 'rgba(55, 70, 88, 0)');
+        veil.addColorStop(0.55, 'rgba(55, 70, 88, 0.15)');
+        veil.addColorStop(1, 'rgba(38, 52, 70, 0.35)');
         ctx.fillStyle = veil;
         ctx.fillRect(0, 0, W, H);
       }
