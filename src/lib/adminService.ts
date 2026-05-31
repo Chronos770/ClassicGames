@@ -52,6 +52,22 @@ export interface DashboardStats {
   openTickets: number;
 }
 
+export interface DbTableStat {
+  name: string;
+  rows: number;
+  size_bytes: number;
+  size_pretty: string;
+}
+
+export interface DbStats {
+  db_size_bytes: number;
+  db_size_pretty: string;
+  tables: DbTableStat[];
+  weather_last_at: string | null;
+  weather_today: number;
+  weather_total: number;
+}
+
 // ── Dashboard ──────────────────────────────────────────────────
 
 export async function getDashboardStats(): Promise<DashboardStats> {
@@ -74,6 +90,13 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     totalGamesPlayed,
     openTickets: ticketsRes.count ?? 0,
   };
+}
+
+export async function getDbStats(): Promise<DbStats | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase.rpc('get_db_stats');
+  if (error) { console.warn('getDbStats:', error.message); return null; }
+  return data as DbStats;
 }
 
 // ── Users ──────────────────────────────────────────────────────

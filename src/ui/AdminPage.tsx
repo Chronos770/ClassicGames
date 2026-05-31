@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useAuthStore } from '../stores/authStore';
 import {
   getDashboardStats,
+  getDbStats,
   getUsers,
   adminSetPassword,
   adminSetRole,
@@ -17,6 +18,7 @@ import {
   respondToTicket,
   getAdminLogs,
   type DashboardStats,
+  type DbStats,
   type AdminUser,
   type Announcement,
   type SupportTicket,
@@ -102,28 +104,133 @@ export default function AdminPage() {
 
 function DashboardTab() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [db, setDb] = useState<DbStats | null>(null);
 
   useEffect(() => {
     getDashboardStats().then(setStats);
+    getDbStats().then(setDb);
   }, []);
 
-  if (!stats) return <div className="text-white/40 text-sm">Loading...</div>;
+  const appCards = stats
+    ? [
+        { label: 'Total Users',   value: stats.totalUsers,       color: 'text-blue-400' },
+        { label: 'Active (7d)',    value: stats.activeUsers,      color: 'text-green-400' },
+        { label: 'Games Played',  value: stats.totalGamesPlayed, color: 'text-amber-400' },
+        { label: 'Open Tickets',  value: stats.openTickets,      color: 'text-red-400' },
+      ]
+    : [];
 
-  const cards = [
-    { label: 'Total Users', value: stats.totalUsers, color: 'text-blue-400' },
-    { label: 'Active (7d)', value: stats.activeUsers, color: 'text-green-400' },
-    { label: 'Games Played', value: stats.totalGamesPlayed, color: 'text-amber-400' },
-    { label: 'Open Tickets', value: stats.openTickets, color: 'text-red-400' },
-  ];
+  const fmt = (bytes: number) => {
+    if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
+    if (bytes >= 1_024)     return `${(bytes / 1_024).toFixed(0)} KB`;
+    return `${bytes} B`;
+  };
+
+  const fmtTime = (iso: string | null) => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
+  // Free-tier soft limit for visual bar (500 MB)
+  const DB_LIMIT_BYTES = 500 * 1_048_576;
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      {cards.map((c) => (
-        <div key={c.label} className="bg-white/5 rounded-xl p-4 border border-white/10">
-          <div className="text-xs text-white/40 mb-1">{c.label}</div>
-          <div className={`text-2xl font-bold ${c.color}`}>{c.value.toLocaleString()}</div>
+    <div className="space-y-6">
+      {/* App stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {appCards.map((c) => (
+          <div key={c.label} className="bg-white/5 rounded-xl p-4 border border-white/10">
+            <div className="text-xs text-white/40 mb-1">{c.label}</div>
+            {stats
+              ? <div className={`text-2xl font-bold ${c.color}`}>{c.value.toLocaleString()}</div>
+              : <div className="h-7 w-16 bg-white/10 rounded animate-pulse" />}
+          </div>
+        ))}
+        {!stats && [0,1,2,3].map(i => (
+          <div key={i} className="bg-white/5 rounded-xl p-4 border border-white/10">
+            <div className="h-3 w-20 bg-white/10 rounded animate-pulse mb-2" />
+            <div className="h-7 w-16 bg-white/10 rounded animate-pulse" />
+          </div>
+        ))}
+      </div>
+
+      {/* Supabase DB stats */}
+      <div className="bg-white/5 rounded-xl border border-white/10 p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-base">{'\u{1F5C4}'}</span>
+          <h3 className="text-sm font-semibold text-white/80 uppercase tracking-wide">Supabase Database</h3>
         </div>
-      ))}
+
+        {!db ? (
+          <div className="space-y-2">
+            {[80, 60, 70, 50].map((w, i) => (
+              <div key={i} className="h-4 bg-white/10 rounded animate-pulse" style={{ width: `${w}%` }} />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-5">
+            {/* Total size bar */}
+            <div>
+              <div className="flex items-baseline justify-between mb-1.5">
+                <span className="text-xs text-white/50">Total storage</span>
+                <span className="text-sm font-mono font-semibold text-white">
+                  {fmt(db.db_size_bytes)}
+                  <span className="text-white/30 font-normal"> / 500 MB</span>
+                </span>
+              </div>
+              <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-teal-400 transition-all duration-700"
+                  style={{ width: `${Math.min(100, (db.db_size_bytes / DB_LIMIT_BYTES) * 100).toFixed(1)}%` }}
+                />
+              </div>
+              <div className="text-right text-[10px] text-white/30 mt-0.5">
+                {((db.db_size_bytes / DB_LIMIT_BYTES) * 100).toFixed(1)}% of free-tier limit
+              </div>
+            </div>
+
+            {/* Weather readings summary */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-white/5 rounded-lg p-3">
+                <div className="text-[10px] text-white/40 mb-0.5">Total readings</div>
+                <div className="text-lg font-bold text-cyan-400">{db.weather_total.toLocaleString()}</div>
+              </div>
+              <div className="bg-white/5 rounded-lg p-3">
+                <div className="text-[10px] text-white/40 mb-0.5">Readings today</div>
+                <div className="text-lg font-bold text-teal-400">{db.weather_today.toLocaleString()}</div>
+              </div>
+              <div className="bg-white/5 rounded-lg p-3">
+                <div className="text-[10px] text-white/40 mb-0.5">Last ingested</div>
+                <div className="text-xs font-mono text-white/70 leading-snug pt-0.5">{fmtTime(db.weather_last_at)}</div>
+              </div>
+            </div>
+
+            {/* Table breakdown */}
+            <div>
+              <div className="text-[10px] text-white/40 uppercase tracking-wider mb-2">Tables (public schema)</div>
+              <div className="space-y-1.5">
+                {db.tables.map((t) => {
+                  const pct = db.db_size_bytes > 0 ? (t.size_bytes / db.db_size_bytes) * 100 : 0;
+                  return (
+                    <div key={t.name} className="flex items-center gap-3">
+                      <div className="w-32 truncate text-xs text-white/60 font-mono">{t.name}</div>
+                      <div className="flex-1 h-1.5 bg-white/8 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-cyan-500/60"
+                          style={{ width: `${Math.min(100, pct * 4).toFixed(1)}%` }}
+                        />
+                      </div>
+                      <div className="w-16 text-right text-[11px] text-white/50 font-mono">{t.size_pretty}</div>
+                      <div className="w-16 text-right text-[11px] text-white/35">{t.rows.toLocaleString()} rows</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
