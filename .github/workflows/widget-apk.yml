@@ -54,11 +54,13 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - name: Set up JDK 17
+      # Capacitor 8 modules target Java 21 source level. Keep JDK 21
+      # in sync with the source compat set by capacitor.build.gradle.
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
