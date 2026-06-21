@@ -1,4 +1,7 @@
 apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
+apply plugin: 'org.jetbrains.kotlin.plugin.serialization'
 
 android {
     namespace = "com.castleandcards.weather"
@@ -20,6 +23,19 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
+
+    buildFeatures {
+        compose true
+    }
+    kotlinOptions {
+        jvmTarget = '21'
+    }
+
+    sourceSets {
+        main {
+            kotlin.srcDirs += 'src/main/kotlin'
+        }
+    }
 }
 
 repositories {
@@ -38,6 +54,20 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
+
+    // ----- Bundled home-screen widget (Glance + Compose) -----
+    implementation 'androidx.glance:glance-appwidget:1.1.0'
+    implementation 'androidx.glance:glance-material3:1.1.0'
+
+    implementation 'androidx.work:work-runtime-ktx:2.9.1'
+    implementation 'androidx.datastore:datastore-preferences:1.1.1'
+
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
+
+    implementation 'androidx.activity:activity-ktx:1.9.0'
+    implementation 'androidx.core:core-ktx:1.13.1'
 }
 
 apply from: 'capacitor.build.gradle'

@@ -57,6 +57,21 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="weather" />
+
+        <!-- Bundled home-screen widget. Tap opens MainActivity (Capacitor)
+             via Glance's actionStartActivity; periodic refresh runs in
+             WorkManager on a 15-min interval. -->
+        <receiver
+            android:name="com.castleandcards.weather.widget.WeatherWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.castleandcards.weather.widget.REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info" />
+        </receiver>
     </application>
 
     <uses-permission android:name="android.permission.INTERNET" />

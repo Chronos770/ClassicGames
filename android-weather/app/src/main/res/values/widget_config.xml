@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Castle & Cards Weather widget config — bundled into the same APK
+      as the Capacitor weather app. The widget calls this Supabase
+      Edge Function directly; pwa_url is unused here since taps open
+      the bundled MainActivity rather than an external URL.
+    -->
+    <string name="widget_endpoint" translatable="false">https://qjjfrblhnvfmrlpujbzx.supabase.co/functions/v1/widget</string>
+    <string name="widget_anon_key" translatable="false">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqamZyYmxobnZmbXJscHVqYnp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA2NjI5NzksImV4cCI6MjA4NjIzODk3OX0.5MBpP52LRgPO-ylwUBMR-mi8O8KL--Mwqsdd7Z6wj-E</string>
+    <string name="pwa_url" translatable="false">https://castleandcards.com/weather</string>
+    <string name="station_id" translatable="false"></string>
+
+    <!-- Widget description shown in the launcher's widget picker. -->
+    <string name="widget_description">Castle &amp; Cards Weather — current conditions and 5-day forecast at a glance.</string>
+</resources>

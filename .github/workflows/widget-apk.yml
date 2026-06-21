@@ -126,21 +126,16 @@ jobs:
             magick -background none "$SRC" -resize "${fg}x${fg}" "$OUT/$dir/ic_launcher_foreground.png"
           done
 
-      - name: Generate widget gradle wrapper
-        working-directory: android-widget
-        run: gradle wrapper --gradle-version 8.7
-
-      - name: Build widget debug APK
-        working-directory: android-widget
-        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
-
       - name: Build full-app debug APK (Capacitor)
         working-directory: android-app
         run: |
           chmod +x ./gradlew
           ./gradlew :app:assembleDebug --no-daemon --stacktrace
 
-      - name: Build weather-app debug APK (Capacitor)
+      # The weather APK now bundles the Glance home-screen widget too,
+      # so there's no separate android-widget build — that project is
+      # kept around for development of the widget in isolation.
+      - name: Build weather-app debug APK (Capacitor + widget)
         working-directory: android-weather
         run: |
           chmod +x ./gradlew
@@ -149,9 +144,12 @@ jobs:
       - name: Stage APKs into public/
         run: |
           mkdir -p public
-          cp android-widget/app/build/outputs/apk/debug/app-debug.apk public/weather-widget.apk
           cp android-app/app/build/outputs/apk/debug/app-debug.apk public/castle-and-cards.apk
           cp android-weather/app/build/outputs/apk/debug/app-debug.apk public/weather-app.apk
+          # The standalone weather-widget.apk is no longer published —
+          # the widget ships inside weather-app.apk. Remove the stale
+          # file if a previous build left one behind.
+          rm -f public/weather-widget.apk
           ls -la public/*.apk
 
       - name: Commit + push if changed
@@ -159,7 +157,13 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git add public/weather-widget.apk public/castle-and-cards.apk public/weather-app.apk
+          git add public/castle-and-cards.apk public/weather-app.apk
+          # Remove the stale standalone widget APK from public/ if present.
+          if [ -f public/weather-widget.apk ]; then
+            git rm public/weather-widget.apk || true
+          else
+            git rm public/weather-widget.apk 2>/dev/null || true
+          fi
           if git diff --cached --quiet; then
             echo "APKs unchanged — nothing to commit."
             exit 0
@@ -172,7 +176,6 @@ jobs:
         with:
           name: castle-and-cards-apks
           path: |
-            public/weather-widget.apk
             public/castle-and-cards.apk
             public/weather-app.apk
           if-no-files-found: error
