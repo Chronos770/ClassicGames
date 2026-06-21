@@ -1,9 +1,10 @@
-# android-apks: builds both Castle & Cards Android artifacts on every
-# push that touches the relevant code, then commits both APKs to
+# android-apks: builds all three Castle & Cards Android artifacts on
+# every push that touches the relevant code, then commits the APKs to
 # `public/` so they ship with the next Vercel deploy. The in-app
 # install buttons (Weather → Station tab) link to same-origin URLs:
 #
 #   https://castleandcards.com/castle-and-cards.apk   (full native app, Capacitor)
+#   https://castleandcards.com/weather-app.apk        (weather-only native app)
 #   https://castleandcards.com/weather-widget.apk     (home-screen widget, Glance)
 #
 # Debug-signed because that's all this project needs for sideloading.
@@ -17,12 +18,14 @@ on:
     paths:
       - 'android-widget/**'
       - 'android-app/**'
+      - 'android-weather/**'
       - 'capacitor.config.ts'
       - 'package.json'
       - 'package-lock.json'
       - 'src/**'
       - 'public/sw.js'
       - 'public/manifest.json'
+      - 'public/manifest-weather.json'
       - 'public/icons/**'
       - 'public/games/**'
       - 'vite.config.ts'
@@ -69,9 +72,27 @@ jobs:
       - name: Capacitor sync (copy dist into android-app)
         run: npx cap sync android
 
-      # The widget's Gradle project intentionally omits the wrapper jar
-      # (Android Studio adds it locally). Generate one with the version
-      # AGP 8.5.2 + Kotlin 1.9.24 expect.
+      # The weather app reuses the same web bundle and Capacitor config
+      # but a different Android project (different applicationId, icons,
+      # MainActivity that routes to /weather?pwa=weather). Mirror the
+      # synced web assets + plugin config into it so the build sees the
+      # latest dist without us needing a second capacitor.config.ts.
+      - name: Mirror Capacitor assets into android-weather
+        run: |
+          set -euo pipefail
+          mkdir -p android-weather/app/src/main/assets
+          rm -rf android-weather/app/src/main/assets/public
+          cp -r android-app/app/src/main/assets/public android-weather/app/src/main/assets/public
+          cp android-app/app/src/main/assets/capacitor.config.json android-weather/app/src/main/assets/capacitor.config.json
+          cp android-app/app/src/main/assets/capacitor.plugins.json android-weather/app/src/main/assets/capacitor.plugins.json
+          # Capacitor stamps the cordova plugin shim too; reuse it.
+          rm -rf android-weather/capacitor-cordova-android-plugins
+          cp -r android-app/capacitor-cordova-android-plugins android-weather/capacitor-cordova-android-plugins
+          # Re-derive the capacitor settings file pointing at the local copy.
+          cp android-app/capacitor.settings.gradle android-weather/capacitor.settings.gradle
+          cp android-app/capacitor.build.gradle android-weather/capacitor.build.gradle 2>/dev/null || true
+          cp android-app/app/capacitor.build.gradle android-weather/app/capacitor.build.gradle
+
       - name: Generate widget gradle wrapper
         working-directory: android-widget
         run: gradle wrapper --gradle-version 8.7
@@ -80,10 +101,14 @@ jobs:
         working-directory: android-widget
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
 
-      # Capacitor ships its own gradle wrapper. Windows-committed
-      # scripts lose +x — add it back before invoking.
       - name: Build full-app debug APK (Capacitor)
         working-directory: android-app
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Build weather-app debug APK (Capacitor)
+        working-directory: android-weather
         run: |
           chmod +x ./gradlew
           ./gradlew :app:assembleDebug --no-daemon --stacktrace
@@ -93,6 +118,7 @@ jobs:
           mkdir -p public
           cp android-widget/app/build/outputs/apk/debug/app-debug.apk public/weather-widget.apk
           cp android-app/app/build/outputs/apk/debug/app-debug.apk public/castle-and-cards.apk
+          cp android-weather/app/build/outputs/apk/debug/app-debug.apk public/weather-app.apk
           ls -la public/*.apk
 
       - name: Commit + push if changed
@@ -100,7 +126,7 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git add public/weather-widget.apk public/castle-and-cards.apk
+          git add public/weather-widget.apk public/castle-and-cards.apk public/weather-app.apk
           if git diff --cached --quiet; then
             echo "APKs unchanged — nothing to commit."
             exit 0
@@ -115,4 +141,5 @@ jobs:
           path: |
             public/weather-widget.apk
             public/castle-and-cards.apk
+            public/weather-app.apk
           if-no-files-found: error

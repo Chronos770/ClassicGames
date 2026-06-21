@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Castle &amp; Cards Weather</string>
+    <string name="title_activity_main">Weather</string>
+    <string name="package_name">com.castleandcards.weather</string>
+    <string name="custom_url_scheme">com.castleandcards.weather</string>
+    <string name="notification_channel_weather">Weather alerts</string>
+    <string name="notification_channel_weather_description">Severe weather, rain incoming, daily forecast, aurora, and other Castle &amp; Cards Weather notifications.</string>
+</resources>

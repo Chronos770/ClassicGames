@@ -1,9 +1,39 @@
 const FULL_APP_URL = '/castle-and-cards.apk';
+const WEATHER_APP_URL = '/weather-app.apk';
 const WIDGET_URL = '/weather-widget.apk';
 
 export default function WidgetInstallSection() {
   return (
     <div className="space-y-4">
+      {/* Weather-only native app */}
+      <div className="bg-gradient-to-br from-sky-500/15 to-sky-500/5 backdrop-blur-md rounded-xl border border-sky-500/30 p-4">
+        <div className="flex items-start gap-3 mb-3">
+          <div className="text-2xl flex-shrink-0">&#9928;&#65039;</div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-white">
+              Castle &amp; Cards Weather (weather-only app)
+              <span className="ml-2 text-[10px] px-1.5 py-0.5 bg-sky-500/30 text-sky-200 rounded uppercase tracking-wide">
+                Beta
+              </span>
+            </div>
+            <div className="text-xs text-white/60 mt-0.5 leading-relaxed">
+              Native APK focused on weather. Cloud + lightning bolt launcher icon, branded splash,
+              dedicated &ldquo;Weather alerts&rdquo; notification channel. Opens straight to the
+              dashboard &mdash; no Castle &amp; Cards header, no games hub. Same web bundle under
+              the hood, just routed to weather-PWA mode on launch.
+            </div>
+          </div>
+        </div>
+
+        <a
+          href={WEATHER_APP_URL}
+          download="weather-app.apk"
+          className="block w-full text-center text-sm px-3 py-2.5 bg-sky-500/40 hover:bg-sky-500/50 text-sky-50 font-medium rounded-lg transition-colors"
+        >
+          Download Weather App APK
+        </a>
+      </div>
+
       {/* Full app — Capacitor-bundled native APK */}
       <div className="bg-black/30 backdrop-blur-md rounded-xl border border-white/10 p-4">
         <div className="flex items-start gap-3 mb-3">
