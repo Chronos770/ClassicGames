@@ -80,10 +80,13 @@ jobs:
         working-directory: android-widget
         run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
 
-      # Capacitor ships its own gradle wrapper, just use it.
+      # Capacitor ships its own gradle wrapper. Windows-committed
+      # scripts lose +x — add it back before invoking.
       - name: Build full-app debug APK (Capacitor)
         working-directory: android-app
-        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:assembleDebug --no-daemon --stacktrace
 
       - name: Stage APKs into public/
         run: |
