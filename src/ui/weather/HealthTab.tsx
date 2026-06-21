@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import LineChart from './LineChart';
 import PushSettings from './PushSettings';
 import WidgetInstallSection from './WidgetInstallSection';
+import ReleaseInfoCard from './ReleaseInfoCard';
 import {
   getReadingsRange,
   timeAgo,
@@ -264,6 +265,12 @@ export default function HealthTab({
       <div className="pt-4 mt-4 border-t border-white/5">
         <h2 className="text-base font-display font-semibold text-white mb-3">Mobile</h2>
         <WidgetInstallSection />
+      </div>
+
+      {/* Build / release info */}
+      <div className="pt-4 mt-4 border-t border-white/5">
+        <h2 className="text-base font-display font-semibold text-white mb-3">Release</h2>
+        <ReleaseInfoCard />
       </div>
     </div>
   );
