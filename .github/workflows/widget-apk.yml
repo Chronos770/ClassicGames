@@ -1,10 +1,11 @@
-# widget-apk: builds the Castle & Cards weather Android widget on every
-# push that touches `android-widget/**`, then commits the APK to `public/` so it
-# ships with the next Vercel deploy. The in-app install button (Weather
-# → Station tab) links to a same-origin URL — no GitHub login, no 404
-# surprises, no separate release flow:
+# android-apks: builds both Castle & Cards Android artifacts on every
+# push that touches `android-widget/**`, then commits both APKs to
+# `public/` so they ship with the next Vercel deploy. The in-app install
+# buttons (Weather → Station tab) link to same-origin URLs — no GitHub
+# login, no 404 surprises, no separate release flow:
 #
-#   https://castleandcards.com/weather-widget.apk
+#   https://castleandcards.com/castle-and-cards.apk   (full site, WebView)
+#   https://castleandcards.com/weather-widget.apk     (home-screen widget)
 #
 # Debug-signed because that's all this project needs for sideloading.
 # Phones will warn "install from unknown sources" the first time.
@@ -33,7 +34,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Need full history + write token so the post-build commit can push.
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up JDK 17
@@ -52,33 +52,36 @@ jobs:
         working-directory: android-widget
         run: gradle wrapper --gradle-version 8.7
 
-      - name: Build debug APK
+      - name: Build debug APKs
         working-directory: android-widget
-        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+        run: ./gradlew :app:assembleDebug :fullapp:assembleDebug --no-daemon --stacktrace
 
-      - name: Stage APK into public/
+      - name: Stage APKs into public/
         run: |
           mkdir -p public
           cp android-widget/app/build/outputs/apk/debug/app-debug.apk public/weather-widget.apk
+          cp android-widget/fullapp/build/outputs/apk/debug/fullapp-debug.apk public/castle-and-cards.apk
 
       - name: Commit + push if changed
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git add public/weather-widget.apk
+          git add public/weather-widget.apk public/castle-and-cards.apk
           if git diff --cached --quiet; then
-            echo "APK unchanged — nothing to commit."
+            echo "APKs unchanged — nothing to commit."
             exit 0
           fi
           # [skip ci] keeps the resulting commit from re-triggering this
           # workflow (paths filter wouldn't match anyway, but belt + braces).
-          git commit -m "ci: rebuild weather widget APK from ${GITHUB_SHA::7} [skip ci]"
+          git commit -m "ci: rebuild Castle & Cards APKs from ${GITHUB_SHA::7} [skip ci]"
           git push origin HEAD:master
 
-      - name: Upload artifact (for manual download)
+      - name: Upload artifacts (for manual download)
         uses: actions/upload-artifact@v4
         with:
-          name: weather-widget-apk
-          path: public/weather-widget.apk
+          name: castle-and-cards-apks
+          path: |
+            public/weather-widget.apk
+            public/castle-and-cards.apk
           if-no-files-found: error
