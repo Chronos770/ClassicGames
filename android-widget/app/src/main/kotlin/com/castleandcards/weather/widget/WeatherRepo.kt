@@ -41,6 +41,10 @@ object WeatherRepo {
         return context.dataStore.data.first()[KEY_LAST_ERROR]
     }
 
+    suspend fun lastAttempt(context: Context): Long {
+        return context.dataStore.data.first()[KEY_LAST_ATTEMPT] ?: 0L
+    }
+
     /**
      * Hits the `widget` Edge Function, decodes the payload, and persists it.
      * Also persists the last error string so the widget can show a real

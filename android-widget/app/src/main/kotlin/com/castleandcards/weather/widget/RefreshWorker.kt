@@ -53,16 +53,14 @@ class RefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         }
 
         fun refreshNow(context: Context) {
-            // Expedited so the first paint after placement isn't blocked on
-            // WorkManager's normal scheduling latency (which can be many
-            // seconds on Android 14+ with strict background policies).
+            // No network constraint here — if the device is briefly seen as
+            // offline by WorkManager, we still want the worker to try; OkHttp
+            // will surface a real error that the widget can display, instead
+            // of WorkManager silently deferring forever.
+            // Expedited so the first paint after placement / APK update isn't
+            // blocked on WorkManager's normal scheduling latency.
             val req = OneTimeWorkRequestBuilder<RefreshWorker>()
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-                .setConstraints(
-                    Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.CONNECTED)
-                        .build(),
-                )
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(
                 ONESHOT_NAME,

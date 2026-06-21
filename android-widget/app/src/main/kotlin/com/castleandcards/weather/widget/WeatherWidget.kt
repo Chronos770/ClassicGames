@@ -45,16 +45,29 @@ class WeatherWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val payload = WeatherRepo.cached(context)
         val error = if (payload == null) WeatherRepo.lastError(context) else null
+        val lastAttempt = WeatherRepo.lastAttempt(context)
+
+        // Self-heal: when the cache is empty and nothing's been tried in
+        // the last 30s, kick the worker now. This covers two cases the
+        // receiver hooks miss: APK reinstall (Android sometimes skips
+        // onEnabled/onUpdate on the first paint after update) and the
+        // periodic worker being deferred by Doze for the first 15 min.
+        val ageMs = System.currentTimeMillis() - lastAttempt
+        if (payload == null && (lastAttempt == 0L || ageMs > 30_000L)) {
+            android.util.Log.i("WeatherWidget", "provideGlance: self-heal kick (age=${ageMs}ms)")
+            RefreshWorker.refreshNow(context)
+        }
+
         provideContent {
             GlanceTheme {
-                WidgetContent(payload = payload, error = error)
+                WidgetContent(payload = payload, error = error, lastAttempt = lastAttempt)
             }
         }
     }
 }
 
 @Composable
-private fun WidgetContent(payload: WidgetPayload?, error: String?) {
+private fun WidgetContent(payload: WidgetPayload?, error: String?, lastAttempt: Long) {
     // Tap bounces through LaunchActivity, which fires the ACTION_VIEW
     // intent at the configured PWA URL. Glance's actionStartActivity
     // only accepts an activity class or ComponentName, not a raw Intent.
@@ -75,7 +88,7 @@ private fun WidgetContent(payload: WidgetPayload?, error: String?) {
                 .padding(horizontal = sidePadding(size), vertical = 10.dp),
         ) {
             if (payload == null) {
-                LoadingBlock(error)
+                LoadingBlock(error = error, lastAttempt = lastAttempt)
             } else {
                 when {
                     size.width < SIZE_MEDIUM.width -> SmallLayout(payload)
@@ -91,7 +104,7 @@ private fun sidePadding(size: DpSize) =
     if (size.width < SIZE_MEDIUM.width) 8.dp else 14.dp
 
 @Composable
-private fun LoadingBlock(error: String?) {
+private fun LoadingBlock(error: String?, lastAttempt: Long) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = GlanceModifier.fillMaxSize().padding(8.dp),
@@ -108,13 +121,35 @@ private fun LoadingBlock(error: String?) {
                 style = TextStyle(color = white(0.55f), fontSize = 10.sp),
                 maxLines = 3,
             )
+        }
+        if (lastAttempt > 0L) {
             Spacer(GlanceModifier.height(4.dp))
             Text(
-                text = "Tap to open the dashboard",
-                style = TextStyle(color = white(0.4f), fontSize = 9.sp),
+                text = "Last try ${ageLabel(lastAttempt)} ago",
+                style = TextStyle(color = white(0.45f), fontSize = 9.sp),
+            )
+        } else if (error == null) {
+            Spacer(GlanceModifier.height(4.dp))
+            Text(
+                text = "Worker hasn't run yet",
+                style = TextStyle(color = white(0.45f), fontSize = 9.sp),
             )
         }
+        Spacer(GlanceModifier.height(4.dp))
+        Text(
+            text = "Tap to open the dashboard",
+            style = TextStyle(color = white(0.4f), fontSize = 9.sp),
+        )
         Spacer(GlanceModifier.defaultWeight())
+    }
+}
+
+private fun ageLabel(timestamp: Long): String {
+    val seconds = (System.currentTimeMillis() - timestamp) / 1000
+    return when {
+        seconds < 60 -> "${seconds}s"
+        seconds < 3600 -> "${seconds / 60}m"
+        else -> "${seconds / 3600}h"
     }
 }
 
