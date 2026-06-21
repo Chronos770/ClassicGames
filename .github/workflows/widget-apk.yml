@@ -9,7 +9,7 @@
 # Debug-signed because that's all this project needs for sideloading.
 # Phones will warn "install from unknown sources" the first time.
 
-name: widget-apk
+name: android-apks
 
 on:
   push:
@@ -45,10 +45,10 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Node 20
+      - name: Set up Node 22
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Set up JDK 17
