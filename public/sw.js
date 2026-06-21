@@ -31,6 +31,10 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET and cross-origin
   if (request.method !== 'GET' || !request.url.startsWith(self.location.origin)) return;
 
+  // Skip binary downloads (APKs etc.) — the SPA fallback would
+  // hand back index.html and the browser would "download" that.
+  if (request.url.endsWith('.apk')) return;
+
   // Navigation requests: network first, fall back to cache
   if (request.mode === 'navigate') {
     event.respondWith(
