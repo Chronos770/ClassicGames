@@ -95,6 +95,37 @@ jobs:
           cp android-app/capacitor.build.gradle android-weather/capacitor.build.gradle 2>/dev/null || true
           cp android-app/app/capacitor.build.gradle android-weather/app/capacitor.build.gradle
 
+      # Rasterize the weather launcher icon from the SVG so older
+      # Android versions (API 24-25, which use the PNG fallback rather
+      # than the adaptive vector) and many launchers that prefer PNG
+      # see the cloud + lightning bolt instead of the default
+      # Capacitor "C" logo. ImageMagick is preinstalled on ubuntu-latest.
+      - name: Rasterize weather launcher icons
+        run: |
+          set -euo pipefail
+          SRC=public/icons/weather-icon-512.svg
+          OUT=android-weather/app/src/main/res
+          declare -A SIZES=(
+            [mipmap-mdpi]=48
+            [mipmap-hdpi]=72
+            [mipmap-xhdpi]=96
+            [mipmap-xxhdpi]=144
+            [mipmap-xxxhdpi]=192
+          )
+          # Foreground sizes for adaptive icon legacy PNG fallback:
+          # the foreground layer is 108dp at design density (so square
+          # PNG sized like ic_launcher but rendered from the same SVG).
+          for dir in "${!SIZES[@]}"; do
+            sz="${SIZES[$dir]}"
+            mkdir -p "$OUT/$dir"
+            magick -background none "$SRC" -resize "${sz}x${sz}" "$OUT/$dir/ic_launcher.png"
+            magick -background none "$SRC" -resize "${sz}x${sz}" "$OUT/$dir/ic_launcher_round.png"
+            # Foreground: render bigger then center so adaptive launchers
+            # that punch a circle still see the cloud + bolt.
+            fg=$(( sz * 108 / 48 ))
+            magick -background none "$SRC" -resize "${fg}x${fg}" "$OUT/$dir/ic_launcher_foreground.png"
+          done
+
       - name: Generate widget gradle wrapper
         working-directory: android-widget
         run: gradle wrapper --gradle-version 8.7

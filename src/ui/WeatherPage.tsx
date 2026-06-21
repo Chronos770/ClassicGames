@@ -19,7 +19,8 @@ import HealthTab from './weather/HealthTab';
 import ForecastTab from './weather/ForecastTab';
 import NewsTab from './weather/NewsTab';
 import SpaceWeatherTab from './weather/SpaceWeatherTab';
-import { WeatherInstallButton, useWeatherManifest } from './weather/WeatherPwa';
+import { WeatherInstallButton, useIsWeatherPwa, useWeatherManifest } from './weather/WeatherPwa';
+import WeatherAuthCard from './weather/WeatherAuthCard';
 import WeatherAlertsBanner from './weather/WeatherAlertsBanner';
 import TomorrowBanner from './weather/TomorrowBanner';
 import UnitsToggle from './weather/UnitsToggle';
@@ -83,6 +84,11 @@ export default function WeatherPage() {
   // Swap manifest, apple-touch-icon, theme-color, and title to weather branding
   // while on this page so "Add to Home Screen" installs the Weather app.
   useWeatherManifest();
+
+  // Detect weather PWA / native app mode (URL param ?pwa=weather, set
+  // by the Capacitor activity for the weather-only APK and by the PWA
+  // manifest's start_url for the installed PWA).
+  const isWeatherPwa = useIsWeatherPwa();
 
   // Load stations once
   useEffect(() => {
@@ -195,6 +201,20 @@ export default function WeatherPage() {
   // /weather so coming back later picks up where we left off.
   if (!isAdmin) {
     const isRestoring = authLoading || (user && !profile);
+
+    // In weather PWA / native app mode show a weather-branded sign-in
+    // card inline instead of the generic "go back to Castle & Cards"
+    // CTA. Bouncing the user out of the weather app to the games hub
+    // is jarring and pointless — same auth backend, just different
+    // chrome.
+    if (isWeatherPwa && !user && !isRestoring) {
+      return (
+        <div className="relative min-h-screen bg-gradient-to-br from-slate-950 via-sky-950 to-slate-950 flex items-center justify-center p-6">
+          <WeatherAuthCard />
+        </div>
+      );
+    }
+
     let icon: string;
     let title: string;
     let body: string;
@@ -221,10 +241,10 @@ export default function WeatherPage() {
           <div className="text-white/60 text-xs mb-4">{body}</div>
           {!isRestoring && (
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate(isWeatherPwa ? '/weather?pwa=weather' : '/')}
               className="text-sm px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-lg transition-colors"
             >
-              {user ? 'Back to Castle & Cards' : 'Sign in on Castle & Cards'}
+              {user ? 'Reload' : 'Sign in on Castle & Cards'}
             </button>
           )}
         </div>

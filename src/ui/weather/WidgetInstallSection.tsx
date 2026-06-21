@@ -32,6 +32,36 @@ export default function WidgetInstallSection() {
         >
           Download Weather App APK
         </a>
+
+        {/* Push setup help — relevant for the weather app */}
+        <details className="mt-3 group">
+          <summary className="cursor-pointer text-xs text-sky-200/80 hover:text-sky-100 select-none">
+            How do push notifications work in the app?
+          </summary>
+          <div className="mt-2 text-xs text-white/65 leading-relaxed space-y-2 border-l border-sky-500/30 pl-3">
+            <p>
+              <strong className="text-white/85">Web push (works today).</strong> Open the app, sign
+              in, then go to Notifications above and tap <em>Enable</em>. Android asks for the OS
+              permission; once granted, the same VAPID/Supabase pipeline that powers the website
+              sends alerts to your phone via the system Chrome WebView. No Firebase setup required.
+            </p>
+            <p>
+              <strong className="text-white/85">Native FCM (better, optional).</strong> For a fully
+              native push channel with the weather icon in the status bar and lower latency, the
+              app needs a <code className="text-white/85">google-services.json</code> from a
+              Firebase project (package name{' '}
+              <code className="text-white/85">com.castleandcards.weather</code>). Steps are in
+              {' '}<code className="text-white/85">android-weather/README.md</code> in the repo &mdash;
+              once it&apos;s wired, the existing Notifications card automatically registers an FCM
+              token.
+            </p>
+            <p className="text-white/45">
+              If you tap Enable inside the app and it errors out about &ldquo;no active Service
+              Worker,&rdquo; close and reopen the app once &mdash; first launch can land before the
+              SW has registered.
+            </p>
+          </div>
+        </details>
       </div>
 
       {/* Full app — Capacitor-bundled native APK */}
