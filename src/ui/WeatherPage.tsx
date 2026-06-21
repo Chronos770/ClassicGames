@@ -21,6 +21,7 @@ import NewsTab from './weather/NewsTab';
 import SpaceWeatherTab from './weather/SpaceWeatherTab';
 import { WeatherInstallButton, useIsWeatherPwa, useWeatherManifest } from './weather/WeatherPwa';
 import WeatherAuthCard from './weather/WeatherAuthCard';
+import WeatherPushPrompt from './weather/WeatherPushPrompt';
 import WeatherAlertsBanner from './weather/WeatherAlertsBanner';
 import TomorrowBanner from './weather/TomorrowBanner';
 import UnitsToggle from './weather/UnitsToggle';
@@ -344,6 +345,11 @@ export default function WeatherPage() {
         )}
 
         <WeatherInstallButton />
+
+        {/* First-launch push opt-in — auto-hidden after Enable / Not now,
+            after the user is already subscribed, or when push isn't
+            available on this surface. */}
+        <WeatherPushPrompt />
 
         {/* Alerts + precip outlook above the tabs so they're visible on every tab */}
         <WeatherAlertsBanner station={station} tick={lastIngestTick} />

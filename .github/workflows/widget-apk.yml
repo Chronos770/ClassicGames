@@ -99,32 +99,35 @@ jobs:
       # Android versions (API 24-25, which use the PNG fallback rather
       # than the adaptive vector) and many launchers that prefer PNG
       # see the cloud + lightning bolt instead of the default
-      # Capacitor "C" logo. ImageMagick is preinstalled on ubuntu-latest.
+      # Capacitor "C" logo. We install librsvg + imagemagick explicitly
+      # — ubuntu-24.04 runners don't have either by default.
+      - name: Install rsvg + ImageMagick for icon rasterization
+        run: sudo apt-get update -y && sudo apt-get install -y --no-install-recommends librsvg2-bin imagemagick
+
       - name: Rasterize weather launcher icons
+        shell: bash
         run: |
           set -euo pipefail
           SRC=public/icons/weather-icon-512.svg
           OUT=android-weather/app/src/main/res
-          declare -A SIZES=(
-            [mipmap-mdpi]=48
-            [mipmap-hdpi]=72
-            [mipmap-xhdpi]=96
-            [mipmap-xxhdpi]=144
-            [mipmap-xxxhdpi]=192
-          )
-          # Foreground sizes for adaptive icon legacy PNG fallback:
-          # the foreground layer is 108dp at design density (so square
-          # PNG sized like ic_launcher but rendered from the same SVG).
-          for dir in "${!SIZES[@]}"; do
-            sz="${SIZES[$dir]}"
+          # rsvg-convert handles SVG → PNG cleanly without needing
+          # ImageMagick's MAGICK_SECURITY_POLICY to allow SVG decode.
+          render() {
+            local size="$1" dest="$2"
+            rsvg-convert -w "$size" -h "$size" "$SRC" -o "$dest"
+          }
+          # Density → launcher icon size (and a 108-style foreground at 2.25x).
+          for entry in "mipmap-mdpi 48" "mipmap-hdpi 72" "mipmap-xhdpi 96" "mipmap-xxhdpi 144" "mipmap-xxxhdpi 192"; do
+            dir="${entry%% *}"
+            sz="${entry##* }"
             mkdir -p "$OUT/$dir"
-            magick -background none "$SRC" -resize "${sz}x${sz}" "$OUT/$dir/ic_launcher.png"
-            magick -background none "$SRC" -resize "${sz}x${sz}" "$OUT/$dir/ic_launcher_round.png"
-            # Foreground: render bigger then center so adaptive launchers
-            # that punch a circle still see the cloud + bolt.
+            render "$sz" "$OUT/$dir/ic_launcher.png"
+            render "$sz" "$OUT/$dir/ic_launcher_round.png"
             fg=$(( sz * 108 / 48 ))
-            magick -background none "$SRC" -resize "${fg}x${fg}" "$OUT/$dir/ic_launcher_foreground.png"
+            render "$fg" "$OUT/$dir/ic_launcher_foreground.png"
           done
+          echo "Generated icons:"
+          ls -la $OUT/mipmap-xxxhdpi/ic_launcher*.png
 
       - name: Build full-app debug APK (Capacitor)
         working-directory: android-app
