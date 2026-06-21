@@ -1,5 +1,5 @@
-# Builds the Castle & Cards weather Android widget on every push that
-# touches `android-widget/**`, then commits the APK to `public/` so it
+# widget-apk: builds the Castle & Cards weather Android widget on every
+# push that touches `android-widget/**`, then commits the APK to `public/` so it
 # ships with the next Vercel deploy. The in-app install button (Weather
 # → Station tab) links to a same-origin URL — no GitHub login, no 404
 # surprises, no separate release flow:
