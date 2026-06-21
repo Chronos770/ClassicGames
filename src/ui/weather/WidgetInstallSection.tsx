@@ -4,7 +4,7 @@ const WIDGET_URL = '/weather-widget.apk';
 export default function WidgetInstallSection() {
   return (
     <div className="space-y-4">
-      {/* Full app — WebView wrapper around castleandcards.com */}
+      {/* Full app — Capacitor-bundled native APK */}
       <div className="bg-black/30 backdrop-blur-md rounded-xl border border-white/10 p-4">
         <div className="flex items-start gap-3 mb-3">
           <div className="text-2xl flex-shrink-0">&#129518;</div>
@@ -16,10 +16,11 @@ export default function WidgetInstallSection() {
               </span>
             </div>
             <div className="text-xs text-white/60 mt-0.5 leading-relaxed">
-              Native APK that opens the whole site in a fullscreen Chromium shell &mdash; the same
-              experience as &ldquo;Add to Home Screen&rdquo; but installs like a real app and shows up
-              in the launcher. Initial iteration: this is a thin WebView wrapper; native push and
-              offline are limited.
+              Native APK that bundles the entire site &mdash; every page, every game, every asset
+              ships inside the APK and runs offline. Native plugins for status bar, splash, back
+              button, network, and push (push needs FCM setup &mdash; see
+              <code className="text-white/80"> android-app/README.md</code>).
+              ~55 MB because the DOSBox game is in there.
             </div>
           </div>
         </div>
