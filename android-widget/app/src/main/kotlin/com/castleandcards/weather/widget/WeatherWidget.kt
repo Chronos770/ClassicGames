@@ -33,16 +33,17 @@ import androidx.compose.ui.unit.sp
 class WeatherWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val payload = WeatherRepo.cached(context)
+        val error = if (payload == null) WeatherRepo.lastError(context) else null
         provideContent {
             GlanceTheme {
-                WidgetContent(context = context, payload = payload)
+                WidgetContent(context = context, payload = payload, error = error)
             }
         }
     }
 }
 
 @Composable
-private fun WidgetContent(context: Context, payload: WidgetPayload?) {
+private fun WidgetContent(context: Context, payload: WidgetPayload?, error: String?) {
     // Tap bounces through LaunchActivity, which fires the ACTION_VIEW
     // intent at the configured PWA URL. Glance's actionStartActivity
     // only accepts an activity class or ComponentName, not a raw Intent.
@@ -61,21 +62,36 @@ private fun WidgetContent(context: Context, payload: WidgetPayload?) {
                 .cornerRadius(28.dp)
                 .padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
-            if (payload == null) LoadingBlock() else FilledLayout(payload)
+            if (payload == null) LoadingBlock(error) else FilledLayout(payload)
         }
     }
 }
 
 @Composable
-private fun LoadingBlock() {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = GlanceModifier.fillMaxSize(),
+private fun LoadingBlock(error: String?) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = GlanceModifier.fillMaxSize().padding(8.dp),
     ) {
+        Spacer(GlanceModifier.defaultWeight())
         Text(
-            text = "Loading weather…",
-            style = TextStyle(color = white(0.7f), fontSize = 13.sp),
+            text = if (error == null) "Loading weather…" else "Couldn't load weather",
+            style = TextStyle(color = white(0.85f), fontSize = 13.sp, fontWeight = FontWeight.Medium),
         )
+        if (error != null) {
+            Spacer(GlanceModifier.height(4.dp))
+            Text(
+                text = error,
+                style = TextStyle(color = white(0.55f), fontSize = 10.sp),
+                maxLines = 3,
+            )
+            Spacer(GlanceModifier.height(4.dp))
+            Text(
+                text = "Tap to open the dashboard",
+                style = TextStyle(color = white(0.4f), fontSize = 9.sp),
+            )
+        }
+        Spacer(GlanceModifier.defaultWeight())
     }
 }
 
