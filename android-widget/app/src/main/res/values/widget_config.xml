@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Production config for Castle & Cards weather widget.
+      See android-widget/README.md if any of these need to change.
+    -->
+    <string name="widget_endpoint" translatable="false">https://qjjfrblhnvfmrlpujbzx.supabase.co/functions/v1/widget</string>
+    <string name="widget_anon_key" translatable="false">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqamZyYmxobnZmbXJscHVqYnp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA2NjI5NzksImV4cCI6MjA4NjIzODk3OX0.5MBpP52LRgPO-ylwUBMR-mi8O8KL--Mwqsdd7Z6wj-E</string>
+    <string name="pwa_url" translatable="false">https://castleandcards.com/weather</string>
+    <!-- Leave empty to default to the first station in the table. -->
+    <string name="station_id" translatable="false"></string>
+</resources>

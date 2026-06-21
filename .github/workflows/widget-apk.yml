@@ -1,0 +1,84 @@
+# Builds the Castle & Cards weather Android widget on every push that
+# touches `android-widget/**`, then re-publishes the APK as the sole
+# asset of the `widget-latest` GitHub release so the in-app install
+# button (Weather → Station tab) can deep-link to a predictable URL:
+#
+#   https://github.com/Chronos770/ClassicGames/releases/download/widget-latest/weather-widget.apk
+#
+# Debug-signed because that's all this project needs for sideloading.
+# Phones will warn "install from unknown sources" the first time.
+
+name: widget-apk
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'android-widget/**'
+      - '.github/workflows/widget-apk.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: widget-apk
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android-widget
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # The committed project intentionally omits the gradle wrapper jar
+      # (Android Studio adds it locally). Generate one with the version
+      # AGP 8.5.2 + Kotlin 1.9.24 expect.
+      - name: Generate wrapper
+        run: gradle wrapper --gradle-version 8.7
+
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Rename APK
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/debug/app-debug.apk out/weather-widget.apk
+
+      - name: Publish to widget-latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          TAG=widget-latest
+          # Recreate the release each run so the asset URL stays stable
+          # (overwriting an existing asset of the same name is fiddly).
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release delete "$TAG" --yes --cleanup-tag
+          fi
+          gh release create "$TAG" \
+            --title "Weather widget (latest debug build)" \
+            --notes "Auto-built from \`${GITHUB_SHA::7}\` on master. Debug-signed APK; phones will warn the first time about installing from an unknown source. See \`android-widget/README.md\`." \
+            --target "$GITHUB_SHA" \
+            android-widget/out/weather-widget.apk
+
+      - name: Upload artifact (for manual download)
+        uses: actions/upload-artifact@v4
+        with:
+          name: weather-widget-apk
+          path: android-widget/out/weather-widget.apk
+          if-no-files-found: error
