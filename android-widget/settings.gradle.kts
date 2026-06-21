@@ -15,4 +15,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "CastleAndCardsWeatherWidget"
 include(":app")
-include(":fullapp")
