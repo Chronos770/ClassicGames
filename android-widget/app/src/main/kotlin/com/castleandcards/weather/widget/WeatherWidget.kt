@@ -10,6 +10,7 @@ import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.SizeMode
+import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.background
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.ImageProvider
@@ -123,23 +124,34 @@ private fun LoadingBlock(error: String?, lastAttempt: Long) {
             )
         }
         if (lastAttempt > 0L) {
-            Spacer(GlanceModifier.height(4.dp))
+            Spacer(GlanceModifier.height(2.dp))
             Text(
                 text = "Last try ${ageLabel(lastAttempt)} ago",
                 style = TextStyle(color = white(0.45f), fontSize = 9.sp),
             )
         } else if (error == null) {
-            Spacer(GlanceModifier.height(4.dp))
+            Spacer(GlanceModifier.height(2.dp))
             Text(
                 text = "Worker hasn't run yet",
                 style = TextStyle(color = white(0.45f), fontSize = 9.sp),
             )
         }
-        Spacer(GlanceModifier.height(4.dp))
-        Text(
-            text = "Tap to open the dashboard",
-            style = TextStyle(color = white(0.4f), fontSize = 9.sp),
-        )
+        // Retry pill — visually distinct, gets its own click-handler so the
+        // tap doesn't bubble up to the outer "open PWA" action.
+        Spacer(GlanceModifier.height(6.dp))
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = GlanceModifier
+                .background(ColorProvider(Color(0xFF1F3554)))
+                .cornerRadius(8.dp)
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .clickable(actionRunCallback<RetryActionCallback>()),
+        ) {
+            Text(
+                text = "Retry",
+                style = TextStyle(color = white(0.95f), fontSize = 11.sp, fontWeight = FontWeight.Medium),
+            )
+        }
         Spacer(GlanceModifier.defaultWeight())
     }
 }
