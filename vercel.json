@@ -1,5 +1,5 @@
 {
-  "rewrites": [{ "source": "/((?!games/|weather-widget\\.apk).*)", "destination": "/index.html" }],
+  "rewrites": [{ "source": "/((?!games/|weather-widget\\.apk|castle-and-cards\\.apk).*)", "destination": "/index.html" }],
   "headers": [
     {
       "source": "/(.*)",
