@@ -73,9 +73,7 @@ jobs:
           fi
           # [skip ci] keeps the resulting commit from re-triggering this
           # workflow (paths filter wouldn't match anyway, but belt + braces).
-          git commit -m "ci: rebuild weather widget APK [skip ci]
-
-Auto-built from ${GITHUB_SHA::7}."
+          git commit -m "ci: rebuild weather widget APK from ${GITHUB_SHA::7} [skip ci]"
           git push origin HEAD:master
 
       - name: Upload artifact (for manual download)
