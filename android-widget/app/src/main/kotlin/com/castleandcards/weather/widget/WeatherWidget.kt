@@ -1,8 +1,6 @@
 package com.castleandcards.weather.widget
 
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
@@ -45,12 +43,10 @@ class WeatherWidget : GlanceAppWidget() {
 
 @Composable
 private fun WidgetContent(context: Context, payload: WidgetPayload?) {
-    val pwaUrl = context.getString(R.string.pwa_url)
-    val openApp = actionStartActivity(
-        Intent(Intent.ACTION_VIEW, Uri.parse(pwaUrl)).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-    )
+    // Tap bounces through LaunchActivity, which fires the ACTION_VIEW
+    // intent at the configured PWA URL. Glance's actionStartActivity
+    // only accepts an activity class or ComponentName, not a raw Intent.
+    val openApp = actionStartActivity<LaunchActivity>()
 
     Box(
         modifier = GlanceModifier

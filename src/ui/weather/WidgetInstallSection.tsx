@@ -1,8 +1,4 @@
-const APK_URL =
-  'https://github.com/Chronos770/ClassicGames/releases/download/widget-latest/weather-widget.apk';
-
-const RELEASE_URL =
-  'https://github.com/Chronos770/ClassicGames/releases/tag/widget-latest';
+const APK_URL = '/weather-widget.apk';
 
 export default function WidgetInstallSection() {
   return (
@@ -44,16 +40,7 @@ export default function WidgetInstallSection() {
       </ol>
 
       <div className="mt-3 text-[11px] text-white/35">
-        Builds are auto-published from the latest commit on master.{' '}
-        <a
-          href={RELEASE_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="text-sky-300/70 hover:text-sky-300"
-        >
-          View release notes
-        </a>
-        .
+        Hosted on this site &mdash; auto-rebuilt by CI on every widget code change.
       </div>
     </div>
   );
