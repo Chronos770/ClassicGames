@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      EDIT THESE THREE BEFORE BUILDING.
+      See android-widget/README.md for what each one is.
+    -->
+    <string name="widget_endpoint" translatable="false">https://YOURPROJECT.supabase.co/functions/v1/widget</string>
+    <string name="widget_anon_key" translatable="false">YOUR_SUPABASE_ANON_KEY</string>
+    <string name="pwa_url" translatable="false">https://YOURDOMAIN.vercel.app/weather</string>
+    <!-- Leave empty to default to the first station in the table. -->
+    <string name="station_id" translatable="false"></string>
+</resources>
