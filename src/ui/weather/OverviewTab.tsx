@@ -44,13 +44,6 @@ export default function OverviewTab({ reading, station, stationId, tick, conditi
 
   return (
     <>
-      {conditionProp && (
-        <WeatherScene
-          conditionKey={conditionProp.key}
-          isDay={conditionProp.isDay}
-          tempF={reading.temp}
-        />
-      )}
       <HeroBanner
         reading={reading}
         station={station}
@@ -159,9 +152,20 @@ function HeroBanner({
 
   return (
     <div
-      className={`relative overflow-hidden bg-black/30 backdrop-blur-md rounded-2xl border border-white/10 p-5 sm:p-6 mb-4 transition-all duration-700`}
+      className={`relative overflow-hidden bg-black/30 backdrop-blur-md rounded-2xl border border-white/10 mb-4 transition-all duration-700`}
     >
-      <div className="relative">
+      {/* Illustrated weather scene at the top of the card. Embedded
+          mode drops the inner border/rounded corners so it merges
+          seamlessly with the card chrome. */}
+      {conditionProp && (
+        <WeatherScene
+          conditionKey={conditionProp.key}
+          isDay={conditionProp.isDay}
+          tempF={reading.temp}
+          embedded
+        />
+      )}
+      <div className="relative p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1 order-1">
           <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-white/50 mb-1">
