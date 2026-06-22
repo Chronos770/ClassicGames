@@ -23,6 +23,7 @@ import { WeatherInstallButton, useIsWeatherPwa, useWeatherManifest } from './wea
 import WeatherAuthCard from './weather/WeatherAuthCard';
 import WeatherPushPrompt from './weather/WeatherPushPrompt';
 import UpdateAvailableBanner from './weather/UpdateAvailableBanner';
+import { usePullToRefresh, PULL_TRIGGER_PX } from '../lib/usePullToRefresh';
 import WeatherAlertsBanner from './weather/WeatherAlertsBanner';
 import TomorrowBanner from './weather/TomorrowBanner';
 import UnitsToggle from './weather/UnitsToggle';
@@ -187,6 +188,11 @@ export default function WeatherPage() {
     }
   };
 
+  // Pull-to-refresh: drag down from the top to trigger the same
+  // WeatherLink ingestion as the Refresh button. Touch-only — desktop
+  // mouse scroll is unaffected.
+  const { pull, refreshing: pullRefreshing, ready: pullReady } = usePullToRefresh(handleRefresh);
+
   const station = useMemo(
     () => stations.find((s) => s.station_id === stationId) ?? null,
     [stations, stationId],
@@ -286,6 +292,38 @@ export default function WeatherPage() {
       {condition && (
         <WeatherBackground condition={condition} windMph={windForBg ?? 0} />
       )}
+
+      {/* Pull-to-refresh indicator. Sits absolutely at the top edge so
+          it doesn't push content down; pulls translate it into view as
+          the user drags. Touch-only — no-op on desktop. */}
+      {(pull > 0 || pullRefreshing) && (
+        <div
+          className="fixed left-0 right-0 z-30 flex items-start justify-center pointer-events-none"
+          style={{ top: 0, height: Math.max(pull, pullRefreshing ? PULL_TRIGGER_PX : 0) }}
+        >
+          <div
+            className={`mt-2 flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-md border transition-colors ${
+              pullRefreshing
+                ? 'bg-amber-500/20 border-amber-500/40 text-amber-200'
+                : pullReady
+                  ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200'
+                  : 'bg-white/10 border-white/20 text-white/80'
+            }`}
+          >
+            <span
+              className={`inline-block ${pullRefreshing ? 'animate-spin' : ''}`}
+              style={{
+                transform: !pullRefreshing && !pullReady ? `rotate(${Math.min(pull * 3, 180)}deg)` : undefined,
+                transition: 'transform 80ms linear',
+              }}
+            >
+              &#8635;
+            </span>
+            {pullRefreshing ? 'Refreshing…' : pullReady ? 'Release to refresh' : 'Pull to refresh'}
+          </div>
+        </div>
+      )}
+
       <div className="relative z-10 max-w-7xl mx-auto px-4 py-6 sm:py-8">
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         {/* Header */}
