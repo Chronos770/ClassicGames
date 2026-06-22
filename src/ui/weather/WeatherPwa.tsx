@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { isNativeApp } from '../../lib/nativeApp';
 
 const SS_KEY = 'weather-pwa-mode';
 
@@ -131,6 +132,11 @@ export function WeatherInstallButton() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    // Already running natively (Capacitor APK)? Don't suggest the user
+    // "download the app" — they're literally inside it. isInstalled()
+    // doesn't catch this because the Capacitor WebView's display-mode
+    // isn't 'standalone' the way a PWA's is.
+    if (isNativeApp()) return;
     if (isInstalled()) return;
     if (localStorage.getItem(DISMISS_KEY)) return;
     if (!isMobile()) return;
