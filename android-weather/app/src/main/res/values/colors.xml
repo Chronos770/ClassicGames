@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Weather brand: sky-500 over slate-950 -->
+    <!-- Weather brand: sky-500 over slate-950
+         (ic_launcher_background lives in its own ic_launcher_background.xml
+          — defining it here too triggers a Duplicate resources error.) -->
     <color name="colorPrimary">#0F172A</color>
     <color name="colorPrimaryDark">#0B1220</color>
     <color name="colorAccent">#0EA5E9</color>
     <color name="splash_background">#0F172A</color>
-    <color name="ic_launcher_background">#0C4A6E</color>
     <!-- Widget surface (D9 alpha) — matches the standalone widget palette. -->
     <color name="widget_bg">#D9101626</color>
 </resources>
