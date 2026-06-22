@@ -24,6 +24,7 @@ import WeatherAuthCard from './weather/WeatherAuthCard';
 import WeatherPushPrompt from './weather/WeatherPushPrompt';
 import UpdateAvailableBanner from './weather/UpdateAvailableBanner';
 import { usePullToRefresh, PULL_TRIGGER_PX } from '../lib/usePullToRefresh';
+import { checkForUpdateNow } from '../lib/updateCheck';
 import WeatherAlertsBanner from './weather/WeatherAlertsBanner';
 import TomorrowBanner from './weather/TomorrowBanner';
 import UnitsToggle from './weather/UnitsToggle';
@@ -175,6 +176,10 @@ export default function WeatherPage() {
     setIngestBusy(true);
     setIngestMsg(null);
     try {
+      // Fire the manifest check in parallel — cheap, dedupes via the
+      // module-level inFlight guard, and means a pull-to-refresh also
+      // refreshes the "App update available" banner state.
+      checkForUpdateNow();
       const res = await triggerIngest();
       const ok = res.results.every((r: IngestResult) => r.ok);
       setIngestMsg(ok ? 'Refreshed from WeatherLink' : `Partial: ${res.results.filter((r) => !r.ok).length} failed`);
