@@ -155,12 +155,33 @@ jobs:
           rm -f public/weather-widget.apk
           ls -la public/*.apk
 
+      # Release manifest the running app polls to detect new versions.
+      # SHA is the source-tree commit (NOT the [skip ci] follow-up),
+      # so it matches whatever __BUILD_SHA__ the Vite bundle baked in
+      # for the same source state.
+      - name: Write current-release.json
+        run: |
+          set -euo pipefail
+          WEATHER_SIZE=$(stat -c%s public/weather-app.apk)
+          FULL_SIZE=$(stat -c%s public/castle-and-cards.apk)
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          cat > public/current-release.json <<JSON
+          {
+            "sha": "${GITHUB_SHA:0:7}",
+            "fullSha": "${GITHUB_SHA}",
+            "time": "${NOW}",
+            "weatherApkBytes": ${WEATHER_SIZE},
+            "fullApkBytes": ${FULL_SIZE}
+          }
+          JSON
+          cat public/current-release.json
+
       - name: Commit + push if changed
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git add public/castle-and-cards.apk public/weather-app.apk
+          git add public/castle-and-cards.apk public/weather-app.apk public/current-release.json
           # Remove the stale standalone widget APK from public/ if present.
           if [ -f public/weather-widget.apk ]; then
             git rm public/weather-widget.apk || true

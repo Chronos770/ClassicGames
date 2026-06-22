@@ -35,6 +35,10 @@ self.addEventListener('fetch', (event) => {
   // hand back index.html and the browser would "download" that.
   if (request.url.endsWith('.apk') || request.url.endsWith('.apk.sha256')) return;
 
+  // Skip the release manifest so the update banner sees fresh data,
+  // not whatever was cached when the SW first installed.
+  if (request.url.endsWith('/current-release.json')) return;
+
   // Navigation requests: network first, fall back to cache
   if (request.mode === 'navigate') {
     event.respondWith(

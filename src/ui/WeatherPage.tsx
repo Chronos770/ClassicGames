@@ -22,6 +22,7 @@ import SpaceWeatherTab from './weather/SpaceWeatherTab';
 import { WeatherInstallButton, useIsWeatherPwa, useWeatherManifest } from './weather/WeatherPwa';
 import WeatherAuthCard from './weather/WeatherAuthCard';
 import WeatherPushPrompt from './weather/WeatherPushPrompt';
+import UpdateAvailableBanner from './weather/UpdateAvailableBanner';
 import WeatherAlertsBanner from './weather/WeatherAlertsBanner';
 import TomorrowBanner from './weather/TomorrowBanner';
 import UnitsToggle from './weather/UnitsToggle';
@@ -345,6 +346,12 @@ export default function WeatherPage() {
         )}
 
         <WeatherInstallButton />
+
+        {/* In-app update check. Polls /current-release.json on mount + every
+            15 min and surfaces a banner if the deployed SHA is newer than
+            the SHA baked into this bundle. One tap downloads the right
+            APK variant; "Later" suppresses the banner for that sha only. */}
+        <UpdateAvailableBanner />
 
         {/* First-launch push opt-in — auto-hidden after Enable / Not now,
             after the user is already subscribed, or when push isn't
