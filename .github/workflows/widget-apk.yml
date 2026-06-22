@@ -68,6 +68,19 @@ jobs:
       - name: npm ci
         run: npm ci
 
+      # CRITICAL: remove the previously-committed APKs from public/
+      # before Vite copies public/ into dist/. If we don't, the new
+      # APK builds bundle the old APKs as assets, doubling their size
+      # each round until they blow past GitHub's 100 MB push limit.
+      # current-release.json is regenerated below so it doesn't need
+      # preservation either.
+      - name: Strip stale APKs from public/ before Vite build
+        run: |
+          rm -f public/weather-app.apk
+          rm -f public/castle-and-cards.apk
+          rm -f public/weather-widget.apk
+          rm -f public/current-release.json
+
       - name: Build web app (Vite)
         run: npm run build
 
