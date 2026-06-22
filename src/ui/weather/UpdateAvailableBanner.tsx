@@ -21,6 +21,10 @@ import { isNativeApp } from '../../lib/nativeApp';
 export default function UpdateAvailableBanner() {
   const isWeatherPwa = useIsWeatherPwa();
   const { available, dismiss } = useUpdateCheck();
+  // Only show inside the installed app — in a mobile browser tab the
+  // user just refreshes the page; there's no APK to "update" in that
+  // context. The banner was always meant for the native shell.
+  if (!isNativeApp()) return null;
   if (!available) return null;
 
   // Pick the APK by variant. The weather APK is the right call when

@@ -110,17 +110,27 @@ export function useWeatherManifest() {
 
 const DISMISS_KEY = 'weather-install-dismissed';
 
+const isAndroid = () =>
+  typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+
 /**
- * Install button for the weather PWA. Shows on mobile only, when not already
- * installed, and dismisses persistently when X'd.
+ * "Download the app" prompt shown to mobile browser visitors. Replaces
+ * the older Add-to-Home-Screen / PWA-install flow:
+ *
+ * - Android browsers: direct download link to /weather-app.apk
+ * - iOS: keep the "Share → Add to Home Screen" hint (no APK option)
+ * - Desktop: nothing
+ * - Already installed (display-mode: standalone) or running in the
+ *   native app: nothing
+ * - Dismissed persistently on X click
  */
 export function WeatherInstallButton() {
   const deferredPrompt = useRef<BeforeInstallPromptEvent | null>(null);
   const [show, setShow] = useState(false);
   const [iosMode, setIosMode] = useState(false);
-  const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     if (isInstalled()) return;
     if (localStorage.getItem(DISMISS_KEY)) return;
     if (!isMobile()) return;
@@ -131,26 +141,19 @@ export function WeatherInstallButton() {
       return;
     }
 
+    // Android (and anything else mobile that isn't iOS): always show
+    // the APK download — no longer wait for beforeinstallprompt. Still
+    // capture the deferred prompt so a future "Add to Home Screen"
+    // option could be brought back, but the primary CTA is now the
+    // native APK download.
+    setShow(true);
     const handler = (e: Event) => {
       e.preventDefault();
       deferredPrompt.current = e as BeforeInstallPromptEvent;
-      setShow(true);
     };
-
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
-
-  const handleInstall = async () => {
-    const prompt = deferredPrompt.current;
-    if (!prompt) return;
-    setInstalling(true);
-    await prompt.prompt();
-    const { outcome } = await prompt.userChoice;
-    setInstalling(false);
-    if (outcome === 'accepted') setShow(false);
-    deferredPrompt.current = null;
-  };
 
   const handleDismiss = () => {
     setShow(false);
@@ -159,30 +162,51 @@ export function WeatherInstallButton() {
 
   if (!show) return null;
 
+  // iOS: keep the Share → Add to Home Screen hint (no APK option)
+  if (iosMode) {
+    return (
+      <div className="bg-gradient-to-r from-sky-500/15 to-blue-500/10 border border-sky-500/30 rounded-xl p-3 sm:p-4 mb-4">
+        <div className="flex items-center gap-3">
+          <div className="text-3xl flex-shrink-0">⛈️</div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-white">Get the weather app</div>
+            <div className="text-xs text-white/60 mt-0.5 leading-relaxed">
+              Tap <strong>Share</strong> then <strong>Add to Home Screen</strong> for a standalone
+              weather app — no Castle &amp; Cards header, just your station.
+            </div>
+          </div>
+          <button
+            onClick={handleDismiss}
+            className="text-white/40 hover:text-white/60 transition-colors text-lg leading-none px-1 flex-shrink-0"
+            aria-label="Dismiss"
+          >
+            &#10005;
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Android (and other mobile): direct APK download
   return (
     <div className="bg-gradient-to-r from-sky-500/15 to-blue-500/10 border border-sky-500/30 rounded-xl p-3 sm:p-4 mb-4">
       <div className="flex items-center gap-3">
         <div className="text-3xl flex-shrink-0">⛈️</div>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold text-white">Install as a Weather App</div>
+          <div className="text-sm font-semibold text-white">Download the weather app</div>
           <div className="text-xs text-white/60 mt-0.5 leading-relaxed">
-            {iosMode ? (
-              <>Tap <strong>Share</strong> then <strong>Add to Home Screen</strong> for a standalone weather app — no Castle &amp; Cards header, just your station.</>
-            ) : (
-              <>Save just the weather to your home screen as its own app — no Castle &amp; Cards header, just your station.</>
-            )}
+            Native Android app — your station&apos;s dashboard, push notifications, home-screen
+            widget. {isAndroid() ? 'Tap Download to install.' : 'Open this on an Android phone to install.'}
           </div>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
-          {!iosMode && (
-            <button
-              onClick={handleInstall}
-              disabled={installing}
-              className="text-xs sm:text-sm px-3 py-1.5 bg-sky-500/30 hover:bg-sky-500/40 text-sky-200 font-medium rounded-lg transition-colors disabled:opacity-50"
-            >
-              {installing ? 'Installing…' : 'Install'}
-            </button>
-          )}
+          <a
+            href="/weather-app.apk"
+            download="weather-app.apk"
+            className="text-xs sm:text-sm px-3 py-1.5 bg-sky-500/30 hover:bg-sky-500/40 text-sky-200 font-medium rounded-lg transition-colors"
+          >
+            Download
+          </a>
           <button
             onClick={handleDismiss}
             className="text-white/40 hover:text-white/60 transition-colors text-lg leading-none px-1"
