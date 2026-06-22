@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   forecastConditionKey,
   parseWindSpeed,
@@ -6,7 +6,6 @@ import {
 } from '../../lib/nwsService';
 import { useNwsForecast, useNwsHourly } from '../../lib/nwsCache';
 import type { WeatherStation } from '../../lib/weatherService';
-import LineChart from './LineChart';
 import AnimatedWeatherIcon from './AnimatedWeatherIcon';
 
 export default function ForecastSection({
@@ -62,28 +61,6 @@ export default function ForecastSection({
 function Next24Hours({ periods }: { periods: NwsForecastPeriod[] }) {
   const [view, setView] = useState<'strip' | 'list'>('strip');
 
-  const tempSeries = useMemo(
-    () => [
-      {
-        label: 'Temp',
-        color: '#fbbf24',
-        points: periods.map((p) => ({
-          t: new Date(p.startTime).getTime(),
-          v: p.temperature,
-        })),
-      },
-      {
-        label: 'Precip %',
-        color: '#60a5fa',
-        points: periods.map((p) => ({
-          t: new Date(p.startTime).getTime(),
-          v: p.probabilityOfPrecipitation.value,
-        })),
-      },
-    ],
-    [periods],
-  );
-
   // Summary stats
   const temps = periods.map((p) => p.temperature);
   const hiTemp = Math.max(...temps);
@@ -123,11 +100,6 @@ function Next24Hours({ periods }: { periods: NwsForecastPeriod[] }) {
         <SummaryStat label="Low" value={`${loTemp}°`} tone="blue" />
         <SummaryStat label="Max Precip" value={`${maxPrecip}%`} tone={maxPrecip > 30 ? 'blue' : 'dim'} />
         <SummaryStat label="Peak Wind" value={`${Math.round(maxWind)} mph`} tone={maxWind > 15 ? 'amber' : 'dim'} />
-      </div>
-
-      {/* Temp chart (always visible for at-a-glance) */}
-      <div className="mb-4">
-        <LineChart series={tempSeries} height={140} />
       </div>
 
       {view === 'strip' ? (
