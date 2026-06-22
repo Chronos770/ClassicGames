@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { RELEASE } from './releaseInfo';
+import { isNativeApp } from './nativeApp';
 
 export interface RemoteRelease {
   sha: string;
@@ -31,13 +32,21 @@ export function useUpdateCheck(): {
 
   useEffect(() => {
     let cancelled = false;
+    // In the Capacitor WebView, relative paths resolve to bundled
+    // assets — `/current-release.json` inside the APK always matches
+    // the build SHA, so the banner would never appear. Hit the
+    // production host directly when running natively so we get the
+    // freshly-deployed manifest from Vercel.
+    const manifestUrl = isNativeApp()
+      ? 'https://castleandcards.com/current-release.json'
+      : '/current-release.json';
     const fetchOnce = async () => {
       try {
-        const r = await fetch('/current-release.json', { cache: 'no-store' });
+        const url = `${manifestUrl}?t=${Date.now()}`;
+        const r = await fetch(url, { cache: 'no-store' });
         if (!r.ok) return;
         const data = (await r.json()) as RemoteRelease;
         if (cancelled) return;
-        // Ignore manifests that don't have a sha field (defensive).
         if (typeof data.sha !== 'string' || !data.sha) return;
         setRemote(data);
       } catch {
