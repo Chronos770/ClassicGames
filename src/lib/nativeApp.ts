@@ -63,6 +63,57 @@ export async function initNativeApp(): Promise<void> {
   });
 }
 
+/**
+ * True iff there's an FCM subscription row for the currently signed-in
+ * user. The native equivalent of pushService.isSubscribed() — that one
+ * consults PushManager.getSubscription which doesn't exist in the
+ * Capacitor WebView.
+ */
+export async function isNativeSubscribed(): Promise<boolean> {
+  if (!isNativeApp()) return false;
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return false;
+    const { data, error } = await supabase
+      .from('weather_push_subscriptions')
+      .select('id')
+      .eq('user_id', userData.user.id)
+      .like('endpoint', 'fcm:%')
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      console.warn('[native] isNativeSubscribed query failed:', error.message);
+      return false;
+    }
+    return !!data;
+  } catch (e) {
+    console.warn('[native] isNativeSubscribed threw', e);
+    return false;
+  }
+}
+
+/**
+ * Delete the FCM subscription row(s) for the current user. The token
+ * itself stays valid until FCM rotates it — we just stop sending pushes
+ * to it.
+ */
+export async function unregisterNativePush(): Promise<{ ok: boolean; error?: string }> {
+  if (!isNativeApp()) return { ok: false, error: 'Not running natively' };
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return { ok: false, error: 'Not signed in' };
+    const { error } = await supabase
+      .from('weather_push_subscriptions')
+      .delete()
+      .eq('user_id', userData.user.id)
+      .like('endpoint', 'fcm:%');
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: String(e?.message ?? e) };
+  }
+}
+
 async function persistFcmToken(token: string): Promise<void> {
   try {
     const { data: userData, error: userErr } = await supabase.auth.getUser();

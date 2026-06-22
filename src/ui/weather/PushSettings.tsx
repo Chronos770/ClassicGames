@@ -12,6 +12,12 @@ import {
   VAPID_PUBLIC_KEY,
   type PushPreferences,
 } from '../../lib/pushService';
+import {
+  isNativeApp,
+  isNativeSubscribed,
+  registerNativePush,
+  unregisterNativePush,
+} from '../../lib/nativeApp';
 
 const TOGGLES: { key: keyof PushPreferences; label: string; help: string; defaultOn: boolean }[] = [
   { key: 'rain_incoming', label: 'Rain incoming', help: 'Rain ≥ 50% likely in the next 24 hours.', defaultOn: true },
@@ -25,7 +31,10 @@ const TOGGLES: { key: keyof PushPreferences; label: string; help: string; defaul
 ];
 
 export default function PushSettings() {
-  const [supported] = useState(isPushSupported);
+  // Native (Capacitor) builds use FCM and don't depend on PushManager
+  // / Service Workers, so the browser-feature check doesn't apply.
+  const native = isNativeApp();
+  const [supported] = useState(() => native || isPushSupported());
   const [subscribed, setSubscribed] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>('default');
   const [prefs, setPrefs] = useState<PushPreferences>(DEFAULT_PREFS);
@@ -37,7 +46,8 @@ export default function PushSettings() {
 
   const refresh = async () => {
     setLoading(true);
-    setSubscribed(await isSubscribed());
+    // Native = check DB for fcm:* row. Web = check PushManager.
+    setSubscribed(native ? await isNativeSubscribed() : await isSubscribed());
     setPermission(typeof Notification !== 'undefined' ? Notification.permission : 'denied');
     setPrefs(await loadPreferences());
     setLoading(false);
@@ -55,7 +65,7 @@ export default function PushSettings() {
   const handleEnable = async () => {
     setBusy(true);
     setMsg(null);
-    const r = await subscribePush();
+    const r = native ? await registerNativePush() : await subscribePush();
     setBusy(false);
     if (r.ok) {
       flash('Notifications enabled.');
@@ -67,7 +77,7 @@ export default function PushSettings() {
 
   const handleDisable = async () => {
     setBusy(true);
-    const r = await unsubscribePush();
+    const r = native ? await unregisterNativePush() : await unsubscribePush();
     setBusy(false);
     if (r.ok) {
       flash('Notifications disabled.');
@@ -142,7 +152,9 @@ export default function PushSettings() {
     );
   }
 
-  if (!VAPID_PUBLIC_KEY) {
+  // Native FCM doesn't need a VAPID key — that's the web-push transport
+  // only. Skip this gate when running inside the Capacitor app.
+  if (!native && !VAPID_PUBLIC_KEY) {
     return (
       <div className="bg-amber-500/10 border border-amber-500/20 text-amber-200/80 rounded-xl p-4 text-sm">
         VAPID_PUBLIC_KEY isn't configured. Set <code className="font-mono">VITE_VAPID_PUBLIC_KEY</code> in the
@@ -288,7 +300,10 @@ export default function PushSettings() {
       )}
 
       {/* Mobile-friendly diagnostic — runs entirely in the page so the
-          user can compare client/server VAPID tails without DevTools. */}
+          user can compare client/server VAPID tails without DevTools.
+          Web-push only; FCM in the native app has its own delivery
+          report inline via sendTestNotification. */}
+      {!native && (
       <div className="bg-black/30 backdrop-blur-md rounded-xl border border-white/10 p-4">
         <div className="flex items-center justify-between gap-3 mb-2">
           <div className="text-xs uppercase tracking-wide text-white/40 font-semibold">
@@ -353,6 +368,7 @@ export default function PushSettings() {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
