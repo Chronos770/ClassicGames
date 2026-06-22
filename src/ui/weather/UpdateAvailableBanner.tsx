@@ -35,19 +35,20 @@ export default function UpdateAvailableBanner() {
   const apkSize = isWeatherPwa ? available.weatherApkBytes : available.fullApkBytes;
 
   const handleUpdate = async (e: React.MouseEvent) => {
-    // In the native app, Capacitor's WebView doesn't reliably hand off
-    // .apk downloads — bounce through Capacitor's Browser plugin which
-    // opens a Chrome Custom Tab where the download flow works the same
-    // as if you'd opened castleandcards.com in Chrome directly.
+    // In the native app, the WebView's origin is https://localhost
+    // (Capacitor's androidScheme) — NOT castleandcards.com. So
+    // window.location.origin gives us the wrong base. Build the
+    // absolute URL against the real production host so the download
+    // actually fetches from Vercel.
     if (isNativeApp()) {
       e.preventDefault();
-      const absolute = new URL(apkUrl, window.location.origin).toString();
+      const absolute = `https://castleandcards.com${apkUrl}`;
       try {
         await Browser.open({ url: absolute });
       } catch {
-        // Fallback: navigate the WebView itself. Worst case the user
-        // sees a download prompt.
-        window.location.assign(apkUrl);
+        // Fallback: navigate the WebView itself to the absolute URL.
+        // Plain `assign(apkUrl)` would resolve relative to localhost.
+        window.location.assign(absolute);
       }
     }
     // Web: let the <a href download> default behavior run.

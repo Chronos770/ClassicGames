@@ -1,7 +1,38 @@
+import { Browser } from '@capacitor/browser';
+import { isNativeApp } from '../../lib/nativeApp';
+
 const FULL_APP_URL = '/castle-and-cards.apk';
 const WEATHER_APP_URL = '/weather-app.apk';
 
+/**
+ * APK download click handler that does the right thing in either
+ * context:
+ *
+ * - On the website (browser): default <a download> behavior fetches
+ *   the APK from the same origin. preventDefault is skipped.
+ * - In the native app: a relative URL resolves against https://localhost
+ *   (Capacitor's WebView origin), which has no APK. Build the absolute
+ *   castleandcards.com URL and bounce to Chrome Custom Tab via
+ *   Capacitor's Browser plugin so the download actually fetches from
+ *   Vercel.
+ */
+function makeApkHandler(apkUrl: string) {
+  return async (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!isNativeApp()) return; // web: let the link work as-is
+    e.preventDefault();
+    const absolute = `https://castleandcards.com${apkUrl}`;
+    try {
+      await Browser.open({ url: absolute });
+    } catch {
+      window.location.assign(absolute);
+    }
+  };
+}
+
 export default function WidgetInstallSection() {
+  const handleWeather = makeApkHandler(WEATHER_APP_URL);
+  const handleFull = makeApkHandler(FULL_APP_URL);
+
   return (
     <div className="space-y-4">
       {/* Weather-only native app (now bundles the widget) */}
@@ -27,6 +58,7 @@ export default function WidgetInstallSection() {
         <a
           href={WEATHER_APP_URL}
           download="weather-app.apk"
+          onClick={handleWeather}
           className="block w-full text-center text-sm px-3 py-2.5 bg-sky-500/40 hover:bg-sky-500/50 text-sky-50 font-medium rounded-lg transition-colors"
         >
           Download Weather App APK
@@ -56,25 +88,16 @@ export default function WidgetInstallSection() {
           </summary>
           <div className="mt-2 text-xs text-white/65 leading-relaxed space-y-2 border-l border-sky-500/30 pl-3">
             <p>
-              <strong className="text-white/85">Web push (works today).</strong> Open the app, sign
-              in, then go to Notifications above and tap <em>Enable</em>. Android asks for the OS
-              permission; once granted, the same VAPID/Supabase pipeline that powers the website
-              sends alerts to your phone via the system Chrome WebView. No Firebase setup required.
+              <strong className="text-white/85">Native FCM (active).</strong> The weather APK
+              ships with Firebase wired up — when you tap <em>Enable</em> in Notifications below,
+              Android asks for permission, registers an FCM token, and stores it. Pushes arrive
+              with the cloud + lightning bolt icon in the status bar and &ldquo;Castle &amp; Cards
+              Weather&rdquo; as the source app.
             </p>
             <p>
-              <strong className="text-white/85">Native FCM (better, optional).</strong> For a fully
-              native push channel with the weather icon in the status bar and lower latency, the
-              app needs a <code className="text-white/85">google-services.json</code> from a
-              Firebase project (package name{' '}
-              <code className="text-white/85">com.castleandcards.weather</code>). Steps are in
-              {' '}<code className="text-white/85">android-weather/README.md</code> in the repo &mdash;
-              once it&apos;s wired, the existing Notifications card automatically registers an FCM
-              token.
-            </p>
-            <p className="text-white/45">
-              If you tap Enable inside the app and it errors out about &ldquo;no active Service
-              Worker,&rdquo; close and reopen the app once &mdash; first launch can land before the
-              SW has registered.
+              <strong className="text-white/85">Web push (browser).</strong> On the website
+              (mobile Chrome or Firefox), VAPID-based web push still works through the service
+              worker. Same Enable button, different transport under the hood.
             </p>
           </div>
         </details>
@@ -102,6 +125,7 @@ export default function WidgetInstallSection() {
         <a
           href={FULL_APP_URL}
           download="castle-and-cards.apk"
+          onClick={handleFull}
           className="block w-full text-center text-sm px-3 py-2.5 bg-amber-500/30 hover:bg-amber-500/40 text-amber-100 font-medium rounded-lg transition-colors"
         >
           Download Full App APK
