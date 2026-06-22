@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "961403666308",
+    "project_id": "castle-and-cards",
+    "storage_bucket": "castle-and-cards.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:961403666308:android:948fb896887944cd5ba7d1",
+        "android_client_info": {
+          "package_name": "com.castleandcards.weather"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB-irpS6PI_09pCdwbNN9O35V-94TDF7U8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

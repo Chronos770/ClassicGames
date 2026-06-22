@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { isPushSupported, isSubscribed, subscribePush } from '../../lib/pushService';
+import { isNativeApp, registerNativePush } from '../../lib/nativeApp';
 
 const DISMISS_KEY = 'weather-push-prompt-dismissed';
 
@@ -15,6 +16,9 @@ type Reason =
 
 function inspect(): Reason {
   if (typeof window === 'undefined') return 'unsupported-sw';
+  // Native (Capacitor) goes through FCM, not Web Push — none of these
+  // browser APIs need to exist for native push to work.
+  if (isNativeApp()) return 'ready';
   if (!('serviceWorker' in navigator)) return 'unsupported-sw';
   if (!('PushManager' in window)) return 'unsupported-pm';
   if (!('Notification' in window)) return 'unsupported-n';
@@ -59,6 +63,16 @@ export default function WeatherPushPrompt() {
         return;
       }
       try {
+        // Native: there's no PushManager.getSubscription equivalent we
+        // can cheaply consult; show the banner once per device and let
+        // the user decide. The localStorage dismiss key prevents nags.
+        if (isNativeApp()) {
+          if (!cancelled) {
+            setReason('ready');
+            setShow(true);
+          }
+          return;
+        }
         const already = await isSubscribed();
         if (cancelled) return;
         if (already) {
@@ -83,7 +97,9 @@ export default function WeatherPushPrompt() {
     setBusy(true);
     setStatus(null);
     try {
-      const r = await subscribePush();
+      // Native: register with FCM and persist the token. Web: VAPID
+      // subscribe through the service worker.
+      const r = isNativeApp() ? await registerNativePush() : await subscribePush();
       if (r.ok) {
         if (typeof localStorage !== 'undefined') localStorage.setItem(DISMISS_KEY, '1');
         setStatus('ok');
