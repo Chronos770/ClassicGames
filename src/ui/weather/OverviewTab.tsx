@@ -18,6 +18,7 @@ import WindRose from './WindRose';
 import ETContextCard from './ETContextCard';
 import AnimatedWeatherIcon from './AnimatedWeatherIcon';
 import WeatherFrog from './WeatherFrog';
+import WeatherScene from './WeatherScene';
 
 interface Props {
   reading: WeatherReading;
@@ -43,6 +44,13 @@ export default function OverviewTab({ reading, station, stationId, tick, conditi
 
   return (
     <>
+      {conditionProp && (
+        <WeatherScene
+          conditionKey={conditionProp.key}
+          isDay={conditionProp.isDay}
+          tempF={reading.temp}
+        />
+      )}
       <HeroBanner
         reading={reading}
         station={station}
