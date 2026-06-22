@@ -174,14 +174,17 @@ function MoonCloud() {
 }
 
 function Clouds() {
-  // Pushed both clouds toward the vertical center of the viewBox so the
-  // rendered icon doesn't have a tall empty band above it. Previously
-  // the upper cloud sat at y=40, which on the 96px hero icon let the
-  // top edge ride up into the "CLOUDY" label's row.
+  // Cloud bbox is asymmetric — the natural cloud shape extends from
+  // y=-16 (top of upper bumps) to y=12 (bottom of lower bumps) relative
+  // to its anchor. To visually center the cluster in the 100x100
+  // viewBox we have to shift the anchors a bit up and adjust x so the
+  // combined two-cloud bbox lands centered on (50, 50). Previous
+  // values produced a cluster centered around (52, 60), which read as
+  // "stuck in the lower-right" inside the small forecast tile icons.
   return (
     <g>
-      <Cloud x={32} y={56} scale={0.65} color="#94a3b8" className="wx-cloud-slow" />
-      <Cloud x={62} y={62} scale={0.95} color="#e2e8f0" className="wx-cloud-fast" />
+      <Cloud x={30} y={47} scale={0.65} color="#94a3b8" className="wx-cloud-slow" />
+      <Cloud x={60} y={53} scale={0.95} color="#e2e8f0" className="wx-cloud-fast" />
     </g>
   );
 }

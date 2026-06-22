@@ -17,6 +17,7 @@ import MoonCard from './MoonCard';
 import WindRose from './WindRose';
 import ETContextCard from './ETContextCard';
 import AnimatedWeatherIcon from './AnimatedWeatherIcon';
+import WeatherFrog from './WeatherFrog';
 
 interface Props {
   reading: WeatherReading;
@@ -154,7 +155,7 @@ function HeroBanner({
     >
       <div className="relative">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 order-1">
           <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-white/50 mb-1">
             <span>{condition.label}</span>
           </div>
@@ -215,6 +216,18 @@ function HeroBanner({
           <div className="text-xs text-white/30 mt-2">
             Observed {timeAgo(reading.observed_at)} · {new Date(reading.observed_at).toLocaleString()}
           </div>
+        </div>
+
+        {/* Mascot — reacts to current condition + temperature. Sits on
+            the right at sm+, drops below the hero on phones so the
+            temperature stays the dominant element. */}
+        <div className="order-2 flex-shrink-0 self-start sm:self-center">
+          <WeatherFrog
+            conditionKey={condition.key}
+            isDay={condition.isDay}
+            tempF={reading.temp}
+            size={120}
+          />
         </div>
       </div>
       </div>
