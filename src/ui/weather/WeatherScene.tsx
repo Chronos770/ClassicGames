@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, type CSSProperties } from 'react';
 import type { ConditionKey } from '../../lib/weatherCondition';
 
 /**
@@ -23,6 +23,12 @@ interface Props {
    * hero banner) so the corners line up.
    */
   embedded?: boolean;
+  /**
+   * When true, the SVG fills 100% of the parent (no fixed pixel height).
+   * Use with an absolutely-positioned wrapper to make the scene a full
+   * card background that text + characters can overlay.
+   */
+  fillCard?: boolean;
 }
 
 const STYLE_ID = 'weather-scene-styles';
@@ -84,7 +90,13 @@ function paletteFor(conditionKey: ConditionKey, isDay: boolean): Palette {
   }
 }
 
-export default function WeatherScene({ conditionKey, isDay = true, tempF, embedded = false }: Props) {
+export default function WeatherScene({
+  conditionKey,
+  isDay = true,
+  tempF,
+  embedded = false,
+  fillCard = false,
+}: Props) {
   useEffect(() => {
     ensureStyles();
   }, []);
@@ -97,18 +109,22 @@ export default function WeatherScene({ conditionKey, isDay = true, tempF, embedd
     conditionKey === 'thunderstorm';
   const isSnow = conditionKey === 'snow' || (conditionKey === 'cold' && (tempF ?? 99) <= 32);
 
-  const wrapperClass = embedded
-    ? 'weather-scene-wrap'
-    : 'weather-scene-wrap mb-4 rounded-2xl border border-white/10 overflow-hidden shadow-lg';
-  const height = embedded ? 130 : 160;
+  const wrapperClass = fillCard
+    ? 'weather-scene-wrap h-full w-full'
+    : embedded
+      ? 'weather-scene-wrap'
+      : 'weather-scene-wrap mb-4 rounded-2xl border border-white/10 overflow-hidden shadow-lg';
+  const svgStyle: CSSProperties = fillCard
+    ? { height: '100%', width: '100%' }
+    : { height: embedded ? 130 : 160 };
 
   return (
     <div className={wrapperClass}>
       <svg
         viewBox="0 0 800 160"
         preserveAspectRatio="xMidYMid slice"
-        className="w-full block"
-        style={{ height }}
+        className="block"
+        style={svgStyle}
         aria-hidden
       >
         <defs>

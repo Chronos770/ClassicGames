@@ -16,7 +16,6 @@ import SunArc from './SunArc';
 import MoonCard from './MoonCard';
 import WindRose from './WindRose';
 import ETContextCard from './ETContextCard';
-import AnimatedWeatherIcon from './AnimatedWeatherIcon';
 import WeatherFrog from './WeatherFrog';
 import WeatherScene from './WeatherScene';
 
@@ -152,39 +151,64 @@ function HeroBanner({
 
   return (
     <div
-      className={`relative overflow-hidden bg-black/30 backdrop-blur-md rounded-2xl border border-white/10 mb-4 transition-all duration-700`}
+      className="relative overflow-hidden rounded-2xl border border-white/10 mb-4 transition-all duration-700"
+      style={{ minHeight: 220 }}
     >
-      {/* Illustrated weather scene at the top of the card. Embedded
-          mode drops the inner border/rounded corners so it merges
-          seamlessly with the card chrome. */}
+      {/* Full-card weather scene as the background. The temperature
+          text + frog + readouts overlay on top. Replaces the previous
+          AnimatedWeatherIcon-next-to-the-temp layout — the scene IS
+          the icon now, just bigger and panoramic. */}
       {conditionProp && (
-        <WeatherScene
-          conditionKey={conditionProp.key}
-          isDay={conditionProp.isDay}
-          tempF={reading.temp}
-          embedded
-        />
+        <div className="absolute inset-0">
+          <WeatherScene
+            conditionKey={conditionProp.key}
+            isDay={conditionProp.isDay}
+            tempF={reading.temp}
+            embedded
+            fillCard
+          />
+        </div>
       )}
-      <div className="relative p-5 sm:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 flex-1 order-1">
-          <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-white/50 mb-1">
+
+      {/* Dim gradient over the left side so the text stays readable
+          across sky palettes. Right side stays clearer so the scene's
+          actors (sun, clouds, moon, etc.) read. */}
+      <div className="absolute inset-0 bg-gradient-to-r from-black/65 via-black/35 to-black/0 pointer-events-none" />
+      <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
+
+      {/* Mascot — sits in the scene like an actor, lower right. Sized
+          to read as part of the illustration rather than a UI chip. */}
+      <div className="absolute right-3 bottom-1 sm:right-5 sm:bottom-2 z-10 pointer-events-none">
+        <WeatherFrog
+          conditionKey={condition.key}
+          isDay={condition.isDay}
+          tempF={reading.temp}
+          size={110}
+        />
+      </div>
+
+      {/* Foreground content */}
+      <div className="relative p-5 sm:p-6 z-10">
+        <div className="min-w-0 max-w-[70%] sm:max-w-[60%]">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-white/80 mb-1 drop-shadow">
             <span>{condition.label}</span>
           </div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <AnimatedWeatherIcon conditionKey={condition.key} isDay={condition.isDay} size={96} />
-            <span className="text-6xl sm:text-7xl font-display font-bold text-white tabular-nums leading-none">
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <span
+              className="text-6xl sm:text-7xl font-display font-bold text-white tabular-nums leading-none"
+              style={{ textShadow: '0 2px 8px rgba(0,0,0,0.55), 0 0 2px rgba(0,0,0,0.7)' }}
+            >
               {fmt.fmtTempNum(reading.temp)}
             </span>
-            <span className="text-2xl text-white/50 font-semibold">{fmt.tempUnitLabel}</span>
+            <span className="text-2xl text-white/75 font-semibold drop-shadow">{fmt.tempUnitLabel}</span>
             {trendLabel && (
               <span
-                className={`text-xs px-2 py-0.5 rounded-full border font-mono ${
+                className={`text-xs px-2 py-0.5 rounded-full border font-mono backdrop-blur-sm ${
                   trendConv !== null && Math.abs(trendConv) >= 0.5
                     ? trendConv > 0
-                      ? 'text-amber-300 border-amber-500/30 bg-amber-500/10'
-                      : 'text-sky-300 border-sky-500/30 bg-sky-500/10'
-                    : 'text-white/50 border-white/10'
+                      ? 'text-amber-200 border-amber-400/40 bg-amber-500/20'
+                      : 'text-sky-200 border-sky-400/40 bg-sky-500/20'
+                    : 'text-white/80 border-white/20 bg-black/20'
                 }`}
               >
                 {trendConv !== null && Math.abs(trendConv) >= 0.5 ? (trendConv > 0 ? '↑ ' : '↓ ') : ''}
@@ -193,20 +217,20 @@ function HeroBanner({
             )}
           </div>
           {feelsLike !== null && (
-            <div className="text-sm text-white/60 mt-2">
+            <div className="text-sm text-white/85 mt-2 drop-shadow">
               Feels like{' '}
               <span className={`font-semibold ${feelsLikeTone}`}>{fmt.fmtTemp(feelsLike)}</span>
-              {deltaLabel && <span className="text-white/40"> · {deltaLabel}</span>}
+              {deltaLabel && <span className="text-white/60"> · {deltaLabel}</span>}
             </div>
           )}
           {(todayExt.max !== null || todayExt.min !== null) && (
-            <div className="text-xs text-white/50 mt-1 flex gap-4 flex-wrap font-mono">
+            <div className="text-xs text-white/75 mt-1 flex gap-4 flex-wrap font-mono drop-shadow">
               {todayExt.max !== null && (
                 <span>
-                  <span className="text-white/40">High </span>
-                  <span className="text-amber-300">{fmt.fmtTemp(todayExt.max)}</span>
+                  <span className="text-white/55">High </span>
+                  <span className="text-amber-200">{fmt.fmtTemp(todayExt.max)}</span>
                   {todayExt.maxAt && (
-                    <span className="text-white/30 ml-1">
+                    <span className="text-white/45 ml-1">
                       {new Date(todayExt.maxAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                     </span>
                   )}
@@ -214,10 +238,10 @@ function HeroBanner({
               )}
               {todayExt.min !== null && (
                 <span>
-                  <span className="text-white/40">Low </span>
-                  <span className="text-sky-300">{fmt.fmtTemp(todayExt.min)}</span>
+                  <span className="text-white/55">Low </span>
+                  <span className="text-sky-200">{fmt.fmtTemp(todayExt.min)}</span>
                   {todayExt.minAt && (
-                    <span className="text-white/30 ml-1">
+                    <span className="text-white/45 ml-1">
                       {new Date(todayExt.minAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                     </span>
                   )}
@@ -225,23 +249,10 @@ function HeroBanner({
               )}
             </div>
           )}
-          <div className="text-xs text-white/30 mt-2">
+          <div className="text-xs text-white/55 mt-2 drop-shadow">
             Observed {timeAgo(reading.observed_at)} · {new Date(reading.observed_at).toLocaleString()}
           </div>
         </div>
-
-        {/* Mascot — reacts to current condition + temperature. Sits on
-            the right at sm+, drops below the hero on phones so the
-            temperature stays the dominant element. */}
-        <div className="order-2 flex-shrink-0 self-start sm:self-center">
-          <WeatherFrog
-            conditionKey={condition.key}
-            isDay={condition.isDay}
-            tempF={reading.temp}
-            size={120}
-          />
-        </div>
-      </div>
       </div>
     </div>
   );
