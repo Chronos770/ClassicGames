@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.datastore.preferences.core.edit
 import com.castleandcards.weather.R
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -20,6 +21,7 @@ private val KEY_JSON = stringPreferencesKey("payload_json")
 private val KEY_UPDATED_AT = longPreferencesKey("updated_at")
 private val KEY_LAST_ERROR = stringPreferencesKey("last_error")
 private val KEY_LAST_ATTEMPT = longPreferencesKey("last_attempt")
+private val KEY_MULTI_PAGE = intPreferencesKey("multi_page")
 
 object WeatherRepo {
     private const val TAG = "WeatherWidget"
@@ -53,6 +55,14 @@ object WeatherRepo {
 
     suspend fun lastAttempt(context: Context): Long {
         return context.dataStore.data.first()[KEY_LAST_ATTEMPT] ?: 0L
+    }
+
+    suspend fun multiPage(context: Context): Int {
+        return context.dataStore.data.first()[KEY_MULTI_PAGE] ?: 0
+    }
+
+    suspend fun setMultiPage(context: Context, page: Int) {
+        context.dataStore.edit { it[KEY_MULTI_PAGE] = page }
     }
 
     /**

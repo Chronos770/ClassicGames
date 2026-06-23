@@ -13,4 +13,5 @@
 
     <!-- Widget description shown in the launcher's widget picker. -->
     <string name="widget_description">Castle &amp; Cards Weather — current conditions and 5-day forecast at a glance.</string>
+    <string name="widget_multi_description">Castle &amp; Cards Weather (Multi) — swipe between current conditions, 5-day forecast, sun &amp; moon, and a clock view.</string>
 </resources>
