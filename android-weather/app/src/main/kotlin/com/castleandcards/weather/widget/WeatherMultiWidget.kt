@@ -66,6 +66,7 @@ class WeatherMultiWidget : GlanceAppWidget() {
         val lastAttempt = WeatherRepo.lastAttempt(context)
         val page = WeatherRepo.multiPage(context)
         val bgAlpha = WeatherRepo.widgetBgAlpha(context)
+        val lastNavTap = WeatherRepo.lastNavTap(context)
 
         val ageMs = System.currentTimeMillis() - lastAttempt
         if (payload == null && (lastAttempt == 0L || ageMs > 30_000L)) {
@@ -74,14 +75,21 @@ class WeatherMultiWidget : GlanceAppWidget() {
 
         provideContent {
             GlanceTheme {
-                MultiContent(payload, error, lastAttempt, page, bgAlpha)
+                MultiContent(payload, error, lastAttempt, page, bgAlpha, lastNavTap)
             }
         }
     }
 }
 
 @Composable
-private fun MultiContent(payload: WidgetPayload?, error: String?, lastAttempt: Long, page: Int, bgAlpha: Float) {
+private fun MultiContent(
+    payload: WidgetPayload?,
+    error: String?,
+    lastAttempt: Long,
+    page: Int,
+    bgAlpha: Float,
+    lastNavTap: Long,
+) {
     val open = actionStartActivity<MainActivity>()
     Box(
         modifier = GlanceModifier
@@ -99,19 +107,22 @@ private fun MultiContent(payload: WidgetPayload?, error: String?, lastAttempt: L
             // z-order ambiguity — RemoteViews' touch dispatcher
             // routes taps to exactly one of these three.
             Row(modifier = GlanceModifier.fillMaxSize()) {
-                // LEFT — prev page. Full-height side band so the tap
-                // target is large and obvious. ◀ glyph rendered centered.
+                // LEFT — prev page. Tinted background so the tap zone
+                // is visible. If the user can see the colored band but
+                // tapping it does nothing, the click handler isn't
+                // dispatching.
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = GlanceModifier
                         .clickable(actionRunCallback<PrevPageActionCallback>())
                         .fillMaxHeight()
-                        .width(36.dp),
+                        .width(40.dp)
+                        .background(ColorProvider(Color(0x331F3554))),
                 ) {
                     Text(
                         text = "‹",
                         style = TextStyle(
-                            color = white(0.9f),
+                            color = white(0.95f),
                             fontSize = 28.sp,
                             fontWeight = FontWeight.Bold,
                         ),
@@ -143,11 +154,29 @@ private fun MultiContent(payload: WidgetPayload?, error: String?, lastAttempt: L
                             }
                         }
                     }
-                    Box(
+                    Column(
                         modifier = GlanceModifier.fillMaxWidth().padding(top = 4.dp),
-                        contentAlignment = Alignment.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
+                        // Page indicator + tap diagnostic. If you tap an
+                        // arrow and "Page X" doesn't change but the
+                        // last-tap timestamp DOES, the click is reaching
+                        // the callback but the DataStore write isn't
+                        // propagating. If neither changes, the click
+                        // isn't reaching the callback at all.
+                        Text(
+                            text = "Page ${page + 1}/4",
+                            style = TextStyle(color = white(0.55f), fontSize = 10.sp, fontWeight = FontWeight.Medium),
+                        )
+                        Spacer(GlanceModifier.height(2.dp))
                         PageDots(page)
+                        if (lastNavTap > 0L) {
+                            Spacer(GlanceModifier.height(2.dp))
+                            Text(
+                                text = "tap ${ageLabel(lastNavTap)} ago",
+                                style = TextStyle(color = white(0.4f), fontSize = 9.sp),
+                            )
+                        }
                     }
                 }
 
@@ -157,12 +186,13 @@ private fun MultiContent(payload: WidgetPayload?, error: String?, lastAttempt: L
                     modifier = GlanceModifier
                         .clickable(actionRunCallback<NextPageActionCallback>())
                         .fillMaxHeight()
-                        .width(36.dp),
+                        .width(40.dp)
+                        .background(ColorProvider(Color(0x331F3554))),
                 ) {
                     Text(
                         text = "›",
                         style = TextStyle(
-                            color = white(0.9f),
+                            color = white(0.95f),
                             fontSize = 28.sp,
                             fontWeight = FontWeight.Bold,
                         ),

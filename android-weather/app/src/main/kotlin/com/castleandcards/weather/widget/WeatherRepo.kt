@@ -22,6 +22,7 @@ private val KEY_UPDATED_AT = longPreferencesKey("updated_at")
 private val KEY_LAST_ERROR = stringPreferencesKey("last_error")
 private val KEY_LAST_ATTEMPT = longPreferencesKey("last_attempt")
 private val KEY_MULTI_PAGE = intPreferencesKey("multi_page")
+private val KEY_LAST_NAV_TAP = longPreferencesKey("last_nav_tap")
 
 object WeatherRepo {
     private const val TAG = "WeatherWidget"
@@ -62,7 +63,14 @@ object WeatherRepo {
     }
 
     suspend fun setMultiPage(context: Context, page: Int) {
-        context.dataStore.edit { it[KEY_MULTI_PAGE] = page }
+        context.dataStore.edit {
+            it[KEY_MULTI_PAGE] = page
+            it[KEY_LAST_NAV_TAP] = System.currentTimeMillis()
+        }
+    }
+
+    suspend fun lastNavTap(context: Context): Long {
+        return context.dataStore.data.first()[KEY_LAST_NAV_TAP] ?: 0L
     }
 
     /**
