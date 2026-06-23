@@ -63,6 +63,7 @@
              WorkManager on a 15-min interval. -->
         <receiver
             android:name="com.castleandcards.weather.widget.WeatherWidgetReceiver"
+            android:label="@string/widget_label"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -77,6 +78,7 @@
              Sun & Moon / Clock pages. -->
         <receiver
             android:name="com.castleandcards.weather.widget.WeatherMultiWidgetReceiver"
+            android:label="@string/widget_multi_label"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

@@ -11,7 +11,10 @@
     <string name="pwa_url" translatable="false">https://castleandcards.com/weather</string>
     <string name="station_id" translatable="false"></string>
 
-    <!-- Widget description shown in the launcher's widget picker. -->
+    <!-- Widget titles shown in the launcher's widget picker. -->
+    <string name="widget_label">Weather</string>
+    <string name="widget_multi_label">Weather (Multi)</string>
+    <!-- Widget descriptions shown below the title in the picker. -->
     <string name="widget_description">Castle &amp; Cards Weather — current conditions and 5-day forecast at a glance.</string>
-    <string name="widget_multi_description">Castle &amp; Cards Weather (Multi) — swipe between current conditions, 5-day forecast, sun &amp; moon, and a clock view.</string>
+    <string name="widget_multi_description">Castle &amp; Cards Weather (Multi) — cycle between current conditions, 5-day forecast, sun &amp; moon, and a clock view.</string>
 </resources>
