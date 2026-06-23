@@ -18,17 +18,17 @@ import java.util.concurrent.TimeUnit
 class RefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = try {
         WeatherRepo.refresh(applicationContext)
+        // Re-render BOTH widget variants. The user can have either or
+        // both placed; without this, only the regular widget would
+        // pick up the new payload and the multi widget would look
+        // frozen after its first paint.
         WeatherWidget().updateAll(applicationContext)
+        WeatherMultiWidget().updateAll(applicationContext)
         Result.success()
     } catch (e: Exception) {
         Log.e(TAG, "doWork failed: ${e.message}", e)
-        // The error is already persisted to DataStore by WeatherRepo, so the
-        // widget will paint a real message. Re-render so users see it now
-        // instead of after the next refresh.
         runCatching { WeatherWidget().updateAll(applicationContext) }
-        // success(), not retry() — retry's backoff hides the error from the
-        // user for ~10s+, and WorkManager already has the periodic 15-min
-        // tick to recover. The widget can also force-refresh on tap (TODO).
+        runCatching { WeatherMultiWidget().updateAll(applicationContext) }
         Result.success()
     }
 
