@@ -64,6 +64,7 @@ class WeatherMultiWidget : GlanceAppWidget() {
         val error = if (payload == null) WeatherRepo.lastError(context) else null
         val lastAttempt = WeatherRepo.lastAttempt(context)
         val page = WeatherRepo.multiPage(context)
+        val bgAlpha = WeatherRepo.widgetBgAlpha(context)
 
         val ageMs = System.currentTimeMillis() - lastAttempt
         if (payload == null && (lastAttempt == 0L || ageMs > 30_000L)) {
@@ -72,14 +73,14 @@ class WeatherMultiWidget : GlanceAppWidget() {
 
         provideContent {
             GlanceTheme {
-                MultiContent(payload, error, lastAttempt, page)
+                MultiContent(payload, error, lastAttempt, page, bgAlpha)
             }
         }
     }
 }
 
 @Composable
-private fun MultiContent(payload: WidgetPayload?, error: String?, lastAttempt: Long, page: Int) {
+private fun MultiContent(payload: WidgetPayload?, error: String?, lastAttempt: Long, page: Int, bgAlpha: Float) {
     val open = actionStartActivity<MainActivity>()
     Box(
         modifier = GlanceModifier
@@ -89,7 +90,7 @@ private fun MultiContent(payload: WidgetPayload?, error: String?, lastAttempt: L
         Box(
             modifier = GlanceModifier
                 .fillMaxSize()
-                .background(ImageProvider(R.drawable.widget_background))
+                .background(ColorProvider(Color(0xFF101626).copy(alpha = bgAlpha)))
                 .cornerRadius(28.dp)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {

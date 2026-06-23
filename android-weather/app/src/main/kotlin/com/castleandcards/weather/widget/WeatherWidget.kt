@@ -48,6 +48,7 @@ class WeatherWidget : GlanceAppWidget() {
         val payload = WeatherRepo.cached(context)
         val error = if (payload == null) WeatherRepo.lastError(context) else null
         val lastAttempt = WeatherRepo.lastAttempt(context)
+        val bgAlpha = WeatherRepo.widgetBgAlpha(context)
 
         // Self-heal: when the cache is empty and nothing's been tried in
         // the last 30s, kick the worker now. This covers two cases the
@@ -62,14 +63,14 @@ class WeatherWidget : GlanceAppWidget() {
 
         provideContent {
             GlanceTheme {
-                WidgetContent(payload = payload, error = error, lastAttempt = lastAttempt)
+                WidgetContent(payload = payload, error = error, lastAttempt = lastAttempt, bgAlpha = bgAlpha)
             }
         }
     }
 }
 
 @Composable
-private fun WidgetContent(payload: WidgetPayload?, error: String?, lastAttempt: Long) {
+private fun WidgetContent(payload: WidgetPayload?, error: String?, lastAttempt: Long, bgAlpha: Float) {
     // Tap opens the bundled Capacitor MainActivity, which is the
     // weather app's own launcher activity. (When the widget shipped
     // as a standalone APK it bounced through LaunchActivity to an
@@ -87,7 +88,7 @@ private fun WidgetContent(payload: WidgetPayload?, error: String?, lastAttempt: 
         Box(
             modifier = GlanceModifier
                 .fillMaxSize()
-                .background(ImageProvider(R.drawable.widget_background))
+                .background(ColorProvider(Color(0xFF101626).copy(alpha = bgAlpha)))
                 .cornerRadius(28.dp)
                 .padding(horizontal = sidePadding(size), vertical = 10.dp),
         ) {

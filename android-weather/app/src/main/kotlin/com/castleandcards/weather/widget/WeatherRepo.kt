@@ -66,6 +66,20 @@ object WeatherRepo {
     }
 
     /**
+     * Widget background alpha, 0.0..1.0. Read from the same
+     * SharedPreferences file Capacitor's @capacitor/preferences plugin
+     * writes to, so the in-app settings UI and the widget agree on
+     * the value with no IPC plumbing.
+     *
+     * Default 0.85 matches the original widget_background drawable.
+     */
+    fun widgetBgAlpha(context: Context): Float {
+        val sp = context.getSharedPreferences("CapacitorStorage", Context.MODE_PRIVATE)
+        val raw = sp.getString("widget_bg_alpha", null) ?: return 0.85f
+        return raw.toFloatOrNull()?.coerceIn(0f, 1f) ?: 0.85f
+    }
+
+    /**
      * Hits the `widget` Edge Function, decodes the payload, and persists it.
      * Also persists the last error string so the widget can show a real
      * message instead of hanging on "Loading…" forever when something breaks.
