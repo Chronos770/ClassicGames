@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Big 4x4 weather + clock widget. Time and date are the centerpiece;
+  weather summary + 5-day forecast sit underneath. Minimum size is
+  set so it can shrink to 3x3 but won't fit smaller without the clock
+  digits clipping.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="220dp"
+    android:minHeight="220dp"
+    android:minResizeWidth="220dp"
+    android:minResizeHeight="220dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="4"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/widget_clock_preview"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:previewLayout="@layout/widget_clock_preview"
+    android:description="@string/widget_clock_description" />

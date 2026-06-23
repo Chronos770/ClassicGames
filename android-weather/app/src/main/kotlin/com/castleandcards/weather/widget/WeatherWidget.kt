@@ -34,9 +34,6 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.castleandcards.weather.R
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 private val SIZE_SMALL = DpSize(140.dp, 110.dp)   // ~2x2 cells
 private val SIZE_MEDIUM = DpSize(220.dp, 110.dp)  // ~3x2 cells
@@ -98,20 +95,10 @@ private fun WidgetContent(payload: WidgetPayload?, error: String?, lastAttempt: 
             if (payload == null) {
                 LoadingBlock(error = error, lastAttempt = lastAttempt)
             } else {
-                // Layout above + clock footer below in a Column. The
-                // footer is omitted at the smallest size where there's
-                // no vertical room for it.
-                Column(modifier = GlanceModifier.fillMaxSize()) {
-                    Box(modifier = GlanceModifier.fillMaxWidth().defaultWeight()) {
-                        when {
-                            size.width < SIZE_MEDIUM.width -> SmallLayout(payload)
-                            size.width < SIZE_LARGE.width -> MediumLayout(payload)
-                            else -> LargeLayout(payload)
-                        }
-                    }
-                    if (size.width >= SIZE_MEDIUM.width) {
-                        ClockFooter()
-                    }
+                when {
+                    size.width < SIZE_MEDIUM.width -> SmallLayout(payload)
+                    size.width < SIZE_LARGE.width -> MediumLayout(payload)
+                    else -> LargeLayout(payload)
                 }
             }
         }
@@ -391,41 +378,3 @@ private fun ForecastCell(day: ForecastDay, modifier: GlanceModifier) {
 }
 
 private fun white(alpha: Float): ColorProvider = ColorProvider(Color(1f, 1f, 1f, alpha))
-
-// Footer clock rendered below the weather content on Medium / Large
-// sizes. Time formatted as "h:mm AM" and refreshes whenever the
-// widget repaints — that's the 15-min periodic worker tick + any
-// manual interaction (open app, retry, etc.), so worst case the
-// time can lag by up to 15 minutes. True minute-precision would
-// need AlarmManager pings, which trade battery for accuracy that's
-// only marginal in a weather widget.
-@Composable
-private fun ClockFooter() {
-    val now = Date()
-    val time = SimpleDateFormat("h:mm", Locale.getDefault()).format(now)
-    val mer = SimpleDateFormat("a", Locale.getDefault()).format(now)
-    val date = SimpleDateFormat("EEE MMM d", Locale.getDefault()).format(now)
-    Row(
-        modifier = GlanceModifier
-            .fillMaxWidth()
-            .padding(top = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = date,
-            style = TextStyle(color = white(0.5f), fontSize = 10.sp, fontWeight = FontWeight.Medium),
-        )
-        Spacer(GlanceModifier.defaultWeight())
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(
-                text = time,
-                style = TextStyle(color = white(0.85f), fontSize = 13.sp, fontWeight = FontWeight.Bold),
-            )
-            Spacer(GlanceModifier.width(2.dp))
-            Text(
-                text = mer,
-                style = TextStyle(color = white(0.55f), fontSize = 10.sp, fontWeight = FontWeight.Medium),
-            )
-        }
-    }
-}

@@ -19,10 +19,12 @@ class RefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorke
     override suspend fun doWork(): Result = try {
         WeatherRepo.refresh(applicationContext)
         WeatherWidget().updateAll(applicationContext)
+        WeatherClockWidget().updateAll(applicationContext)
         Result.success()
     } catch (e: Exception) {
         Log.e(TAG, "doWork failed: ${e.message}", e)
         runCatching { WeatherWidget().updateAll(applicationContext) }
+        runCatching { WeatherClockWidget().updateAll(applicationContext) }
         Result.success()
     }
 

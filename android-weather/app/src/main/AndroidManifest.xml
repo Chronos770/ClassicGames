@@ -74,6 +74,21 @@
                 android:resource="@xml/widget_info" />
         </receiver>
 
+        <!-- 4x4 weather + clock widget. Time + date dominate; weather
+             sits underneath. Separate receiver so it shows as its own
+             entry in the picker. -->
+        <receiver
+            android:name="com.castleandcards.weather.widget.WeatherClockWidgetReceiver"
+            android:label="@string/widget_clock_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_clock" />
+        </receiver>
+
     </application>
 
     <uses-permission android:name="android.permission.INTERNET" />

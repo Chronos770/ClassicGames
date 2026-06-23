@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Static preview for the 4x4 clock widget shown in the picker. Mock
+  time + weather so the user can recognize the layout before placing.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="18dp"
+    android:background="@drawable/widget_background">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="bottom">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="9:42"
+            android:textColor="#FFFFFFFF"
+            android:textSize="64sp"
+            android:textStyle="bold" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="PM"
+            android:textColor="#A6FFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:layout_marginStart="6dp"
+            android:layout_marginBottom="8dp" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Monday, June 23"
+        android:textColor="#B3FFFFFF"
+        android:textSize="15sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="14dp">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="☀️"
+            android:textSize="36sp"
+            android:layout_marginEnd="8dp" />
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="72°"
+                android:textColor="#FFFFFFFF"
+                android:textSize="28sp"
+                android:textStyle="bold" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Gilliam · Feels 70°"
+                android:textColor="#99FFFFFF"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:weightSum="5">
+
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:gravity="center">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="MON" android:textColor="#8CFFFFFF" android:textSize="11sp" android:textStyle="bold" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="☀️" android:textSize="18sp" android:layout_marginTop="2dp" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="76°" android:textColor="#F2FFFFFF" android:textSize="12sp" android:textStyle="bold" android:layout_marginTop="2dp" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="58°" android:textColor="#80FFFFFF" android:textSize="11sp" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:gravity="center">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="TUE" android:textColor="#8CFFFFFF" android:textSize="11sp" android:textStyle="bold" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="⛅" android:textSize="18sp" android:layout_marginTop="2dp" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="74°" android:textColor="#F2FFFFFF" android:textSize="12sp" android:textStyle="bold" android:layout_marginTop="2dp" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="57°" android:textColor="#80FFFFFF" android:textSize="11sp" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:gravity="center">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="WED" android:textColor="#8CFFFFFF" android:textSize="11sp" android:textStyle="bold" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="☁️" android:textSize="18sp" android:layout_marginTop="2dp" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="71°" android:textColor="#F2FFFFFF" android:textSize="12sp" android:textStyle="bold" android:layout_marginTop="2dp" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="55°" android:textColor="#80FFFFFF" android:textSize="11sp" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:gravity="center">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="THU" android:textColor="#8CFFFFFF" android:textSize="11sp" android:textStyle="bold" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="⛈️" android:textSize="18sp" android:layout_marginTop="2dp" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="68°" android:textColor="#F2FFFFFF" android:textSize="12sp" android:textStyle="bold" android:layout_marginTop="2dp" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="52°" android:textColor="#80FFFFFF" android:textSize="11sp" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:gravity="center">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="FRI" android:textColor="#8CFFFFFF" android:textSize="11sp" android:textStyle="bold" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="☀️" android:textSize="18sp" android:layout_marginTop="2dp" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="78°" android:textColor="#F2FFFFFF" android:textSize="12sp" android:textStyle="bold" android:layout_marginTop="2dp" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="60°" android:textColor="#80FFFFFF" android:textSize="11sp" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

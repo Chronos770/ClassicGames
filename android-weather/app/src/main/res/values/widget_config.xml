@@ -11,8 +11,10 @@
     <string name="pwa_url" translatable="false">https://castleandcards.com/weather</string>
     <string name="station_id" translatable="false"></string>
 
-    <!-- Widget title shown in the launcher's widget picker. -->
+    <!-- Widget titles shown in the launcher's widget picker. -->
     <string name="widget_label">Weather</string>
-    <!-- Description shown below the title in the picker. -->
-    <string name="widget_description">Castle &amp; Cards Weather — current conditions, 5-day forecast, and the time at a glance.</string>
+    <string name="widget_clock_label">Weather Clock</string>
+    <!-- Descriptions shown below the title in the picker. -->
+    <string name="widget_description">Castle &amp; Cards Weather — current conditions and 5-day forecast at a glance.</string>
+    <string name="widget_clock_description">Castle &amp; Cards Weather Clock — big time + date, plus a weather summary and 5-day forecast. 4×4.</string>
 </resources>
