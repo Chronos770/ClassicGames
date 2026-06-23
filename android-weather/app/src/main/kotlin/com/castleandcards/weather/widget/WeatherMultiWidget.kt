@@ -126,28 +126,40 @@ private fun NavBar(page: Int) {
         modifier = GlanceModifier.fillMaxWidth().padding(top = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ArrowButton(label = "◀", delta = -1)
+        // Larger tap targets — small <12dp buttons often don't register
+        // a tap on widget surfaces (some launchers reserve close-range
+        // touches for widget drag).
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = GlanceModifier
+                .width(40.dp)
+                .height(28.dp)
+                .background(ColorProvider(Color(0xFF1F3554)))
+                .cornerRadius(14.dp)
+                .clickable(actionRunCallback<PrevPageActionCallback>()),
+        ) {
+            Text(
+                text = "<",
+                style = TextStyle(color = white(0.95f), fontSize = 16.sp, fontWeight = FontWeight.Bold),
+            )
+        }
         Spacer(GlanceModifier.defaultWeight())
         PageDots(page)
         Spacer(GlanceModifier.defaultWeight())
-        ArrowButton(label = "▶", delta = 1)
-    }
-}
-
-@Composable
-private fun ArrowButton(label: String, delta: Int) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = GlanceModifier
-            .background(ColorProvider(Color(0xFF1F3554)))
-            .cornerRadius(10.dp)
-            .padding(horizontal = 10.dp, vertical = 4.dp)
-            .clickable(actionRunCallback<MultiPageActionCallback>(pageActionParams(delta))),
-    ) {
-        Text(
-            text = label,
-            style = TextStyle(color = white(0.95f), fontSize = 12.sp, fontWeight = FontWeight.Bold),
-        )
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = GlanceModifier
+                .width(40.dp)
+                .height(28.dp)
+                .background(ColorProvider(Color(0xFF1F3554)))
+                .cornerRadius(14.dp)
+                .clickable(actionRunCallback<NextPageActionCallback>()),
+        ) {
+            Text(
+                text = ">",
+                style = TextStyle(color = white(0.95f), fontSize = 16.sp, fontWeight = FontWeight.Bold),
+            )
+        }
     }
 }
 

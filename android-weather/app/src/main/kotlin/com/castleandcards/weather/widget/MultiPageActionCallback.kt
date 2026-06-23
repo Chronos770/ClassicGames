@@ -1,36 +1,48 @@
 package com.castleandcards.weather.widget
 
 import android.content.Context
+import android.util.Log
 import androidx.glance.GlanceId
 import androidx.glance.action.ActionParameters
-import androidx.glance.action.actionParametersOf
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.updateAll
 
 private const val NUM_PAGES = 4
+private const val TAG = "WeatherMultiWidget"
 
-val PAGE_DELTA = ActionParameters.Key<Int>("page_delta")
+private suspend fun advance(context: Context, delta: Int) {
+    val current = WeatherRepo.multiPage(context)
+    // Modulo math that handles negatives — Kotlin's % can return
+    // negative values for negative operands.
+    val next = ((current + delta) % NUM_PAGES + NUM_PAGES) % NUM_PAGES
+    Log.i(TAG, "page nav: $current -> $next (delta=$delta)")
+    WeatherRepo.setMultiPage(context, next)
+    WeatherMultiWidget().updateAll(context)
+}
 
 /**
- * Tap action used by the multi-page widget's < / > arrow buttons.
- * Increments / decrements the page index in DataStore (mod 4) then
- * re-renders the widget so the new page paints. No network call.
+ * Tap action for the ◀ button. Two separate classes (PrevPage /
+ * NextPage) instead of one with an ActionParameters delta — the
+ * parameter-passing path through actionRunCallback can fail silently
+ * with no error in Logcat when params don't round-trip. Two classes
+ * dodges the question entirely.
  */
-class MultiPageActionCallback : ActionCallback {
+class PrevPageActionCallback : ActionCallback {
     override suspend fun onAction(
         context: Context,
         glanceId: GlanceId,
         parameters: ActionParameters,
     ) {
-        val delta = parameters[PAGE_DELTA] ?: 0
-        val current = WeatherRepo.multiPage(context)
-        // Modulo math that handles negatives — Kotlin's % can return
-        // negative values for negative operands.
-        val next = ((current + delta) % NUM_PAGES + NUM_PAGES) % NUM_PAGES
-        WeatherRepo.setMultiPage(context, next)
-        WeatherMultiWidget().updateAll(context)
+        advance(context, -1)
     }
 }
 
-fun pageActionParams(delta: Int): ActionParameters =
-    actionParametersOf(PAGE_DELTA to delta)
+class NextPageActionCallback : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters,
+    ) {
+        advance(context, 1)
+    }
+}
