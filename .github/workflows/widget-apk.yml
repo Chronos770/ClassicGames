@@ -81,6 +81,30 @@ jobs:
           rm -f public/weather-widget.apk
           rm -f public/current-release.json
 
+      # First-time bootstrap: if no stable debug keystore is committed
+      # yet, generate one. Standard Android debug credentials so AGP
+      # is happy. Committed back at the end of the workflow so future
+      # runs reuse the same cert and in-place app updates work.
+      - name: Ensure stable debug keystores
+        run: |
+          set -euo pipefail
+          for path in android-weather/app/debug.keystore android-app/app/debug.keystore; do
+            if [ ! -f "$path" ]; then
+              echo "Generating $path"
+              keytool -genkey -noprompt \
+                -alias androiddebugkey \
+                -dname "CN=Castle and Cards Debug, O=Castle and Cards, C=US" \
+                -keystore "$path" \
+                -storepass android \
+                -keypass android \
+                -keyalg RSA \
+                -keysize 2048 \
+                -validity 10000
+            else
+              echo "Reusing $path"
+            fi
+          done
+
       - name: Build web app (Vite)
         run: npm run build
 
@@ -195,6 +219,10 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           git add public/castle-and-cards.apk public/weather-app.apk public/current-release.json
+          # First-run bootstrap: commit any freshly-generated debug
+          # keystores. Subsequent runs reuse the committed ones so
+          # APK signing cert stays stable and in-place updates work.
+          git add android-weather/app/debug.keystore android-app/app/debug.keystore 2>/dev/null || true
           # Remove the stale standalone widget APK from public/ if present.
           if [ -f public/weather-widget.apk ]; then
             git rm public/weather-widget.apk || true

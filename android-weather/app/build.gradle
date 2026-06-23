@@ -17,7 +17,27 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Use a stable, repo-committed debug keystore so every CI build
+    // signs with the same certificate. Without this, each `gradlew
+    // assembleDebug` invocation generates a fresh debug key, and
+    // Android refuses to install an APK over an existing app whose
+    // signing cert doesn't match ("App not installed as package
+    // conflicts with an existing package"). The keystore IS the
+    // standard Android debug key (password "android" / alias
+    // "androiddebugkey") — Google's docs explicitly state it's safe
+    // to commit. It cannot be used to sign Play Store releases.
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
     buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
