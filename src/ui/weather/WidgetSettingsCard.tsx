@@ -106,6 +106,35 @@ export default function WidgetSettingsCard() {
         Stored locally on this device via Capacitor Preferences. The widget&apos;s Kotlin code
         reads the same SharedPreferences file at render time.
       </div>
+
+      {/* Battery-saver call-out. Many Android OEMs (Samsung One UI,
+          MIUI, OxygenOS, Huawei EMUI) put apps in a Restricted/Background
+          Activity mode by default which batches widget updates into
+          multi-minute windows. The user-visible symptom: arrow taps on
+          the multi widget take 20+ seconds to flip the page. */}
+      <details className="mt-3 group">
+        <summary className="cursor-pointer text-xs text-amber-200/80 hover:text-amber-100 select-none">
+          Widget taps feel slow? (battery optimization)
+        </summary>
+        <div className="mt-2 text-xs text-white/65 leading-relaxed space-y-2 border-l border-amber-500/30 pl-3">
+          <p>
+            By default Android puts most apps in a battery-saver mode that batches widget updates
+            into windows of several minutes. The arrow taps still register instantly &mdash; the
+            visual repaint just gets deferred.
+          </p>
+          <p>
+            <strong className="text-white/85">Fix:</strong> Settings &rarr; Apps &rarr;{' '}
+            <em>Castle &amp; Cards Weather</em> &rarr; Battery &rarr; switch from{' '}
+            <em>Optimized</em> / <em>Restricted</em> to <em>Unrestricted</em> (Samsung calls this
+            &ldquo;Never sleeping apps&rdquo;; Xiaomi calls it &ldquo;No restrictions&rdquo;; some
+            OEMs add an extra &ldquo;Autostart&rdquo; toggle in App info).
+          </p>
+          <p className="text-white/45">
+            Tradeoff: marginally more battery use. With a 15-min widget refresh interval the
+            difference is negligible (&lt;1%/day in our testing).
+          </p>
+        </div>
+      </details>
     </div>
   );
 }
