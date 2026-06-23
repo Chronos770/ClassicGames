@@ -23,6 +23,7 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
+import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -91,74 +92,83 @@ private fun MultiContent(payload: WidgetPayload?, error: String?, lastAttempt: L
             modifier = GlanceModifier
                 .fillMaxSize()
                 .background(ColorProvider(Color(0xFF101626).copy(alpha = bgAlpha)))
-                .cornerRadius(28.dp)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .cornerRadius(28.dp),
         ) {
-            Column(modifier = GlanceModifier.fillMaxSize()) {
-                // Page content (clickable area = opens app)
+            // Layout: a single Row with three sibling regions, each
+            // having its own clickable. No nested click handlers, no
+            // z-order ambiguity — RemoteViews' touch dispatcher
+            // routes taps to exactly one of these three.
+            Row(modifier = GlanceModifier.fillMaxSize()) {
+                // LEFT — prev page. Full-height side band so the tap
+                // target is large and obvious. ◀ glyph rendered centered.
                 Box(
+                    contentAlignment = Alignment.Center,
                     modifier = GlanceModifier
-                        .fillMaxWidth()
-                        .defaultWeight()
-                        .clickable(open),
+                        .clickable(actionRunCallback<PrevPageActionCallback>())
+                        .fillMaxHeight()
+                        .width(36.dp),
                 ) {
-                    if (payload == null) {
-                        LoadingPanel(error, lastAttempt)
-                    } else {
-                        when (page) {
-                            0 -> CurrentPage(payload)
-                            1 -> ForecastPage(payload)
-                            2 -> SunMoonPage(payload)
-                            else -> ClockPage(payload)
+                    Text(
+                        text = "‹",
+                        style = TextStyle(
+                            color = white(0.9f),
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                    )
+                }
+
+                // MIDDLE — page content. Clicking opens the app; bottom
+                // strip shows page dots.
+                Column(
+                    modifier = GlanceModifier
+                        .defaultWeight()
+                        .fillMaxHeight()
+                        .padding(vertical = 8.dp, horizontal = 4.dp),
+                ) {
+                    Box(
+                        modifier = GlanceModifier
+                            .fillMaxWidth()
+                            .defaultWeight()
+                            .clickable(open),
+                    ) {
+                        if (payload == null) {
+                            LoadingPanel(error, lastAttempt)
+                        } else {
+                            when (page) {
+                                0 -> CurrentPage(payload)
+                                1 -> ForecastPage(payload)
+                                2 -> SunMoonPage(payload)
+                                else -> ClockPage(payload)
+                            }
                         }
                     }
+                    Box(
+                        modifier = GlanceModifier.fillMaxWidth().padding(top = 4.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        PageDots(page)
+                    }
                 }
-                // Page indicator + arrows
-                NavBar(page = page)
-            }
-        }
-    }
-}
 
-@Composable
-private fun NavBar(page: Int) {
-    Row(
-        modifier = GlanceModifier.fillMaxWidth().padding(top = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // Larger tap targets — small <12dp buttons often don't register
-        // a tap on widget surfaces (some launchers reserve close-range
-        // touches for widget drag).
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = GlanceModifier
-                .width(40.dp)
-                .height(28.dp)
-                .background(ColorProvider(Color(0xFF1F3554)))
-                .cornerRadius(14.dp)
-                .clickable(actionRunCallback<PrevPageActionCallback>()),
-        ) {
-            Text(
-                text = "<",
-                style = TextStyle(color = white(0.95f), fontSize = 16.sp, fontWeight = FontWeight.Bold),
-            )
-        }
-        Spacer(GlanceModifier.defaultWeight())
-        PageDots(page)
-        Spacer(GlanceModifier.defaultWeight())
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = GlanceModifier
-                .width(40.dp)
-                .height(28.dp)
-                .background(ColorProvider(Color(0xFF1F3554)))
-                .cornerRadius(14.dp)
-                .clickable(actionRunCallback<NextPageActionCallback>()),
-        ) {
-            Text(
-                text = ">",
-                style = TextStyle(color = white(0.95f), fontSize = 16.sp, fontWeight = FontWeight.Bold),
-            )
+                // RIGHT — next page. Mirror of left.
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = GlanceModifier
+                        .clickable(actionRunCallback<NextPageActionCallback>())
+                        .fillMaxHeight()
+                        .width(36.dp),
+                ) {
+                    Text(
+                        text = "›",
+                        style = TextStyle(
+                            color = white(0.9f),
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                    )
+                }
+            }
         }
     }
 }
