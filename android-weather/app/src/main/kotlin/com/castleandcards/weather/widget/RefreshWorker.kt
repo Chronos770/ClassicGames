@@ -18,17 +18,11 @@ import java.util.concurrent.TimeUnit
 class RefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = try {
         WeatherRepo.refresh(applicationContext)
-        // Re-render BOTH widget variants. The user can have either or
-        // both placed; without this, only the regular widget would
-        // pick up the new payload and the multi widget would look
-        // frozen after its first paint.
         WeatherWidget().updateAll(applicationContext)
-        WeatherMultiWidget().updateAll(applicationContext)
         Result.success()
     } catch (e: Exception) {
         Log.e(TAG, "doWork failed: ${e.message}", e)
         runCatching { WeatherWidget().updateAll(applicationContext) }
-        runCatching { WeatherMultiWidget().updateAll(applicationContext) }
         Result.success()
     }
 

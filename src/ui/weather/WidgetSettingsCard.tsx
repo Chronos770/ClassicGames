@@ -51,7 +51,7 @@ export default function WidgetSettingsCard() {
           <div className="text-sm font-semibold text-white">Widget settings</div>
           <div className="text-xs text-white/55 mt-0.5 leading-relaxed">
             Tweak how the home-screen widget renders. Changes apply on the next widget refresh
-            (within 15 min, or when you tap an arrow on the multi-widget).
+            (within 15 min, or when you reopen the app).
           </div>
         </div>
       </div>
@@ -110,8 +110,8 @@ export default function WidgetSettingsCard() {
       {/* Battery-saver call-out. Many Android OEMs (Samsung One UI,
           MIUI, OxygenOS, Huawei EMUI) put apps in a Restricted/Background
           Activity mode by default which batches widget updates into
-          multi-minute windows. The user-visible symptom: arrow taps on
-          the multi widget take 20+ seconds to flip the page. */}
+          multi-minute windows. Symptom: changes to settings here can
+          take many minutes to apply to the widget. */}
       <details className="mt-3 group">
         <summary className="cursor-pointer text-xs text-amber-200/80 hover:text-amber-100 select-none">
           Widget taps feel slow? (battery optimization)
