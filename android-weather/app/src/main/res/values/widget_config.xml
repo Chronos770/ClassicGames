@@ -14,7 +14,9 @@
     <!-- Widget titles shown in the launcher's widget picker. -->
     <string name="widget_label">Weather</string>
     <string name="widget_clock_label">Weather Clock</string>
+    <string name="widget_clock_compact_label">Weather Clock — Compact</string>
     <!-- Descriptions shown below the title in the picker. -->
     <string name="widget_description">Castle &amp; Cards Weather — current conditions and 5-day forecast at a glance.</string>
     <string name="widget_clock_description">Castle &amp; Cards Weather Clock — big time + date, plus a weather summary and 5-day forecast. 4×4.</string>
+    <string name="widget_clock_compact_description">Castle &amp; Cards Weather Clock (compact) — time + date and today\'s conditions only. 4×2.</string>
 </resources>

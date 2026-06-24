@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Compact 4x2 clock + today widget. Same horizontal clock-left /
+  weather-right layout as the full Weather Clock, minus the 5-day
+  forecast strip. Min size lets it shrink to 3x2 if the user wants;
+  resize horizontal only (vertical resize would just stretch the
+  background since there's no extra content to fill it).
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="220dp"
+    android:minHeight="100dp"
+    android:minResizeWidth="220dp"
+    android:minResizeHeight="100dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/widget_clock_compact_preview"
+    android:resizeMode="horizontal"
+    android:widgetCategory="home_screen"
+    android:previewLayout="@layout/widget_clock_compact_preview"
+    android:description="@string/widget_clock_compact_description" />

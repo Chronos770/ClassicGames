@@ -20,11 +20,13 @@ class RefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         WeatherRepo.refresh(applicationContext)
         WeatherWidget().updateAll(applicationContext)
         WeatherClockWidget().updateAll(applicationContext)
+        WeatherClockCompactWidget().updateAll(applicationContext)
         Result.success()
     } catch (e: Exception) {
         Log.e(TAG, "doWork failed: ${e.message}", e)
         runCatching { WeatherWidget().updateAll(applicationContext) }
         runCatching { WeatherClockWidget().updateAll(applicationContext) }
+        runCatching { WeatherClockCompactWidget().updateAll(applicationContext) }
         Result.success()
     }
 

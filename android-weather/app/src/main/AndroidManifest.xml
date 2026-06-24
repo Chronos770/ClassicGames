@@ -89,6 +89,20 @@
                 android:resource="@xml/widget_info_clock" />
         </receiver>
 
+        <!-- Compact 4x2 clock + today variant. Same horizontal layout
+             as the full clock widget but no 5-day forecast strip. -->
+        <receiver
+            android:name="com.castleandcards.weather.widget.WeatherClockCompactWidgetReceiver"
+            android:label="@string/widget_clock_compact_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_clock_compact" />
+        </receiver>
+
     </application>
 
     <uses-permission android:name="android.permission.INTERNET" />
