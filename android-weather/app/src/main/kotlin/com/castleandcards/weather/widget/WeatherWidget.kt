@@ -338,6 +338,13 @@ private fun MiniDay(day: ForecastDay) {
             text = "${day.hi}°",
             style = TextStyle(color = white(0.9f), fontSize = 10.sp, fontWeight = FontWeight.Medium),
         )
+        if ((day.precipPct ?: 0) > 0) {
+            Spacer(GlanceModifier.width(4.dp))
+            Text(
+                text = "${day.precipPct}%",
+                style = TextStyle(color = ColorProvider(Color(0xFF7DD3FC)), fontSize = 9.sp),
+            )
+        }
     }
 }
 
@@ -376,6 +383,16 @@ private fun ForecastCell(day: ForecastDay, modifier: GlanceModifier) {
             text = "${day.hi}° ${day.lo}°",
             style = TextStyle(color = white(0.9f), fontSize = 11.sp),
         )
+        if ((day.precipPct ?: 0) > 0) {
+            Text(
+                text = "${day.precipPct}%",
+                style = TextStyle(
+                    color = ColorProvider(Color(0xFF7DD3FC)),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Medium,
+                ),
+            )
+        }
     }
 }
 

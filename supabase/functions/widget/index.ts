@@ -30,6 +30,7 @@ interface ForecastDay {
   icon: string;         // condition key e.g. "rain", "cloudy", "sunny"
   hi: number;           // °F
   lo: number;           // °F
+  precipPct: number | null; // chance of precipitation, 0-100
 }
 
 interface WidgetPayload {
@@ -76,8 +77,20 @@ async function nwsFetch(url: string, retries = 2): Promise<any> {
 }
 
 function shortDay(startTime: string): string {
-  const d = new Date(startTime);
-  return ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][d.getDay()];
+  // NWS startTime carries the station's local TZ offset (e.g.
+  // "2025-06-25T22:00:00-05:00"). The edge function runs in UTC, so
+  // `new Date(startTime).getDay()` would shift the day name across
+  // midnight UTC — a 10 PM CST period would show up as Thursday
+  // even though it's still Wednesday locally. Parse the local
+  // calendar components directly from the string to get the day in
+  // the station's timezone, not the server's.
+  const m = startTime.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) {
+    const d = new Date(startTime);
+    return ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][d.getUTCDay()];
+  }
+  const utc = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date(utc).getUTCDay()];
 }
 
 // Map NWS shortForecast to a small icon vocabulary the widget understands.
@@ -96,32 +109,33 @@ function iconFor(short: string, isDaytime: boolean): string {
 // Walk NWS daytime periods and collapse to up to 5 day-level rows with hi/lo.
 function buildForecast(periods: any[]): ForecastDay[] {
   // NWS alternates daytime + nighttime periods. Pair each daytime with the
-  // following nighttime to derive hi/lo. If today's daytime has passed (we're
-  // mid-afternoon), the API may start with the nighttime period — handle both.
+  // following nighttime to derive hi/lo. If the fetch happens after sunset
+  // the API leads with the current day's nighttime period — SKIP it,
+  // otherwise we end up with TWO rows for the same day (a "night-only"
+  // synthesized row, then the proper hi/lo row that comes from the next
+  // daytime period). Either both rows say "WED" or the night row says
+  // "THU" due to UTC-vs-local day rollover, both confusing.
   const out: ForecastDay[] = [];
   let i = 0;
+  if (periods.length > 0 && !periods[0].isDaytime) i = 1;
   while (i < periods.length && out.length < 5) {
     const p = periods[i];
-    if (p.isDaytime) {
-      const next = periods[i + 1];
-      const lo = next && !next.isDaytime ? Number(next.temperature) : Number(p.temperature);
-      out.push({
-        day: shortDay(p.startTime),
-        icon: iconFor(p.shortForecast, true),
-        hi: Math.round(Number(p.temperature)),
-        lo: Math.round(lo),
-      });
-      i += 2;
-    } else {
-      // Lead with a nighttime period — synthesize a row using just its values.
-      out.push({
-        day: shortDay(p.startTime),
-        icon: iconFor(p.shortForecast, false),
-        hi: Math.round(Number(p.temperature)),
-        lo: Math.round(Number(p.temperature)),
-      });
-      i += 1;
-    }
+    if (!p.isDaytime) { i += 1; continue; }
+    const next = periods[i + 1];
+    const lo = next && !next.isDaytime ? Number(next.temperature) : Number(p.temperature);
+    // Precip is reported per period; surface the higher of day vs night
+    // so a daytime 10% + nighttime 60% reads as a clear "60% rain" day.
+    const dayP = Number(p.probabilityOfPrecipitation?.value ?? 0);
+    const nightP = next ? Number(next.probabilityOfPrecipitation?.value ?? 0) : 0;
+    const precip = Math.round(Math.max(dayP, nightP));
+    out.push({
+      day: shortDay(p.startTime),
+      icon: iconFor(p.shortForecast, true),
+      hi: Math.round(Number(p.temperature)),
+      lo: Math.round(lo),
+      precipPct: Number.isFinite(precip) ? precip : null,
+    });
+    i += 2;
   }
   return out;
 }

@@ -32,4 +32,5 @@ data class ForecastDay(
     val icon: String,
     val hi: Int,
     val lo: Int,
+    @SerialName("precipPct") val precipPct: Int? = null,
 )

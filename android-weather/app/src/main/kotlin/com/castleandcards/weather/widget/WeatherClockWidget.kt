@@ -218,6 +218,16 @@ private fun ClockBody(p: WidgetPayload) {
                         text = "${day.lo}°",
                         style = TextStyle(color = white(0.5f), fontSize = 11.sp),
                     )
+                    if ((day.precipPct ?: 0) > 0) {
+                        Text(
+                            text = "${day.precipPct}%",
+                            style = TextStyle(
+                                color = ColorProvider(Color(0xFF7DD3FC)),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
+                            ),
+                        )
+                    }
                 }
             }
         }
