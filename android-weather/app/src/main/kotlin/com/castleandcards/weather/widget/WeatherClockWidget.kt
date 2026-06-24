@@ -102,9 +102,15 @@ private fun ClockBody(p: WidgetPayload) {
     val mer = SimpleDateFormat("a", Locale.getDefault()).format(now)
     val date = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(now)
 
-    Column(modifier = GlanceModifier.fillMaxSize()) {
-        // CLOCK — dominant, top of the widget.
-        Row(verticalAlignment = Alignment.Bottom) {
+    Column(
+        modifier = GlanceModifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        // CLOCK — centered, dominant, top of the widget.
+        Row(
+            verticalAlignment = Alignment.Bottom,
+            modifier = GlanceModifier.padding(top = 4.dp),
+        ) {
             Text(
                 text = time,
                 style = TextStyle(
@@ -134,7 +140,7 @@ private fun ClockBody(p: WidgetPayload) {
 
         Spacer(GlanceModifier.height(14.dp))
 
-        // WEATHER SUMMARY ROW
+        // WEATHER SUMMARY ROW — also centered
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = iconGlyph(p.current.icon),
@@ -162,8 +168,10 @@ private fun ClockBody(p: WidgetPayload) {
                         )
                     }
                 }
+                val precip = p.current.precipPct
+                val precipPart = if (precip != null) " · ${precip}% rain" else ""
                 Text(
-                    text = "${p.location} · Feels ${p.current.feels ?: "--"}°",
+                    text = "${p.location} · Feels ${p.current.feels ?: "--"}°$precipPart",
                     style = TextStyle(color = white(0.6f), fontSize = 12.sp),
                     maxLines = 1,
                 )

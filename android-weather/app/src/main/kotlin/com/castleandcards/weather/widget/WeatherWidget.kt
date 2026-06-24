@@ -201,8 +201,9 @@ private fun SmallLayout(p: WidgetPayload) {
             )
         }
         Text(
-            text = "Feels ${p.current.feels ?: "--"}°",
+            text = buildFeelsAndPrecip(p, withDot = true),
             style = TextStyle(color = white(0.6f), fontSize = 10.sp),
+            maxLines = 1,
         )
         Spacer(GlanceModifier.defaultWeight())
     }
@@ -242,8 +243,9 @@ private fun MediumLayout(p: WidgetPayload) {
                 )
             }
             Text(
-                text = "Feels ${p.current.feels ?: "--"}°",
+                text = buildFeelsAndPrecip(p, withDot = true),
                 style = TextStyle(color = white(0.6f), fontSize = 10.sp),
+                maxLines = 1,
             )
         }
         Spacer(GlanceModifier.width(4.dp))
@@ -378,3 +380,11 @@ private fun ForecastCell(day: ForecastDay, modifier: GlanceModifier) {
 }
 
 private fun white(alpha: Float): ColorProvider = ColorProvider(Color(1f, 1f, 1f, alpha))
+
+// "Feels 70°" or "Feels 70° · 25%". Single line so the Small/Medium
+// layouts don't grow vertically.
+internal fun buildFeelsAndPrecip(p: WidgetPayload, withDot: Boolean): String {
+    val feels = "Feels ${p.current.feels ?: "--"}°"
+    val precip = p.current.precipPct ?: return feels
+    return if (withDot) "$feels · $precip% rain" else "$feels  $precip% rain"
+}
