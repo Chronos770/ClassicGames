@@ -12,7 +12,7 @@ internal fun iconGlyph(key: String): String = when (key) {
     "rain" -> "🌧️"     // 🌧️
     "thunder" -> "⛈️"        // ⛈️
     "snow" -> "❄️"           // ❄️
-    "fog" -> "🌫️"      // 🌫️
+    "fog" -> "≋"             // ≋ (U+224B triple tilde) — three wavy lines read as mist/fog. The proper 🌫️ tofu-renders on many Android emoji fonts and a plain cloud doesn't distinguish fog from cloudy.
     else -> "☁️"
 }
 

@@ -106,49 +106,56 @@ private fun ClockBody(p: WidgetPayload) {
         modifier = GlanceModifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // CLOCK — centered, dominant, top of the widget.
+        // TOP ROW: clock on the left, current weather on the right.
+        // Stacking time + summary vertically made the body too tall and
+        // pushed the 5-day strip out of the default cell height — going
+        // horizontal keeps everything visible without the user resizing.
         Row(
-            verticalAlignment = Alignment.Bottom,
-            modifier = GlanceModifier.padding(top = 4.dp),
+            modifier = GlanceModifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = time,
-                style = TextStyle(
-                    color = white(1f),
-                    fontSize = 72.sp,
-                    fontWeight = FontWeight.Bold,
-                ),
-            )
-            Spacer(GlanceModifier.width(6.dp))
-            Text(
-                text = mer,
-                style = TextStyle(
-                    color = white(0.65f),
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Medium,
-                ),
-            )
-        }
-        Text(
-            text = date,
-            style = TextStyle(
-                color = white(0.7f),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-            ),
-        )
+            // LEFT — clock + date
+            Column(modifier = GlanceModifier.defaultWeight()) {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = time,
+                        style = TextStyle(
+                            color = white(1f),
+                            fontSize = 56.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                    )
+                    Spacer(GlanceModifier.width(4.dp))
+                    Text(
+                        text = mer,
+                        style = TextStyle(
+                            color = white(0.65f),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                        ),
+                    )
+                }
+                Text(
+                    text = date,
+                    style = TextStyle(
+                        color = white(0.65f),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                    ),
+                    maxLines = 1,
+                )
+            }
 
-        Spacer(GlanceModifier.height(14.dp))
-
-        // WEATHER SUMMARY ROW — also centered
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = iconGlyph(p.current.icon),
-                style = TextStyle(fontSize = 38.sp),
-            )
             Spacer(GlanceModifier.width(8.dp))
-            Column {
+
+            // RIGHT — icon + temp + feels/precip stacked tight
+            Column(horizontalAlignment = Alignment.End) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = iconGlyph(p.current.icon),
+                        style = TextStyle(fontSize = 28.sp),
+                    )
+                    Spacer(GlanceModifier.width(4.dp))
                     Text(
                         text = "${p.current.temp ?: "--"}°",
                         style = TextStyle(
@@ -158,21 +165,26 @@ private fun ClockBody(p: WidgetPayload) {
                         ),
                     )
                     if (p.current.alert != null) {
-                        Spacer(GlanceModifier.width(8.dp))
+                        Spacer(GlanceModifier.width(4.dp))
                         Text(
                             text = ALERT_GLYPH,
                             style = TextStyle(
                                 color = ColorProvider(Color(0xFFE03B3B)),
-                                fontSize = 18.sp,
+                                fontSize = 14.sp,
                             ),
                         )
                     }
                 }
                 val precip = p.current.precipPct
-                val precipPart = if (precip != null) " · ${precip}% rain" else ""
+                val precipPart = if (precip != null) " · ${precip}%" else ""
                 Text(
-                    text = "${p.location} · Feels ${p.current.feels ?: "--"}°$precipPart",
-                    style = TextStyle(color = white(0.6f), fontSize = 12.sp),
+                    text = "Feels ${p.current.feels ?: "--"}°$precipPart",
+                    style = TextStyle(color = white(0.6f), fontSize = 11.sp),
+                    maxLines = 1,
+                )
+                Text(
+                    text = p.location,
+                    style = TextStyle(color = white(0.5f), fontSize = 10.sp),
                     maxLines = 1,
                 )
             }
