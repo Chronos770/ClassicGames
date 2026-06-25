@@ -207,6 +207,13 @@ Deno.serve(async (req) => {
     let forecast: ForecastDay[] = [];
     let precipPct: number | null = null;
     let alert: string | null = null;
+    // The current-conditions icon is derived from the NWS hourly forecast's
+    // FIRST period — i.e. the hour we're actually in — rather than the
+    // daily forecast's first period. The daily summary reads "partly
+    // cloudy" all day; the hourly forecast knows it's raining right now.
+    // Station readings give us accurate numbers (temp/humidity/wind) but
+    // don't classify conditions, so NWS fills that gap.
+    let currentIcon: string | null = null;
     const lat = station.latitude as number | null;
     const lon = station.longitude as number | null;
     if (lat !== null && lon !== null) {
@@ -218,14 +225,40 @@ Deno.serve(async (req) => {
         ),
       ]);
       if (pointRes.status === 'fulfilled') {
-        try {
-          const fc = await nwsFetch(pointRes.value.properties.forecast);
-          forecast = buildForecast(fc?.properties?.periods ?? []);
-          const first = fc?.properties?.periods?.[0];
-          const p = first?.probabilityOfPrecipitation?.value;
-          if (p !== null && p !== undefined) precipPct = Math.round(Number(p));
-        } catch (e) {
-          console.error('forecast fetch failed:', (e as Error).message);
+        // Daily + hourly forecasts in parallel — both are derived from the
+        // same gridpoint URL set returned by /points.
+        const dailyUrl = pointRes.value.properties.forecast;
+        const hourlyUrl = pointRes.value.properties.forecastHourly;
+        const [dailyRes, hourlyRes] = await Promise.allSettled([
+          dailyUrl ? nwsFetch(dailyUrl) : Promise.resolve(null),
+          hourlyUrl ? nwsFetch(hourlyUrl) : Promise.resolve(null),
+        ]);
+        if (dailyRes.status === 'fulfilled' && dailyRes.value) {
+          try {
+            const fc = dailyRes.value;
+            forecast = buildForecast(fc?.properties?.periods ?? []);
+          } catch (e) {
+            console.error('daily forecast parse failed:', (e as Error).message);
+          }
+        } else if (dailyRes.status === 'rejected') {
+          console.error('daily forecast fetch failed:', (dailyRes.reason as Error)?.message);
+        }
+        if (hourlyRes.status === 'fulfilled' && hourlyRes.value) {
+          const h0 = hourlyRes.value?.properties?.periods?.[0];
+          if (h0) {
+            currentIcon = iconFor(String(h0.shortForecast ?? ''), Boolean(h0.isDaytime));
+            const hp = h0?.probabilityOfPrecipitation?.value;
+            if (hp !== null && hp !== undefined) precipPct = Math.round(Number(hp));
+          }
+        } else if (hourlyRes.status === 'rejected') {
+          console.error('hourly forecast fetch failed:', (hourlyRes.reason as Error)?.message);
+        }
+        // Fallback: if hourly didn't give us precip, fall back to daily's first period
+        // so the widget doesn't lose the metric entirely on a partial NWS outage.
+        if (precipPct === null && dailyRes.status === 'fulfilled' && dailyRes.value) {
+          const d0 = dailyRes.value?.properties?.periods?.[0];
+          const dp = d0?.probabilityOfPrecipitation?.value;
+          if (dp !== null && dp !== undefined) precipPct = Math.round(Number(dp));
         }
       }
       if (alertsRes.status === 'fulfilled') {
@@ -248,7 +281,10 @@ Deno.serve(async (req) => {
           ? Math.round(reading.wind_speed_last)
           : null,
         humidity: reading?.hum !== undefined && reading?.hum !== null ? Math.round(reading.hum) : null,
-        icon: forecast[0]?.icon ?? 'cloudy',
+        // Prefer the hourly-derived icon; if NWS hourly was unreachable
+        // fall back to the daily-derived icon so we still render something
+        // sensible instead of defaulting to "cloudy".
+        icon: currentIcon ?? forecast[0]?.icon ?? 'cloudy',
         alert,
       },
       forecast,
