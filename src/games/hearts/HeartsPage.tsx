@@ -241,25 +241,56 @@ export default function HeartsPage() {
   hostAiPlayRef.current = async (game: HeartsGame, aiSeats: Set<number>) => {
     if (aiPlayingRef.current) return;
     aiPlayingRef.current = true;
-    let s = game.getState();
-    while (s.phase === 'playing' && aiSeats.has(s.currentPlayer)) {
-      await new Promise((r) => setTimeout(r, 400));
-      if (destroyedRef.current) { aiPlayingRef.current = false; return; }
-      s = game.getState();
-      if (s.phase !== 'playing' || !aiSeats.has(s.currentPlayer)) break;
-      const card = selectPlay(s, s.currentPlayer);
-      if (card) {
+    // Everything the AI loop does is wrapped in try/finally: any throw from
+    // broadcast/render/sound/state would otherwise leave aiPlayingRef stuck
+    // at true and the guard above would silently no-op every future turn \u2014
+    // the host looks alive but no AI ever plays again.
+    try {
+      let s = game.getState();
+      while (s.phase === 'playing' && aiSeats.has(s.currentPlayer)) {
+        await new Promise((r) => setTimeout(r, 400));
+        if (destroyedRef.current) return;
+        s = game.getState();
+        if (s.phase !== 'playing' || !aiSeats.has(s.currentPlayer)) break;
+        const preTrickCount = s.tricks.length;
+        const preCurrentTrickLen = s.currentTrick.filter((c) => c !== null).length;
+        const card = selectPlay(s, s.currentPlayer);
+        if (!card) break;
         const playingSeat = s.currentPlayer;
-        game.playCard(s.currentPlayer, card);
+        const played = game.playCard(s.currentPlayer, card);
+        // If playCard rejected the chosen card (illegal move \u2014 2\u2663 rules,
+        // hearts-not-broken, etc.), fall back to the FIRST legal card in
+        // this seat's hand. Without this, selectPlay's rejected card gets
+        // re-picked on the next loop iteration and the AI spin-locks on
+        // the same illegal move forever, freezing the game.
+        if (!played) {
+          const legal = s.hands[s.currentPlayer].find((c) => game.playCard(s.currentPlayer, c));
+          if (!legal) {
+            // No legal card at all \u2014 genuinely stuck; surface it instead of
+            // burning cycles.
+            console.warn('[Hearts host AI] no legal card for seat', s.currentPlayer);
+            break;
+          }
+        }
         SoundManager.getInstance().play('card-flip');
         s = game.getState();
 
-        // Broadcast card-played event for animation on non-host
-        broadcastEvent({ type: 'card-played', seat: playingSeat, card });
+        // Broadcast the card that actually ended up played. If selectPlay
+        // was rejected we picked the fallback via playCard's side-effect,
+        // so re-read the last-played slot from the trick.
+        const trickAdvanced =
+          s.tricks.length > preTrickCount ||
+          s.currentTrick.filter((c) => c !== null).length > preCurrentTrickLen;
+        if (trickAdvanced) {
+          // Prefer the card we intended; if fallback ran, use the one now
+          // sitting in the current trick at this seat's slot.
+          const actualCard =
+            (s.currentTrick[playingSeat] as Card | null) ?? card;
+          broadcastEvent({ type: 'card-played', seat: playingSeat, card: actualCard });
+        }
 
         const completedTrick = game.getLastCompletedTrick();
         if (completedTrick) {
-          // Show trick with cards visible before clearing
           const displayS = { ...s, currentTrick: completedTrick.cards as (Card | null)[] };
           setState({ ...displayS });
           const rotated = rotateStateForSeat(displayS, mySeatRef.current);
@@ -284,27 +315,29 @@ export default function HeartsPage() {
         } else {
           broadcastState(game);
         }
-      } else break;
-    }
-    // Check end conditions and update turn message
-    s = game.getState();
-    if (s.phase === 'round-over') {
-      setMessage('Round over!');
-      rendererRef.current?.showAnnouncement('Round Over!', 2500);
-      broadcastState(game);
-    } else if (s.phase === 'game-over') {
-      setGameOver(true);
-      broadcastState(game);
-    } else if (s.phase === 'playing') {
-      // Update turn message for host
-      if (s.currentPlayer === mySeatRef.current) {
-        setMessage('Your turn \u2014 play a card');
-      } else {
-        const name = getSeatDisplayName(s.currentPlayer);
-        setMessage(`Waiting for ${name}...`);
       }
+      // Check end conditions and update turn message
+      s = game.getState();
+      if (s.phase === 'round-over') {
+        setMessage('Round over!');
+        rendererRef.current?.showAnnouncement('Round Over!', 2500);
+        broadcastState(game);
+      } else if (s.phase === 'game-over') {
+        setGameOver(true);
+        broadcastState(game);
+      } else if (s.phase === 'playing') {
+        if (s.currentPlayer === mySeatRef.current) {
+          setMessage('Your turn \u2014 play a card');
+        } else {
+          const name = getSeatDisplayName(s.currentPlayer);
+          setMessage(`Waiting for ${name}...`);
+        }
+      }
+    } catch (err) {
+      console.error('[Hearts host AI loop] threw:', err);
+    } finally {
+      aiPlayingRef.current = false;
     }
-    aiPlayingRef.current = false;
   };
 
   // ── Multiplayer: broadcast state (host only) ───────────────
@@ -485,18 +518,34 @@ export default function HeartsPage() {
         const handSizes: number[] = data.handSizes || [13, 13, 13, 13];
         // Only enter animating state if renderer is actually ready —
         // otherwise animatingRef would get stuck at true and queue all
-        // future state updates forever.
+        // future state updates forever. Watchdog below is a secondary
+        // guarantee for the case where the callback never fires (renderer
+        // destroyed mid-animation, RAF stopped, WebGL context lost).
         if (rendererRef.current) {
           animatingRef.current = true;
-          rendererRef.current.playDealAnimation(handSizes, () => {
-            SoundManager.getInstance().play('card-deal');
+          let cleared = false;
+          const drainAndClear = () => {
+            if (cleared) return;
+            cleared = true;
             animatingRef.current = false;
-            // Apply any queued state
             if (pendingStateRef.current) {
               const s = pendingStateRef.current;
               pendingStateRef.current = null;
               applyRemoteState(s);
             }
+          };
+          // Watchdog: if the deal animation callback hasn't fired in 5s,
+          // force-clear so game-state updates aren't queued indefinitely.
+          const watchdog = setTimeout(() => {
+            if (!cleared) {
+              console.warn('[Hearts] deal animation watchdog fired — forcing clear');
+              drainAndClear();
+            }
+          }, 5000);
+          rendererRef.current.playDealAnimation(handSizes, () => {
+            clearTimeout(watchdog);
+            SoundManager.getInstance().play('card-deal');
+            drainAndClear();
           });
         }
       }
@@ -506,15 +555,30 @@ export default function HeartsPage() {
         const absoluteSeat: number = data.seat;
         const card: Card = data.card;
         const rotatedSeat = (absoluteSeat - mySeatRef.current + 4) % 4;
-        // Guard: block game-state renders during card animation to prevent visual glitch
+        // Guard: block game-state renders during card animation to prevent
+        // visual glitch. Watchdog handles the case where the animation
+        // callback never fires (renderer destroyed, WebGL context lost).
         animatingRef.current = true;
-        rendererRef.current.animateCardToTrick(rotatedSeat, card, () => {
+        let cleared = false;
+        const drainAndClear = () => {
+          if (cleared) return;
+          cleared = true;
           animatingRef.current = false;
           if (pendingStateRef.current) {
             const s = pendingStateRef.current;
             pendingStateRef.current = null;
             applyRemoteState(s);
           }
+        };
+        const watchdog = setTimeout(() => {
+          if (!cleared) {
+            console.warn('[Hearts] card animation watchdog fired — forcing clear');
+            drainAndClear();
+          }
+        }, 3000);
+        rendererRef.current.animateCardToTrick(rotatedSeat, card, () => {
+          clearTimeout(watchdog);
+          drainAndClear();
         });
         SoundManager.getInstance().play('card-flip');
       }
