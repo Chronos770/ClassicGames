@@ -197,7 +197,7 @@ Deno.serve(async (req) => {
 
     const { data: reading, error: readErr } = await sb
       .from('weather_readings')
-      .select('temp, hum, heat_index, wind_chill, wind_speed_last, observed_at')
+      .select('temp, hum, heat_index, wind_chill, wind_speed_last, rain_rate_last_in, observed_at')
       .eq('station_id', stationId)
       .order('observed_at', { ascending: false })
       .limit(1)
@@ -266,6 +266,13 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Station-observed precipitation takes priority over the NWS-forecast icon.
+    // This ensures the widget shows "rain" when the station is actively recording
+    // rainfall, even if the NWS hourly hasn't caught up yet or was unreachable.
+    if ((reading?.rain_rate_last_in ?? 0) > 0.01) {
+      currentIcon = 'rain';
+    }
+
     const payload: WidgetPayload = {
       location: station.city || station.station_name || 'Home',
       observed_at: reading?.observed_at ?? null,
@@ -281,10 +288,11 @@ Deno.serve(async (req) => {
           ? Math.round(reading.wind_speed_last)
           : null,
         humidity: reading?.hum !== undefined && reading?.hum !== null ? Math.round(reading.hum) : null,
-        // Prefer the hourly-derived icon; if NWS hourly was unreachable
-        // fall back to the daily-derived icon so we still render something
-        // sensible instead of defaulting to "cloudy".
-        icon: currentIcon ?? forecast[0]?.icon ?? 'cloudy',
+        // Prefer the hourly-derived icon (set above), with station rain-rate
+        // override already applied. Fall back to "cloudy" rather than the daily
+        // forecast icon — the daily icon covers "today overall" and at night it
+        // resolves to tomorrow's daytime conditions, which would be misleading.
+        icon: currentIcon ?? 'cloudy',
         alert,
       },
       forecast,

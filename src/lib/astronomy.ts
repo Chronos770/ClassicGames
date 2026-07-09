@@ -140,3 +140,78 @@ export function moonPhaseEmoji(phase: number): string {
 export function moonIllumination(phase: number): number {
   return (1 - Math.cos(2 * Math.PI * phase)) / 2;
 }
+
+// ---- Moon rise / set ----
+
+// Moon geocentric position (simplified Meeus table 47a, accurate to ~10').
+function moonCoords(d: number): { ra: number; dec: number } {
+  const L = (218.316 + 13.176396 * d) * DEG;  // ecliptic longitude
+  const M = (134.963 + 13.064993 * d) * DEG;  // mean anomaly
+  const F = (93.272 + 13.229350 * d) * DEG;   // argument of latitude
+  const l = L + 6.289 * DEG * Math.sin(M);    // longitude with equation of center
+  const b = 5.128 * DEG * Math.sin(F);         // latitude
+  const e = 23.4397 * DEG;                     // ecliptic obliquity
+  return {
+    ra: Math.atan2(Math.sin(l) * Math.cos(e) - Math.tan(b) * Math.sin(e), Math.cos(l)),
+    dec: Math.asin(Math.sin(b) * Math.cos(e) + Math.cos(b) * Math.sin(e) * Math.sin(l)),
+  };
+}
+
+export interface MoonTimes {
+  moonrise: Date | null;
+  moonset: Date | null;
+}
+
+// Find moonrise and moonset within the local calendar day containing `date`.
+// Returns null for an event that doesn't occur that day (e.g. high-latitude
+// days where the moon is circumpolar or stays below the horizon all day).
+export function getMoonTimes(date: Date, lat: number, lon: number): MoonTimes {
+  const phi = lat * DEG;
+  const lw = -lon * DEG;
+  // Effective horizon: Moon parallax (~57') − atmospheric refraction (~34') ≈ −0.3°
+  const h0 = -0.3 * DEG;
+
+  const getAlt = (ms: number): number => {
+    const d = toDays(new Date(ms));
+    const { ra, dec } = moonCoords(d);
+    // Greenwich Mean Sidereal Time converted to Local Hour Angle
+    const theta = (280.16 + 360.9856235 * d) * DEG - lw;
+    const H = theta - ra;
+    return Math.asin(Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.cos(H));
+  };
+
+  // Binary-search the crossing time between two hour-boundaries
+  const bisect = (t0ms: number, t1ms: number): Date => {
+    const sign0 = Math.sign(getAlt(t0ms) - h0);
+    let lo = t0ms, hi = t1ms;
+    for (let i = 0; i < 14; i++) {
+      const mid = (lo + hi) / 2;
+      if (Math.sign(getAlt(mid) - h0) === sign0) lo = mid; else hi = mid;
+    }
+    return new Date((lo + hi) / 2);
+  };
+
+  // Scan from local midnight in 1-hour steps up to 25 hours (covers full
+  // lunar day even when moonrise/set straddles the calendar midnight).
+  const midnight = new Date(date);
+  midnight.setHours(0, 0, 0, 0);
+  const startMs = midnight.getTime();
+
+  let moonrise: Date | null = null;
+  let moonset: Date | null = null;
+  let prevAlt = getAlt(startMs);
+
+  for (let h = 1; h <= 25; h++) {
+    const tMs = startMs + h * 3600_000;
+    const alt = getAlt(tMs);
+    if (prevAlt < h0 && alt >= h0 && !moonrise) {
+      moonrise = bisect(tMs - 3600_000, tMs);
+    } else if (prevAlt >= h0 && alt < h0 && !moonset) {
+      moonset = bisect(tMs - 3600_000, tMs);
+    }
+    prevAlt = alt;
+    if (moonrise && moonset) break;
+  }
+
+  return { moonrise, moonset };
+}

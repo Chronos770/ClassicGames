@@ -61,7 +61,7 @@ export default function OverviewTab({ reading, station, stationId, tick, conditi
         ) : (
           <div />
         )}
-        <MoonCard now={new Date(reading.observed_at)} />
+        <MoonCard now={new Date(reading.observed_at)} lat={station?.latitude} lon={station?.longitude} />
       </div>
 
       {/* Wind direction components together: live compass + 24h wind rose */}

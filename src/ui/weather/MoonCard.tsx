@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { getMoonPhase, moonIllumination, moonPhaseName } from '../../lib/astronomy';
+import { getMoonPhase, getMoonTimes, moonIllumination, moonPhaseName } from '../../lib/astronomy';
 
 // Inject moon CSS once. Same pattern as AnimatedWeatherIcon — also avoids
 // the prefers-reduced-motion override so Brave / iOS-Low-Power-Mode still
@@ -26,6 +26,8 @@ function ensureMoonStyles() {
 
 interface Props {
   now?: Date;
+  lat?: number | null;
+  lon?: number | null;
 }
 
 const SYNODIC_MONTH_DAYS = 29.53058867;
@@ -65,7 +67,7 @@ function moonShadowPath(phase: number, cx: number, cy: number, r: number): strin
   );
 }
 
-export default function MoonCard({ now }: Props) {
+export default function MoonCard({ now, lat, lon }: Props) {
   useEffect(() => { ensureMoonStyles(); }, []);
   const data = useMemo(() => {
     const t = now ?? new Date();
@@ -86,6 +88,11 @@ export default function MoonCard({ now }: Props) {
 
     return { phase, illum, name, nextNew, nextFull, age };
   }, [now?.getTime()]);
+
+  const moonTimes = useMemo(() => {
+    if (lat == null || lon == null) return null;
+    return getMoonTimes(now ?? new Date(), lat, lon);
+  }, [now?.getTime(), lat, lon]);
 
   // SVG dimensions
   const size = 110;
@@ -167,6 +174,26 @@ export default function MoonCard({ now }: Props) {
               <span>Next new</span>
               <span className="font-mono text-white/80">{fmtDays(data.nextNew)}</span>
             </div>
+            {moonTimes && (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <span>Moonrise</span>
+                  <span className="font-mono text-white/80">
+                    {moonTimes.moonrise
+                      ? moonTimes.moonrise.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+                      : '—'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span>Moonset</span>
+                  <span className="font-mono text-white/80">
+                    {moonTimes.moonset
+                      ? moonTimes.moonset.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+                      : '—'}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
