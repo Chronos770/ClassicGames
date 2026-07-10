@@ -16,6 +16,12 @@
       "headers": [
         { "key": "Content-Type", "value": "application/octet-stream" }
       ]
+    },
+    {
+      "source": "/(.*).apk",
+      "headers": [
+        { "key": "Content-Disposition", "value": "attachment" }
+      ]
     }
   ]
 }
