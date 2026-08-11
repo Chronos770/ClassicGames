@@ -1,9 +1,11 @@
 // ═══════════════════════════════════════════════════════════════════
 // SolarSystemViewer.tsx — interactive 3D solar system for the Space
-// Weather tab. Drag/pinch to orbit & zoom, tap a planet or the Sun for
-// real astronomical facts, tap the three glowing markers (solar wind,
-// flare activity, aurora) for a live readout pulled from the same NOAA
-// data powering the rest of the tab.
+// Weather tab. Drag/pinch to orbit & zoom, tap a planet, moon, ring, or
+// surface feature for real astronomical facts, tap the glowing markers
+// (solar wind, flare activity, aurora) for a live readout pulled from
+// the same NOAA data powering the rest of the tab. Tapping anything
+// smoothly zooms the camera in on it (so you can freely orbit around
+// just that body); tapping empty space zooms back out.
 //
 // Distances/sizes/speeds are stylized, not to-scale (see
 // solarSystemData.ts for why). Lighting is a single point light at the
@@ -19,7 +21,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { PLANETS, SUN_RADIUS, SUN_FACTS, type PlanetDef } from '../../lib/solarSystemData';
+import { PLANETS, SUN_RADIUS, SUN_FACTS, type PlanetDef, type MoonDef, type PlanetFeature } from '../../lib/solarSystemData';
 import {
   flareActivity,
   flareClass,
@@ -32,6 +34,9 @@ import type { WeatherStation } from '../../lib/weatherService';
 type Selection =
   | { kind: 'sun' }
   | { kind: 'planet'; id: string }
+  | { kind: 'moon'; planetId: string; moonName: string }
+  | { kind: 'ring'; planetId: string }
+  | { kind: 'feature'; planetId: string; featureId: string }
   | { kind: 'solarwind' }
   | { kind: 'flare' }
   | { kind: 'aurora' };
@@ -39,6 +44,34 @@ type Selection =
 interface Props {
   data: SpaceWeatherSnapshot | null;
   station: WeatherStation | null;
+}
+
+// ── Space-weather severity → color ────────────────────────────────
+// Shared color language across the wind comet, flare burst, and aurora
+// ring: calm = blue/emerald, elevated = amber, severe = red/fuchsia.
+// Markers are drawn with a plain white glow texture and tinted via
+// `material.color` so this can update live, frame to frame, without
+// regenerating any canvas/texture.
+
+function windSeverityColor(speed: number | null, bz: number | null): number {
+  if (speed === null) return 0x93c5fd; // unknown — neutral blue
+  const veryFast = speed > 800 || (bz !== null && bz < -15);
+  const fast = speed > 600 || (bz !== null && bz < -10);
+  const elevated = speed > 450 || (bz !== null && bz < -5);
+  if (veryFast) return 0xe879f9; // fuchsia — CME-level
+  if (fast) return 0xfb923c; // orange — fast & aurora-friendly
+  if (elevated) return 0xfbbf24; // amber
+  return 0x93c5fd; // calm blue
+}
+
+function flareSeverityColor(letter: string): number {
+  switch (letter) {
+    case 'X': return 0xf5d0fe; // near-white magenta — major flare
+    case 'M': return 0xf87171; // red
+    case 'C': return 0xfb923c; // orange
+    case 'B': return 0xfacc15; // yellow
+    default: return 0xfca5a5; // dim rose — quiet/unknown
+  }
 }
 
 // ── Procedural texture helpers (canvas → THREE.CanvasTexture) ────────
@@ -174,12 +207,18 @@ function makeEarthTexture(): THREE.CanvasTexture {
   return tex;
 }
 
-function makeSunTexture(): THREE.CanvasTexture {
-  const size = 256;
-  const c = document.createElement('canvas');
-  c.width = size;
-  c.height = size;
-  const ctx = c.getContext('2d')!;
+// Fixed candidate sunspot positions (as UV fractions), generated once
+// and reused across redraws — only which ones are DRAWN changes with
+// the live active-region count, so spots appear/disappear in place
+// rather than jumping around every time data refreshes.
+const SUNSPOT_SLOTS: { u: number; v: number; scale: number }[] = Array.from({ length: 14 }, () => ({
+  u: 0.08 + Math.random() * 0.84,
+  v: 0.18 + Math.random() * 0.64,
+  scale: 0.6 + Math.random() * 0.8,
+}));
+
+function drawSunSurface(ctx: CanvasRenderingContext2D, size: number, activeSpotCount: number) {
+  ctx.clearRect(0, 0, size, size);
   ctx.fillStyle = '#ffb347';
   ctx.fillRect(0, 0, size, size);
   for (let i = 0; i < 1400; i++) {
@@ -191,13 +230,46 @@ function makeSunTexture(): THREE.CanvasTexture {
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
   }
+  // Real sunspots — count driven by the live NOAA active-region count
+  // (data.sunspots.active_regions_count), capped to how many slots we
+  // pre-generated. Each is a dark umbra with a lighter penumbra ring,
+  // roughly how sunspots actually look.
+  const n = Math.max(0, Math.min(activeSpotCount, SUNSPOT_SLOTS.length));
+  for (let i = 0; i < n; i++) {
+    const slot = SUNSPOT_SLOTS[i];
+    const x = slot.u * size;
+    const y = slot.v * size;
+    const r = 4.5 * slot.scale;
+    ctx.beginPath();
+    ctx.fillStyle = 'rgba(90,45,10,0.55)';
+    ctx.arc(x, y, r * 1.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.fillStyle = 'rgba(40,15,5,0.85)';
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function makeSunTexture(spotCount: number): { tex: THREE.CanvasTexture; redraw: (n: number) => void } {
+  const size = 256;
+  const c = document.createElement('canvas');
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext('2d')!;
+  drawSunSurface(ctx, size, spotCount);
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.ClampToEdgeWrapping;
-  return tex;
+  const redraw = (n: number) => {
+    drawSunSurface(ctx, size, n);
+    tex.needsUpdate = true;
+  };
+  return { tex, redraw };
 }
 
-// Radial-gradient sprite texture for glow effects (Sun corona, markers).
+// Radial-gradient sprite texture for glow effects (Sun corona, markers,
+// comet head/tail particles).
 function makeGlowTexture(color: string): THREE.CanvasTexture {
   const size = 128;
   const c = document.createElement('canvas');
@@ -211,6 +283,37 @@ function makeGlowTexture(color: string): THREE.CanvasTexture {
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, size, size);
   return new THREE.CanvasTexture(c);
+}
+
+// Small pill-shaped text label so the live-data markers read as
+// "something you can click," not decorative sparkles.
+function makeLabelSprite(text: string, accent: string): { sprite: THREE.Sprite; dispose: () => void } {
+  const fontPx = 40;
+  const padX = 20;
+  const padY = 14;
+  const measure = document.createElement('canvas').getContext('2d')!;
+  measure.font = `700 ${fontPx}px sans-serif`;
+  const textWidth = measure.measureText(text).width;
+  const c = document.createElement('canvas');
+  c.width = Math.ceil(textWidth + padX * 2);
+  c.height = fontPx + padY * 2;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = 'rgba(8,10,20,0.72)';
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(1.5, 1.5, c.width - 3, c.height - 3);
+  ctx.font = `700 ${fontPx}px sans-serif`;
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, c.width / 2, c.height / 2 + 2);
+  const tex = new THREE.CanvasTexture(c);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+  const sprite = new THREE.Sprite(mat);
+  const worldHeight = 0.42;
+  sprite.scale.set(worldHeight * (c.width / c.height), worldHeight, 1);
+  return { sprite, dispose: () => { tex.dispose(); mat.dispose(); } };
 }
 
 interface ClickTarget {
@@ -252,7 +355,7 @@ export default function SolarSystemViewer({ data, station }: Props) {
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 500);
+    const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 500);
     camera.position.set(0, 22, 34);
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -291,7 +394,10 @@ export default function SolarSystemViewer({ data, station }: Props) {
     }
 
     // ── Sun ──────────────────────────────────────────────────────
-    const sunTex = makeSunTexture();
+    // Sunspot count on the texture is driven by the real live NOAA
+    // active-region count (redrawn on demand via __setSunspots below,
+    // not every frame — see the note near that hook).
+    const { tex: sunTex, redraw: redrawSunspots } = makeSunTexture(dataRef.current?.sunspots.active_regions_count ?? 0);
     const sunGeo = new THREE.SphereGeometry(SUN_RADIUS, 32, 24);
     const sunMat = new THREE.MeshBasicMaterial({ map: sunTex });
     const sunMesh = new THREE.Mesh(sunGeo, sunMat);
@@ -320,12 +426,17 @@ export default function SolarSystemViewer({ data, station }: Props) {
     }
 
     // ── Planets ──────────────────────────────────────────────────
+    interface MoonRuntime {
+      pivot: THREE.Object3D;
+      def: MoonDef;
+      angle: number;
+    }
     interface PlanetRuntime {
       def: PlanetDef;
       group: THREE.Group;
       mesh: THREE.Mesh;
       angle: number;
-      moons: { pivot: THREE.Object3D; def: NonNullable<PlanetDef['moons']>[number]; angle: number }[];
+      moons: MoonRuntime[];
     }
     const runtimePlanets: PlanetRuntime[] = [];
 
@@ -367,10 +478,25 @@ export default function SolarSystemViewer({ data, station }: Props) {
         const ring = new THREE.Mesh(ringGeo, ringMat);
         ring.rotation.x = Math.PI / 2;
         tiltGroup.add(ring);
+        clickTargets.push({ object: ring, selection: { kind: 'ring', planetId: def.id } });
         disposables.push(ringGeo, ringMat);
       }
 
-      const moons: PlanetRuntime['moons'] = [];
+      // Surface landmarks (Great Red Spot, Olympus Mons, ...) — tiny
+      // marker attached directly to the spinning mesh, so it stays
+      // pinned to the same point on the surface as the planet rotates.
+      for (const feat of def.features ?? []) {
+        const dir = new THREE.Vector3(...feat.direction).normalize();
+        const fGeo = new THREE.SphereGeometry(Math.max(def.radius * 0.1, 0.02), 8, 6);
+        const fMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const marker = new THREE.Mesh(fGeo, fMat);
+        marker.position.copy(dir).multiplyScalar(def.radius * 1.05);
+        mesh.add(marker);
+        clickTargets.push({ object: marker, selection: { kind: 'feature', planetId: def.id, featureId: feat.id } });
+        disposables.push(fGeo, fMat);
+      }
+
+      const moons: MoonRuntime[] = [];
       for (const m of def.moons ?? []) {
         const mGeo = new THREE.SphereGeometry(m.radius, 10, 8);
         const mMat = new THREE.MeshStandardMaterial({ color: m.color, roughness: 0.95 });
@@ -378,35 +504,64 @@ export default function SolarSystemViewer({ data, station }: Props) {
         const pivot = new THREE.Object3D();
         pivot.add(mMesh);
         group.add(pivot);
+        clickTargets.push({ object: mMesh, selection: { kind: 'moon', planetId: def.id, moonName: m.name } });
         moons.push({ pivot, def: m, angle: Math.random() * Math.PI * 2 });
         disposables.push(mGeo, mMat);
       }
 
       runtimePlanets.push({ def, group, mesh, angle, moons });
     }
+    const earthRuntime = runtimePlanets.find((r) => r.def.id === 'earth')!;
+    const earthDef = earthRuntime.def;
 
     // ── Live data markers ────────────────────────────────────────
-    // Solar wind: a small glowing marker roughly between the Sun and
-    // Earth's orbit, color/pulse driven by real current wind speed.
-    const windTex = makeGlowTexture('rgba(96,165,250,1)');
-    const windMat = new THREE.SpriteMaterial({ map: windTex, transparent: true, depthWrite: false });
-    const windMarker = new THREE.Sprite(windMat);
-    const earthDef = PLANETS.find((p) => p.id === 'earth')!;
-    windMarker.position.set(earthDef.orbitRadius * 0.55, 0.6, 0);
-    windMarker.scale.set(1.1, 1.1, 1);
-    scene.add(windMarker);
-    clickTargets.push({ object: windMarker, selection: { kind: 'solarwind' } });
-    disposables.push(windTex, windMat);
+    // Solar wind: rendered as an actual comet — a bright head with a
+    // fading particle tail — continuously streaming outward from the
+    // Sun toward wherever Earth currently is in its orbit. Direction
+    // and general path are illustrative, but its travel SPEED and color
+    // are driven by the real, live solar wind speed from NOAA.
+    // White base so material.color can tint it live by real severity
+    // (see windSeverityColor/flareSeverityColor) without regenerating
+    // the texture every frame.
+    const windTex = makeGlowTexture('rgba(255,255,255,1)');
+    const windHeadMat = new THREE.SpriteMaterial({ map: windTex, transparent: true, depthWrite: false, color: 0x93c5fd });
+    const windHead = new THREE.Sprite(windHeadMat);
+    windHead.scale.set(0.55, 0.55, 1);
+    scene.add(windHead);
+    clickTargets.push({ object: windHead, selection: { kind: 'solarwind' } });
+    disposables.push(windTex, windHeadMat);
 
-    // Flare activity: pulsing marker just off the Sun's surface.
-    const flareTex = makeGlowTexture('rgba(248,113,113,1)');
-    const flareMat = new THREE.SpriteMaterial({ map: flareTex, transparent: true, depthWrite: false });
+    const WIND_TAIL_LEN = 16;
+    const windTailSprites: THREE.Sprite[] = [];
+    const windTailMats: THREE.SpriteMaterial[] = [];
+    for (let i = 0; i < WIND_TAIL_LEN; i++) {
+      const m = new THREE.SpriteMaterial({ map: windTex, transparent: true, depthWrite: false, opacity: 0 });
+      const s = new THREE.Sprite(m);
+      scene.add(s);
+      windTailSprites.push(s);
+      windTailMats.push(m);
+      disposables.push(m);
+    }
+    const windHistory: THREE.Vector3[] = [];
+    let windProgress = 0; // 0 (near Sun) → 1 (past Earth's orbit), loops
+
+    const { sprite: windLabel, dispose: disposeWindLabel } = makeLabelSprite('Solar Wind', '#93c5fd');
+    scene.add(windLabel);
+    disposables.push({ dispose: disposeWindLabel });
+
+    // Flare activity: a prominent pulsing burst right at the Sun's edge.
+    const flareTex = makeGlowTexture('rgba(255,255,255,1)');
+    const flareMat = new THREE.SpriteMaterial({ map: flareTex, transparent: true, depthWrite: false, color: 0xfca5a5 });
     const flareMarker = new THREE.Sprite(flareMat);
-    flareMarker.position.set(SUN_RADIUS * 1.6, SUN_RADIUS * 0.9, SUN_RADIUS * 0.6);
-    flareMarker.scale.set(0.9, 0.9, 1);
+    flareMarker.position.set(SUN_RADIUS * 1.5, SUN_RADIUS * 0.85, SUN_RADIUS * 0.55);
+    flareMarker.scale.set(1.5, 1.5, 1);
     scene.add(flareMarker);
     clickTargets.push({ object: flareMarker, selection: { kind: 'flare' } });
     disposables.push(flareTex, flareMat);
+
+    const { sprite: flareLabel, dispose: disposeFlareLabel } = makeLabelSprite('Solar Flare', '#fca5a5');
+    scene.add(flareLabel);
+    disposables.push({ dispose: disposeFlareLabel });
 
     // Aurora: a ring around Earth, colored by Kp / aurora probability.
     const auroraRingGeo = new THREE.RingGeometry(earthDef.radius * 1.7, earthDef.radius * 2.1, 32);
@@ -418,12 +573,15 @@ export default function SolarSystemViewer({ data, station }: Props) {
     });
     const auroraRing = new THREE.Mesh(auroraRingGeo, auroraRingMat);
     disposables.push(auroraRingGeo, auroraRingMat);
-    // Parented under Earth's tilt group so it stays centered on the
-    // planet as it orbits; found after the fact since Earth was built
-    // in the loop above.
-    const earthRuntime = runtimePlanets.find((r) => r.def.id === 'earth')!;
-    earthRuntime.mesh.parent!.add(auroraRing);
+    // Parented under the scene (not Earth's group) so its per-frame
+    // position can be set explicitly alongside the label below — Earth's
+    // own position is read fresh from earthRuntime.group each frame.
+    scene.add(auroraRing);
     clickTargets.push({ object: auroraRing, selection: { kind: 'aurora' } });
+
+    const { sprite: auroraLabel, dispose: disposeAuroraLabel } = makeLabelSprite('Aurora', '#6ee7b7');
+    scene.add(auroraLabel);
+    disposables.push({ dispose: disposeAuroraLabel });
 
     // ── Pointer handling (click vs drag-to-orbit) ───────────────
     const raycaster = new THREE.Raycaster();
@@ -448,7 +606,10 @@ export default function SolarSystemViewer({ data, station }: Props) {
       pointerToNdc(e);
       raycaster.setFromCamera(ndc, camera);
       const hits = raycaster.intersectObjects(clickTargets.map((t) => t.object), false);
-      if (hits.length === 0) return;
+      if (hits.length === 0) {
+        setSelected(null); // tapped empty space — zoom back out
+        return;
+      }
       const hitObj = hits[0].object;
       const target = clickTargets.find((t) => t.object === hitObj);
       if (target) setSelected(target.selection);
@@ -471,10 +632,83 @@ export default function SolarSystemViewer({ data, station }: Props) {
 
     setReady(true);
 
+    // ── Camera focus (click-to-zoom) ────────────────────────────
+    // Clicking any body smoothly pulls the camera in close enough to
+    // freely orbit around just that object, while continuing to track
+    // its position as it orbits/moves. Clicking empty space (or ✕)
+    // clears focus and the camera drifts back out to the wide default
+    // range via the restored min/max distance.
+    interface FocusTarget {
+      getPos: () => THREE.Vector3;
+      distance: number;
+    }
+    let focus: FocusTarget | null = null;
+    const DEFAULT_MIN_DIST = 6;
+    const DEFAULT_MAX_DIST = 90;
+
+    function computeFocus(sel: Selection | null): FocusTarget | null {
+      if (!sel) return null;
+      switch (sel.kind) {
+        case 'sun':
+          return { getPos: () => new THREE.Vector3(0, 0, 0), distance: SUN_RADIUS * 3.2 };
+        case 'planet': {
+          const rp = runtimePlanets.find((r) => r.def.id === sel.id);
+          if (!rp) return null;
+          return { getPos: () => rp.group.position, distance: rp.def.radius * 6.5 + 1.1 };
+        }
+        case 'ring': {
+          const rp = runtimePlanets.find((r) => r.def.id === sel.planetId);
+          if (!rp) return null;
+          return { getPos: () => rp.group.position, distance: rp.def.radius * 8 + 1.2 };
+        }
+        case 'feature': {
+          const rp = runtimePlanets.find((r) => r.def.id === sel.planetId);
+          if (!rp) return null;
+          return { getPos: () => rp.group.position, distance: rp.def.radius * 5.5 + 0.9 };
+        }
+        case 'moon': {
+          const rp = runtimePlanets.find((r) => r.def.id === sel.planetId);
+          const moon = rp?.moons.find((m) => m.def.name === sel.moonName);
+          if (!rp || !moon) return null;
+          // Simple translation, not a rotation — pivot is a direct
+          // child of `group` with no intervening rotated node, so world
+          // position is just the sum, no matrix-world lag to worry about.
+          return {
+            getPos: () => rp.group.position.clone().add(moon.pivot.position),
+            distance: moon.def.radius * 11 + 0.35,
+          };
+        }
+        case 'solarwind':
+          return { getPos: () => windHead.position, distance: 2.4 };
+        case 'flare':
+          return { getPos: () => flareMarker.position, distance: SUN_RADIUS * 2.1 };
+        case 'aurora':
+          return { getPos: () => earthRuntime.group.position, distance: earthDef.radius * 6.5 + 1.1 };
+        default:
+          return null;
+      }
+    }
+
+    (container as any).__setFocus = (sel: Selection | null) => {
+      focus = computeFocus(sel);
+      if (focus) {
+        controls.minDistance = Math.max(0.1, focus.distance * 0.3);
+        controls.maxDistance = focus.distance * 4;
+      } else {
+        controls.minDistance = DEFAULT_MIN_DIST;
+        controls.maxDistance = DEFAULT_MAX_DIST;
+      }
+    };
+
+    // Redrawing a 256x256 canvas (noise + spots) every frame would be
+    // wasteful for something that only changes when fresh data lands —
+    // so this fires on demand from a React effect below rather than
+    // from inside animate().
+    (container as any).__setSunspots = (n: number) => redrawSunspots(n);
+
     // ── Animation loop ──────────────────────────────────────────
     const clock = new THREE.Clock();
     let animId = 0;
-    let focusedId: string | null = null;
 
     function animate() {
       if (disposed) return;
@@ -495,19 +729,56 @@ export default function SolarSystemViewer({ data, station }: Props) {
         }
       }
 
-      // Live marker updates from the latest fetched data.
+      // ── Live marker updates from the latest fetched data ────────
       const d = dataRef.current;
       const speed = d?.solar_wind.latest.speed ?? null;
-      const windScale = speed === null ? 1 : Math.max(0.7, Math.min(2.2, speed / 400));
-      const windPulse = 1 + Math.sin(t * 2.2) * 0.12;
-      windMarker.scale.setScalar(1.1 * windScale * windPulse);
+      const bz = d?.solar_wind.latest.bz ?? null;
+      const speedFactor = speed === null ? 1 : Math.max(0.5, Math.min(2.5, speed / 400));
+      const windColor = windSeverityColor(speed, bz);
+      windHeadMat.color.setHex(windColor);
+      for (const m of windTailMats) m.color.setHex(windColor);
+
+      // Comet-style solar wind stream: travels from just outside the
+      // Sun's corona out past Earth's current orbital position, along
+      // the Sun→Earth line, looping continuously. Faster real wind
+      // speed = faster loop.
+      windProgress += delta * 0.12 * speedFactor;
+      if (windProgress > 1) {
+        windProgress -= 1;
+        windHistory.length = 0; // avoid a stray tail segment snapping across the whole path on wrap
+      }
+      const windAngle = earthRuntime.angle;
+      const windR = THREE.MathUtils.lerp(SUN_RADIUS * 1.35, earthDef.orbitRadius * 1.3, windProgress);
+      const windY = Math.sin(windProgress * Math.PI) * 0.9;
+      windHead.position.set(Math.cos(windAngle) * windR, windY, Math.sin(windAngle) * windR);
+      const windHeadPulse = 1 + Math.sin(t * 3) * 0.15;
+      windHead.scale.setScalar(0.5 * speedFactor * 0.6 * windHeadPulse + 0.25);
+
+      windHistory.unshift(windHead.position.clone());
+      if (windHistory.length > WIND_TAIL_LEN + 1) windHistory.pop();
+      for (let i = 0; i < WIND_TAIL_LEN; i++) {
+        const p = windHistory[i + 1];
+        const sprite = windTailSprites[i];
+        const mat = windTailMats[i];
+        if (!p) {
+          mat.opacity = 0;
+          continue;
+        }
+        sprite.position.copy(p);
+        const life = 1 - i / WIND_TAIL_LEN;
+        mat.opacity = life * life * 0.55;
+        sprite.scale.setScalar((0.5 * speedFactor * 0.6 + 0.25) * (0.25 + life * 0.6));
+      }
+      windLabel.position.copy(windHead.position).add(new THREE.Vector3(0, 0.55, 0));
 
       const flux = d?.xray.latest_flux ?? null;
       const flareAct = flareActivity(flux);
-      const flarePulse = flareAct.label.startsWith('Major') || flareAct.label.startsWith('Moderate')
-        ? 1 + Math.sin(t * 6) * 0.35
-        : 1 + Math.sin(t * 1.5) * 0.1;
-      flareMarker.scale.setScalar(0.9 * flarePulse);
+      const flareCls = flareClass(flux);
+      const flareHot = flareAct.label.startsWith('Major') || flareAct.label.startsWith('Moderate');
+      const flarePulse = flareHot ? 1 + Math.sin(t * 6) * 0.4 : 1 + Math.sin(t * 1.4) * 0.15;
+      flareMarker.scale.setScalar(1.5 * flarePulse);
+      flareMat.color.setHex(flareSeverityColor(flareCls.letter));
+      flareLabel.position.copy(flareMarker.position).add(new THREE.Vector3(0, 0.65, 0));
 
       const kp = d?.kp.current ?? null;
       if (kp !== null) {
@@ -521,25 +792,25 @@ export default function SolarSystemViewer({ data, station }: Props) {
         auroraRingMat.color.setHex(color);
       }
       auroraRingMat.opacity = 0.4 + Math.sin(t * 2) * 0.15;
+      auroraRing.position.copy(earthRuntime.group.position);
       auroraRing.lookAt(camera.position);
+      auroraLabel.position.copy(earthRuntime.group.position).add(new THREE.Vector3(0, earthDef.radius * 2.6, 0));
 
-      // Smoothly follow a focused planet so it stays centered while it
-      // continues to orbit.
-      if (focusedId) {
-        const rp = runtimePlanets.find((r) => r.def.id === focusedId);
-        if (rp) controls.target.lerp(rp.group.position, 0.06);
+      // ── Camera focus follow/zoom ─────────────────────────────
+      if (focus) {
+        const targetPos = focus.getPos();
+        const dir = new THREE.Vector3().subVectors(camera.position, controls.target);
+        const curDist = dir.length() || 1;
+        dir.normalize();
+        controls.target.lerp(targetPos, 0.08);
+        const newDist = THREE.MathUtils.lerp(curDist, focus.distance, 0.07);
+        camera.position.copy(controls.target).addScaledVector(dir, newDist);
       }
 
       controls.update();
       renderer.render(scene, camera);
     }
     animate();
-
-    // Expose a tiny hook so the React click handler (outside this
-    // closure) can update which planet the camera follows.
-    (container as any).__focusPlanet = (id: string | null) => {
-      focusedId = id;
-    };
 
     return () => {
       disposed = true;
@@ -554,12 +825,21 @@ export default function SolarSystemViewer({ data, station }: Props) {
     };
   }, []);
 
-  // Keep the camera following whichever planet is selected.
+  // Push the current selection into the scene's focus/zoom system.
   useEffect(() => {
     const container = containerRef.current as any;
-    if (!container?.__focusPlanet) return;
-    container.__focusPlanet(selected?.kind === 'planet' ? selected.id : null);
+    if (!container?.__setFocus) return;
+    container.__setFocus(selected);
   }, [selected]);
+
+  // Redraw the Sun's sunspots when the live active-region count changes
+  // (not every render — only the count value itself matters here).
+  const activeRegionsCount = data?.sunspots.active_regions_count ?? 0;
+  useEffect(() => {
+    const container = containerRef.current as any;
+    if (!container?.__setSunspots) return;
+    container.__setSunspots(activeRegionsCount);
+  }, [activeRegionsCount]);
 
   return (
     <div className="bg-black/30 backdrop-blur-md rounded-xl border border-white/10 overflow-hidden">
@@ -568,7 +848,8 @@ export default function SolarSystemViewer({ data, station }: Props) {
           The solar system, right now
         </div>
         <div className="text-[11px] text-white/50">
-          Drag to rotate · scroll or pinch to zoom · tap a planet, or the glowing markers, for details
+          Drag to rotate · scroll or pinch to zoom · tap a planet, moon, ring, or labeled marker to zoom in
+          and see details · tap empty space to zoom back out
         </div>
       </div>
       <div className="relative w-full" style={{ height: 'min(72vw, 460px)', minHeight: 280 }}>
@@ -604,12 +885,15 @@ function InfoPanel({
       <button
         onClick={onClose}
         className="absolute top-2 right-2 text-white/40 hover:text-white text-sm w-6 h-6 flex items-center justify-center rounded hover:bg-white/10"
-        aria-label="Close"
+        aria-label="Close and zoom back out"
       >
         ✕
       </button>
       {selection.kind === 'sun' && <SunPanel />}
       {selection.kind === 'planet' && <PlanetPanel id={selection.id} />}
+      {selection.kind === 'moon' && <MoonPanel planetId={selection.planetId} moonName={selection.moonName} />}
+      {selection.kind === 'ring' && <RingPanel planetId={selection.planetId} />}
+      {selection.kind === 'feature' && <FeaturePanel planetId={selection.planetId} featureId={selection.featureId} />}
       {selection.kind === 'solarwind' && <SolarWindPanel data={data} />}
       {selection.kind === 'flare' && <FlarePanel data={data} />}
       {selection.kind === 'aurora' && <AuroraPanel data={data} station={station} />}
@@ -653,6 +937,65 @@ function PlanetPanel({ id }: { id: string }) {
       <Fact label="Atmosphere" value={p.facts.atmosphere} />
       <Fact label="Moons" value={p.facts.moonCount} />
       <p className="text-[11px] text-white/55 leading-relaxed mt-2">{p.facts.blurb}</p>
+      {(p.moons?.length || p.features?.length || p.hasRing) && (
+        <p className="text-[10px] text-white/35 mt-3 pt-2 border-t border-white/10">
+          Zoomed in — look around for {[
+            p.moons?.length ? `${p.moons.length} moon${p.moons.length > 1 ? 's' : ''}` : null,
+            p.features?.length ? 'surface features' : null,
+            p.hasRing ? 'its rings' : null,
+          ].filter(Boolean).join(', ')} to tap.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function MoonPanel({ planetId, moonName }: { planetId: string; moonName: string }) {
+  const p = PLANETS.find((x) => x.id === planetId);
+  const m = p?.moons?.find((x) => x.name === moonName);
+  if (!p || !m) return null;
+  return (
+    <div className="pr-5">
+      <div className="text-[10px] uppercase tracking-wide text-white/35 mb-0.5">Moon of {p.name}</div>
+      <div className="text-lg font-display font-bold text-slate-200 mb-2">{m.name}</div>
+      <Fact label="Diameter" value={m.facts.diameterKm} />
+      <Fact label="Distance from planet" value={m.facts.distanceFromPlanetKm} />
+      <Fact label="Orbital period" value={m.facts.orbitalPeriod} />
+      <p className="text-[11px] text-white/55 leading-relaxed mt-2">{m.facts.blurb}</p>
+    </div>
+  );
+}
+
+const RING_BLURBS: Record<string, string> = {
+  saturn:
+    "Trillions of chunks of ice and rock, ranging from dust grains to mountain-sized blocks, spread across a disk that's incredibly thin — about 10 meters thick on average despite being over 280,000 km wide. Likely the remains of a shattered moon or comet.",
+  uranus:
+    "Discovered in 1977 by watching a star flicker as Uranus passed in front of it — the rings themselves are too dark to see directly from Earth. Made of much larger, darker particles than Saturn's icy, bright rings.",
+};
+
+function RingPanel({ planetId }: { planetId: string }) {
+  const p = PLANETS.find((x) => x.id === planetId);
+  if (!p) return null;
+  return (
+    <div className="pr-5">
+      <div className="text-[10px] uppercase tracking-wide text-white/35 mb-0.5">Ring system</div>
+      <div className="text-lg font-display font-bold text-amber-100 mb-2">{p.name}'s Rings</div>
+      <p className="text-[11px] text-white/55 leading-relaxed">
+        {RING_BLURBS[planetId] ?? "A ring system made of countless small icy and rocky particles orbiting the planet."}
+      </p>
+    </div>
+  );
+}
+
+function FeaturePanel({ planetId, featureId }: { planetId: string; featureId: string }) {
+  const p = PLANETS.find((x) => x.id === planetId);
+  const f: PlanetFeature | undefined = p?.features?.find((x) => x.id === featureId);
+  if (!p || !f) return null;
+  return (
+    <div className="pr-5">
+      <div className="text-[10px] uppercase tracking-wide text-white/35 mb-0.5">Surface feature on {p.name}</div>
+      <div className="text-lg font-display font-bold text-orange-200 mb-2">{f.name}</div>
+      <p className="text-[11px] text-white/55 leading-relaxed">{f.blurb}</p>
     </div>
   );
 }
@@ -668,9 +1011,9 @@ function SolarWindPanel({ data }: { data: SpaceWeatherSnapshot | null }) {
       <Fact label="Density" value={l?.density !== null && l?.density !== undefined ? `${l.density.toFixed(1)} p/cm³` : '—'} />
       <Fact label="Bz (N/S magnetism)" value={l?.bz !== null && l?.bz !== undefined ? `${l.bz.toFixed(1)} nT` : '—'} />
       <p className="text-[11px] text-white/55 leading-relaxed mt-2">
-        This is the actual stream of particles flowing from the Sun past Earth right now, measured a
-        million miles upwind. Strongly negative Bz punches holes in Earth's magnetic shield and drives
-        aurora.
+        The streaking "comet" is a stylized stand-in for the actual stream of particles flowing from the
+        Sun past Earth right now, measured a million miles upwind — its speed here scales with the real
+        wind speed. Strongly negative Bz punches holes in Earth's magnetic shield and drives aurora.
       </p>
     </div>
   );

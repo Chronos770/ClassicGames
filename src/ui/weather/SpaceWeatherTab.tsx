@@ -94,7 +94,7 @@ export default function SpaceWeatherTab({ station, tick }: Props) {
       </div>
 
       {data.aurora && data.aurora.points.length > 0 && (
-        <AuroraMapCard aurora={data.aurora} station={station} />
+        <AuroraMapCard data={data} station={station} />
       )}
 
       <SunImageCard imgIndex={imgIndex} setImgIndex={setImgIndex} />
@@ -561,22 +561,100 @@ function AuroraCard({ data, station }: { data: SpaceWeatherSnapshot; station: We
 }
 
 // Polar-projection heatmap of NOAA's OVATION aurora nowcast grid — the
-// closest thing to a "radar" for aurora. Two small polar plots (N/S
+// closest thing to a "radar" for aurora. Two polar plots (N/S
 // hemisphere), each point colored by aurora probability/intensity, with
 // the user's station plotted on top so they can see at a glance whether
 // the oval currently reaches them. Rendered to a <canvas> via raw pixel
 // pushes rather than one DOM/SVG element per grid point — the grid can
 // carry several thousand points and canvas handles that instantly where
 // SVG would start to choke, especially on lower-end phones.
-function AuroraMapCard({ aurora, station }: { aurora: AuroraSnapshot; station: WeatherStation | null }) {
+//
+// Fullscreen mode (⛶) doesn't just blow the maps up — it's the one
+// place a compact strip of the rest of the tab's live numbers (Kp,
+// solar wind, flares, sunspots, NOAA scales) shows up alongside the
+// maps, so you can cross-reference without the base card getting
+// cluttered with a second copy of everything above it.
+function AuroraMapCard({ data, station }: { data: SpaceWeatherSnapshot; station: WeatherStation | null }) {
+  const aurora = data.aurora!; // caller only renders this card when data.aurora is present
+  const [fullscreen, setFullscreen] = useState(false);
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFullscreen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [fullscreen]);
+
+  return (
+    <div className="bg-black/30 backdrop-blur-md rounded-xl border border-white/10 p-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <CardHeader title="Aurora forecast map — the closest thing to radar for the northern lights">
+            NOAA's OVATION model estimates aurora probability across the whole globe every few
+            minutes, forecast about 30-60 minutes ahead. Brighter/hotter colors mean a better
+            chance of visible aurora at that location. Your station is marked with a white ring
+            if it falls within plotted range.
+          </CardHeader>
+        </div>
+        <button
+          onClick={() => setFullscreen(true)}
+          className="flex-shrink-0 text-[11px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+          title="View fullscreen"
+        >
+          ⛶ Fullscreen
+        </button>
+      </div>
+      <AuroraMapBody data={data} aurora={aurora} station={station} sizeKey="compact" />
+      {fullscreen && (
+        <div className="fixed inset-0 z-50 bg-black/97 backdrop-blur-sm overflow-y-auto">
+          <div className="max-w-5xl mx-auto px-4 py-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-sm font-display font-bold text-white">Aurora Forecast Map</div>
+              <button
+                onClick={() => setFullscreen(false)}
+                className="text-white/60 hover:text-white text-sm w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10"
+                aria-label="Close fullscreen"
+              >
+                ✕
+              </button>
+            </div>
+            <SpaceWeatherStrip data={data} />
+            <div className="mt-4">
+              <AuroraMapBody data={data} aurora={aurora} station={station} sizeKey="full" />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AuroraMapBody({
+  data,
+  aurora,
+  station,
+  sizeKey,
+}: {
+  data: SpaceWeatherSnapshot;
+  aurora: AuroraSnapshot;
+  station: WeatherStation | null;
+  sizeKey: 'compact' | 'full';
+}) {
   const northRef = useRef<HTMLCanvasElement>(null);
   const southRef = useRef<HTMLCanvasElement>(null);
 
   const northPts = useMemo(() => aurora.points.filter((p) => p[1] > 0), [aurora.points]);
   const southPts = useMemo(() => aurora.points.filter((p) => p[1] < 0), [aurora.points]);
 
-  useDrawAuroraPolar(northRef, northPts, 'north', station);
-  useDrawAuroraPolar(southRef, southPts, 'south', station);
+  useDrawAuroraPolar(northRef, northPts, 'north', station, sizeKey);
+  useDrawAuroraPolar(southRef, southPts, 'south', station, sizeKey);
 
   const stationVal =
     station?.latitude != null && station?.longitude != null
@@ -584,19 +662,14 @@ function AuroraMapCard({ aurora, station }: { aurora: AuroraSnapshot; station: W
       : null;
 
   return (
-    <div className="bg-black/30 backdrop-blur-md rounded-xl border border-white/10 p-4">
-      <CardHeader title="Aurora forecast map — the closest thing to radar for the northern lights">
-        NOAA's OVATION model estimates aurora probability across the whole globe every few
-        minutes, forecast about 30-60 minutes ahead. Brighter/hotter colors mean a better chance
-        of visible aurora at that location. Your station is marked with a white ring if it falls
-        within plotted range.
-      </CardHeader>
-      <div className="text-[10px] text-white/40 mb-2">
+    <>
+      <div className="text-[10px] text-white/40 mb-2 mt-2">
         Observed {aurora.observation_time ? new Date(aurora.observation_time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '—'}
         {' · '}forecast for{' '}
         {aurora.forecast_time ? new Date(aurora.forecast_time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '—'}
+        {' · '}Kp {data.kp.current !== null ? data.kp.current.toFixed(1) : '—'}
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className={sizeKey === 'full' ? 'grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-3xl mx-auto' : 'grid grid-cols-2 gap-3'}>
         <div>
           <div className="text-[10px] uppercase tracking-wide text-white/40 text-center mb-1">Northern Hemisphere</div>
           <canvas ref={northRef} className="w-full aspect-square rounded-lg bg-black/40" />
@@ -607,12 +680,50 @@ function AuroraMapCard({ aurora, station }: { aurora: AuroraSnapshot; station: W
         </div>
       </div>
       {stationVal !== null && (
-        <div className="text-xs text-white/60 mt-3 pt-3 border-t border-white/5">
+        <div className="text-xs text-white/60 mt-3 pt-3 border-t border-white/5 text-center">
           Aurora probability directly over your station right now:{' '}
           <span className="text-white font-semibold">{Math.round(stationVal)}%</span>
         </div>
       )}
       <AuroraLegend />
+    </>
+  );
+}
+
+// Compact, horizontally-scrollable strip of the tab's other live
+// numbers — only shown in the fullscreen aurora map, so cross-checking
+// "is this a real storm?" doesn't require closing the map to scroll up.
+function SpaceWeatherStrip({ data }: { data: SpaceWeatherSnapshot }) {
+  const kp = kpDescription(data.kp.current);
+  const wind = solarWindActivity(data.solar_wind.latest.speed, data.solar_wind.latest.bz);
+  const flare = flareActivity(data.xray.latest_flux);
+  const cls = flareClass(data.xray.latest_flux);
+  const chips: { label: string; value: string; tone: string }[] = [
+    { label: 'Kp index', value: `${kp.label}${data.kp.current !== null ? ` (${data.kp.current.toFixed(1)})` : ''}`, tone: kp.tone },
+    {
+      label: 'Solar wind',
+      value: `${wind.label}${data.solar_wind.latest.speed !== null ? ` · ${Math.round(data.solar_wind.latest.speed)} km/s` : ''}`,
+      tone: wind.tone,
+    },
+    { label: 'Flares', value: `${flare.label} (${cls.letter === '—' ? '—' : `${cls.letter}${cls.magnitude}`})`, tone: flare.tone },
+    { label: 'Sunspot number', value: data.sunspots.ssn !== null ? String(data.sunspots.ssn) : '—', tone: 'text-white' },
+    { label: 'Active regions', value: String(data.sunspots.active_regions_count), tone: 'text-white' },
+  ];
+  if (data.scales) {
+    chips.push({ label: 'G / S / R', value: `G${data.scales.G} S${data.scales.S} R${data.scales.R}`, tone: 'text-white' });
+  }
+  chips.push({ label: 'NOAA alerts (36h)', value: String(data.alerts.length), tone: data.alerts.length > 0 ? 'text-amber-300' : 'text-white/50' });
+
+  return (
+    <div className="overflow-x-auto -mx-1 px-1">
+      <div className="flex gap-2 min-w-max pb-1">
+        {chips.map((c) => (
+          <div key={c.label} className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 min-w-[130px]">
+            <div className="text-[9px] uppercase tracking-wide text-white/40">{c.label}</div>
+            <div className={`text-xs font-semibold mt-0.5 ${c.tone}`}>{c.value}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -639,6 +750,10 @@ function useDrawAuroraPolar(
   points: AuroraGridPoint[],
   hemisphere: 'north' | 'south',
   station: WeatherStation | null,
+  // Not read directly — included only so the effect re-runs (and picks
+  // up the canvas's new clientWidth) when switching between the compact
+  // card and the fullscreen overlay, which render at very different sizes.
+  sizeKey: 'compact' | 'full',
 ) {
   useEffect(() => {
     const canvas = ref.current;
@@ -709,7 +824,7 @@ function useDrawAuroraPolar(
     ctx.arc(cx, cy, 2, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.fill();
-  }, [ref, points, hemisphere, station?.latitude, station?.longitude]);
+  }, [ref, points, hemisphere, station?.latitude, station?.longitude, sizeKey]);
 }
 
 function degToRad(deg: number): number {

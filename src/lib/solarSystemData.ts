@@ -18,12 +18,35 @@ export interface PlanetFacts {
   blurb: string;
 }
 
+export interface MoonFacts {
+  diameterKm: string;
+  distanceFromPlanetKm: string;
+  orbitalPeriod: string;
+  blurb: string;
+}
+
 export interface MoonDef {
   name: string;
   radius: number; // scene units
   orbitRadius: number; // scene units, from planet center
   orbitSpeed: number; // radians/sec, stylized
   color: number;
+  facts: MoonFacts;
+}
+
+// A notable surface landmark, rendered as a small marker fixed to a point
+// on the planet's mesh (so it spins with the planet, like it's actually
+// attached to the surface). localPosition is a point roughly on the
+// planet's surface in the mesh's own local space (before the mesh's
+// radius scaling is applied elsewhere — see SolarSystemViewer, which
+// normalizes it to the planet's actual radius).
+export interface PlanetFeature {
+  id: string;
+  name: string;
+  // Unit-sphere direction (doesn't need to be normalized, the viewer
+  // normalizes it) picking a point on the surface.
+  direction: [number, number, number];
+  blurb: string;
 }
 
 export interface PlanetDef {
@@ -39,6 +62,7 @@ export interface PlanetDef {
   hasRing?: boolean;
   ringColor?: number;
   moons?: MoonDef[];
+  features?: PlanetFeature[];
   facts: PlanetFacts;
 }
 
@@ -99,7 +123,21 @@ export const PLANETS: PlanetDef[] = [
     orbitSpeed: 0.29,
     spinSpeed: 1.4,
     axialTilt: 23.4,
-    moons: [{ name: 'Moon', radius: 0.1, orbitRadius: 0.7, orbitSpeed: 0.9, color: 0xaaaaaa }],
+    moons: [
+      {
+        name: 'Moon',
+        radius: 0.1,
+        orbitRadius: 0.7,
+        orbitSpeed: 0.9,
+        color: 0xaaaaaa,
+        facts: {
+          diameterKm: '3,474 km',
+          distanceFromPlanetKm: '384,400 km average',
+          orbitalPeriod: '27.3 days',
+          blurb: 'Earth\'s only natural satellite and the fifth-largest moon in the solar system. Tidally locked — the same face always points at Earth. Likely formed from debris after a Mars-sized body struck the young Earth ~4.5 billion years ago.',
+        },
+      },
+    ],
     facts: {
       distanceAU: 1.0,
       distanceKm: '149.6 million km',
@@ -123,8 +161,40 @@ export const PLANETS: PlanetDef[] = [
     spinSpeed: 1.36,
     axialTilt: 25.2,
     moons: [
-      { name: 'Phobos', radius: 0.03, orbitRadius: 0.42, orbitSpeed: 2.1, color: 0x8a7f70 },
-      { name: 'Deimos', radius: 0.025, orbitRadius: 0.58, orbitSpeed: 1.3, color: 0x8a7f70 },
+      {
+        name: 'Phobos',
+        radius: 0.03,
+        orbitRadius: 0.42,
+        orbitSpeed: 2.1,
+        color: 0x8a7f70,
+        facts: {
+          diameterKm: '~22 km (irregular, potato-shaped)',
+          distanceFromPlanetKm: '9,377 km',
+          orbitalPeriod: '7 hours 39 minutes — faster than Mars rotates',
+          blurb: 'Orbits so fast and close that it rises in the west and sets in the east, twice a day. Tidal forces are dragging it slowly inward — in 30-50 million years it will likely break apart into a ring or crash into Mars.',
+        },
+      },
+      {
+        name: 'Deimos',
+        radius: 0.025,
+        orbitRadius: 0.58,
+        orbitSpeed: 1.3,
+        color: 0x8a7f70,
+        facts: {
+          diameterKm: '~12 km (irregular, potato-shaped)',
+          distanceFromPlanetKm: '23,460 km',
+          orbitalPeriod: '30.3 hours',
+          blurb: 'Smaller and smoother than Phobos, likely a captured asteroid. From Mars\' surface it would look like a bright, slow-moving star rather than a proper moon.',
+        },
+      },
+    ],
+    features: [
+      {
+        id: 'olympus-mons',
+        name: 'Olympus Mons',
+        direction: [0.3, 0.85, 0.4],
+        blurb: 'The tallest volcano — and tallest planetary mountain — in the solar system, at roughly 21.9 km high (2.5x Everest). It\'s a shield volcano, built up over billions of years by lava flows, with a base wide enough to roughly cover the state of Arizona.',
+      },
     ],
     facts: {
       distanceAU: 1.52,
@@ -149,10 +219,66 @@ export const PLANETS: PlanetDef[] = [
     spinSpeed: 2.6, // gas giants really do spin fast — Jupiter's day is under 10 hours
     axialTilt: 3.1,
     moons: [
-      { name: 'Io', radius: 0.06, orbitRadius: 1.5, orbitSpeed: 1.6, color: 0xe8d27a },
-      { name: 'Europa', radius: 0.055, orbitRadius: 1.75, orbitSpeed: 1.3, color: 0xd8c9a8 },
-      { name: 'Ganymede', radius: 0.09, orbitRadius: 2.0, orbitSpeed: 1.0, color: 0x9c8f7a },
-      { name: 'Callisto', radius: 0.08, orbitRadius: 2.3, orbitSpeed: 0.8, color: 0x6e6255 },
+      {
+        name: 'Io',
+        radius: 0.06,
+        orbitRadius: 1.5,
+        orbitSpeed: 1.6,
+        color: 0xe8d27a,
+        facts: {
+          diameterKm: '3,643 km',
+          distanceFromPlanetKm: '421,700 km',
+          orbitalPeriod: '1.77 days',
+          blurb: 'The most volcanically active body in the solar system — over 400 active volcanoes, powered by tidal heating as Jupiter and neighboring moons Europa and Ganymede constantly flex it.',
+        },
+      },
+      {
+        name: 'Europa',
+        radius: 0.055,
+        orbitRadius: 1.75,
+        orbitSpeed: 1.3,
+        color: 0xd8c9a8,
+        facts: {
+          diameterKm: '3,122 km',
+          distanceFromPlanetKm: '671,000 km',
+          orbitalPeriod: '3.55 days',
+          blurb: 'An icy crust hides a liquid water ocean underneath — possibly more water than all of Earth\'s oceans combined. One of the most promising places in the solar system to search for life.',
+        },
+      },
+      {
+        name: 'Ganymede',
+        radius: 0.09,
+        orbitRadius: 2.0,
+        orbitSpeed: 1.0,
+        color: 0x9c8f7a,
+        facts: {
+          diameterKm: '5,268 km',
+          distanceFromPlanetKm: '1,070,000 km',
+          orbitalPeriod: '7.15 days',
+          blurb: 'The largest moon in the solar system — bigger than the planet Mercury. The only moon known to generate its own magnetic field.',
+        },
+      },
+      {
+        name: 'Callisto',
+        radius: 0.08,
+        orbitRadius: 2.3,
+        orbitSpeed: 0.8,
+        color: 0x6e6255,
+        facts: {
+          diameterKm: '4,821 km',
+          distanceFromPlanetKm: '1,883,000 km',
+          orbitalPeriod: '16.7 days',
+          blurb: 'One of the most heavily cratered surfaces known — it\'s been geologically inactive for billions of years, so nothing has erased the impact scars.',
+        },
+      },
+    ],
+    features: [
+      {
+        id: 'great-red-spot',
+        name: 'Great Red Spot',
+        direction: [0.35, -0.15, 0.9],
+        blurb: 'A storm bigger than Earth that has raged for at least 190 years (possibly since the 1600s). Winds inside it reach over 400 km/h. It has been slowly shrinking for decades but shows no sign of disappearing soon.',
+      },
     ],
     facts: {
       distanceAU: 5.2,
@@ -178,7 +304,21 @@ export const PLANETS: PlanetDef[] = [
     axialTilt: 26.7,
     hasRing: true,
     ringColor: 0xc9b98a,
-    moons: [{ name: 'Titan', radius: 0.075, orbitRadius: 2.0, orbitSpeed: 0.7, color: 0xd9a441 }],
+    moons: [
+      {
+        name: 'Titan',
+        radius: 0.075,
+        orbitRadius: 2.0,
+        orbitSpeed: 0.7,
+        color: 0xd9a441,
+        facts: {
+          diameterKm: '5,150 km — 2nd-largest moon in the solar system',
+          distanceFromPlanetKm: '1,222,000 km',
+          orbitalPeriod: '15.9 days',
+          blurb: 'The only other body in the solar system with stable liquid on its surface — lakes and rivers of liquid methane and ethane, under a thick, hazy nitrogen atmosphere denser than Earth\'s.',
+        },
+      },
+    ],
     facts: {
       distanceAU: 9.5,
       distanceKm: '1.43 billion km',
@@ -225,7 +365,21 @@ export const PLANETS: PlanetDef[] = [
     orbitSpeed: 0.055,
     spinSpeed: 1.8,
     axialTilt: 28.3,
-    moons: [{ name: 'Triton', radius: 0.06, orbitRadius: 1.1, orbitSpeed: -0.6, color: 0xbcd0e0 }],
+    moons: [
+      {
+        name: 'Triton',
+        radius: 0.06,
+        orbitRadius: 1.1,
+        orbitSpeed: -0.6,
+        color: 0xbcd0e0,
+        facts: {
+          diameterKm: '2,707 km',
+          distanceFromPlanetKm: '354,800 km',
+          orbitalPeriod: '5.88 days (retrograde)',
+          blurb: 'Orbits backwards relative to Neptune\'s rotation — the only large moon in the solar system that does. Almost certainly a captured Kuiper Belt object, not formed alongside Neptune. Has active nitrogen geysers.',
+        },
+      },
+    ],
     facts: {
       distanceAU: 30.1,
       distanceKm: '4.5 billion km',
