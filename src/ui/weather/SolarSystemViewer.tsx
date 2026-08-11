@@ -19,6 +19,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { PLANETS, SUN_RADIUS, SUN_FACTS, type PlanetDef, type MoonDef, type PlanetFeature } from '../../lib/solarSystemData';
@@ -373,12 +374,33 @@ interface ClickTarget {
   selection: Selection;
 }
 
+// What the running Three.js scene exposes to React once built, so the
+// component's other effects (fullscreen toggle, focus/zoom, sunspot
+// redraw) can drive it without tearing anything down. Kept in a ref
+// rather than component state since none of this should ever trigger
+// a re-render.
+interface SceneEngine {
+  attach: (el: HTMLDivElement) => void;
+  setFocus: (sel: Selection | null) => void;
+  setSunspots: (n: number) => void;
+}
+
 export default function SolarSystemViewer({ data, station }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  // Two possible homes for the live WebGL canvas: the normal in-card
+  // spot, and a fullscreen one rendered through a portal (see below).
+  // Only one is ever attached at a time — attach() (built inside the
+  // setup effect) moves the *same* canvas element between them via
+  // plain DOM appendChild, which re-parents it without losing its GL
+  // context, so toggling fullscreen never rebuilds the scene or resets
+  // the camera.
+  const compactContainerRef = useRef<HTMLDivElement>(null);
+  const fullscreenContainerRef = useRef<HTMLDivElement>(null);
+  const engineRef = useRef<SceneEngine | null>(null);
   const dataRef = useRef(data);
   const stationRef = useRef(station);
   const [selected, setSelected] = useState<Selection | null>(null);
   const [ready, setReady] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
 
   useEffect(() => {
     dataRef.current = data;
@@ -387,24 +409,55 @@ export default function SolarSystemViewer({ data, station }: Props) {
     stationRef.current = station;
   }, [station]);
 
+  // Fullscreen chrome is rendered via a portal straight into
+  // document.body (see the return statement) — NOT just `position:
+  // fixed` in place. Reason: this tab's route wrapper
+  // (src/ui/Layout.tsx's `<motion.div>` around `<Outlet />`) is
+  // animated by Framer Motion, and an ancestor with a CSS transform
+  // establishes a new containing block for `position: fixed`
+  // descendants — so a plain fixed-position overlay here would only
+  // ever fill that wrapper's box, not the real viewport. A portal
+  // sidesteps the whole issue by mounting outside that subtree.
   useEffect(() => {
-    const containerEl = containerRef.current;
-    if (!containerEl) return;
-    // Explicitly-typed non-null alias — plain narrowing of `container`
-    // doesn't survive being read inside the nested `resize` function
-    // declaration below, so give the closures a binding TS already
-    // knows is non-null by its declared type, not by control flow.
-    const container: HTMLDivElement = containerEl;
+    if (!fullscreen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFullscreen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [fullscreen]);
+
+  // Move the live canvas to whichever container is currently mounted —
+  // fires on mount (attaching for the first time) and every time
+  // `fullscreen` toggles (re-parenting into/out of the portal).
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    const target = fullscreen ? fullscreenContainerRef.current : compactContainerRef.current;
+    if (!target) return;
+    engine.attach(target);
+  }, [fullscreen]);
+
+  useEffect(() => {
+    const initialContainer = compactContainerRef.current;
+    if (!initialContainer) return;
 
     let disposed = false;
     const clickTargets: ClickTarget[] = [];
     const disposables: { dispose: () => void }[] = [];
 
     // ── Renderer / Scene / Camera ─────────────────────────────────
+    // Not attached to a DOM container here — engine.attach() (defined
+    // near the bottom of this effect) handles that, and also runs on
+    // every fullscreen toggle via the effect above.
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setClearColor(0x03040a);
-    container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 500);
@@ -715,18 +768,27 @@ export default function SolarSystemViewer({ data, station }: Props) {
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointerup', onPointerUp);
 
-    // ── Resize (responsive to container) ────────────────────────
-    function resize() {
-      const w = container.clientWidth;
-      const h = container.clientHeight;
+    // ── Resize (responsive to whichever container currently holds
+    // the canvas — compact card or fullscreen portal) ──────────────
+    let activeContainer: HTMLDivElement = initialContainer;
+    function resizeTo(el: HTMLDivElement) {
+      const w = el.clientWidth;
+      const h = el.clientHeight;
       if (w === 0 || h === 0) return;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
     }
-    resize();
-    const ro = new ResizeObserver(resize);
-    ro.observe(container);
+    const ro = new ResizeObserver(() => resizeTo(activeContainer));
+
+    function attach(el: HTMLDivElement) {
+      activeContainer = el;
+      el.appendChild(renderer.domElement);
+      ro.disconnect();
+      ro.observe(el);
+      resizeTo(el);
+    }
+    attach(initialContainer);
 
     setReady(true);
 
@@ -801,7 +863,7 @@ export default function SolarSystemViewer({ data, station }: Props) {
       }
     }
 
-    (container as any).__setFocus = (sel: Selection | null) => {
+    function setFocus(sel: Selection | null) {
       const next = computeFocus(sel);
       if (next) {
         focus = next;
@@ -816,13 +878,20 @@ export default function SolarSystemViewer({ data, station }: Props) {
         controls.minDistance = DEFAULT_MIN_DIST;
         controls.maxDistance = DEFAULT_MAX_DIST;
       }
-    };
+    }
 
-    // Redrawing a 256x256 canvas (noise + spots) every frame would be
-    // wasteful for something that only changes when fresh data lands —
-    // so this fires on demand from a React effect below rather than
-    // from inside animate().
-    (container as any).__setSunspots = (n: number) => redrawSunspots(n);
+    // Exposed to React (the effects above/below this one) via a ref
+    // rather than DOM-node properties, now that the canvas can live in
+    // either of two different containers depending on fullscreen state.
+    engineRef.current = {
+      attach,
+      setFocus,
+      // Redrawing a 256x256 canvas (noise + spots) every frame would be
+      // wasteful for something that only changes when fresh data lands
+      // — so this fires on demand from a React effect below instead of
+      // from inside animate().
+      setSunspots: (n: number) => redrawSunspots(n),
+    };
 
     // ── Animation loop ──────────────────────────────────────────
     const clock = new THREE.Clock();
@@ -989,6 +1058,7 @@ export default function SolarSystemViewer({ data, station }: Props) {
 
     return () => {
       disposed = true;
+      engineRef.current = null;
       cancelAnimationFrame(animId);
       ro.disconnect();
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
@@ -996,45 +1066,50 @@ export default function SolarSystemViewer({ data, station }: Props) {
       controls.dispose();
       for (const d2 of disposables) d2.dispose();
       renderer.dispose();
-      if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement);
+      renderer.domElement.remove();
     };
   }, []);
 
   // Push the current selection into the scene's focus/zoom system.
   useEffect(() => {
-    const container = containerRef.current as any;
-    if (!container?.__setFocus) return;
-    container.__setFocus(selected);
+    engineRef.current?.setFocus(selected);
   }, [selected]);
 
   // Redraw the Sun's sunspots when the live active-region count changes
   // (not every render — only the count value itself matters here).
   const activeRegionsCount = data?.sunspots.active_regions_count ?? 0;
   useEffect(() => {
-    const container = containerRef.current as any;
-    if (!container?.__setSunspots) return;
-    container.__setSunspots(activeRegionsCount);
+    engineRef.current?.setSunspots(activeRegionsCount);
   }, [activeRegionsCount]);
 
   return (
     <div className="bg-black/30 backdrop-blur-md rounded-xl border border-white/10 overflow-hidden">
-      <div className="px-4 pt-4 pb-2">
-        <div className="text-xs uppercase tracking-wide text-white/40 font-semibold">
-          The solar system, right now
+      <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-xs uppercase tracking-wide text-white/40 font-semibold">
+            The solar system, right now
+          </div>
+          <div className="text-[11px] text-white/50">
+            Drag to rotate · scroll or pinch to zoom · tap a planet, moon, ring, or labeled marker to zoom
+            in and see details · tap empty space to zoom back out
+          </div>
         </div>
-        <div className="text-[11px] text-white/50">
-          Drag to rotate · scroll or pinch to zoom · tap a planet, moon, ring, or labeled marker to zoom in
-          and see details · tap empty space to zoom back out
-        </div>
+        <button
+          onClick={() => setFullscreen(true)}
+          className="flex-shrink-0 min-h-[38px] text-xs sm:text-[13px] font-medium px-3 py-2 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 border border-sky-400/30 text-sky-200 hover:text-white transition-colors"
+          title="View fullscreen"
+        >
+          ⛶ Fullscreen
+        </button>
       </div>
       <div className="relative w-full" style={{ height: 'min(72vw, 460px)', minHeight: 280 }}>
-        <div ref={containerRef} className="absolute inset-0" />
+        <div ref={compactContainerRef} className="absolute inset-0" />
         {!ready && (
           <div className="absolute inset-0 flex items-center justify-center text-white/40 text-sm animate-pulse">
             Building the solar system…
           </div>
         )}
-        {selected && (
+        {selected && !fullscreen && (
           <InfoPanel
             selection={selected}
             data={data}
@@ -1044,6 +1119,39 @@ export default function SolarSystemViewer({ data, station }: Props) {
           />
         )}
       </div>
+
+      {fullscreen && createPortal(
+        <div className="fixed inset-0 z-50 bg-[#03040a] flex flex-col">
+          <div className="px-4 py-3 flex items-center justify-between gap-2 border-b border-white/10 flex-shrink-0">
+            <div className="min-w-0">
+              <div className="text-sm font-display font-bold text-white">The Solar System</div>
+              <div className="text-[11px] text-white/50 truncate">
+                Drag to rotate · scroll or pinch to zoom · tap anything for details
+              </div>
+            </div>
+            <button
+              onClick={() => setFullscreen(false)}
+              className="flex-shrink-0 text-white/60 hover:text-white text-sm w-9 h-9 flex items-center justify-center rounded-lg hover:bg-white/10"
+              aria-label="Exit fullscreen"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="relative flex-1 min-h-0">
+            <div ref={fullscreenContainerRef} className="absolute inset-0" />
+            {selected && (
+              <InfoPanel
+                selection={selected}
+                data={data}
+                station={station}
+                onClose={() => setSelected(null)}
+                onSelect={setSelected}
+              />
+            )}
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
