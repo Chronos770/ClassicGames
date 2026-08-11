@@ -605,7 +605,7 @@ function AuroraMapCard({ data, station }: { data: SpaceWeatherSnapshot; station:
         </div>
         <button
           onClick={() => setFullscreen(true)}
-          className="flex-shrink-0 text-[11px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+          className="flex-shrink-0 min-h-[38px] text-xs sm:text-[13px] font-medium px-3 py-2 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 border border-sky-400/30 text-sky-200 hover:text-white transition-colors"
           title="View fullscreen"
         >
           ⛶ Fullscreen

@@ -285,6 +285,58 @@ function makeGlowTexture(color: string): THREE.CanvasTexture {
   return new THREE.CanvasTexture(c);
 }
 
+// Elongated "shooting star" glow — bright core tapering to transparent
+// at both ends along Y, soft falloff across X. Used for the solar-wind
+// streak's head so it reads as a fast-moving particle, not a round dot.
+// White base so material.color can tint it live (see makeGlowTexture).
+function makeStreakTexture(): THREE.CanvasTexture {
+  const w = 64;
+  const h = 256;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d')!;
+  const cx = w / 2;
+  const cy = h / 2;
+  const img = ctx.createImageData(w, h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const nx = (x - cx) / (w / 2);
+      const ny = (y - cy) / (h / 2);
+      // Elliptical falloff, softer along the long (Y) axis so the tip
+      // fades gradually rather than looking cut off.
+      const d = Math.sqrt(nx * nx + ny * ny * 0.55);
+      const a = Math.max(0, 1 - d);
+      const i = (y * w + x) * 4;
+      img.data[i] = 255;
+      img.data[i + 1] = 255;
+      img.data[i + 2] = 255;
+      img.data[i + 3] = Math.round(255 * a * a);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return new THREE.CanvasTexture(c);
+}
+
+// Horizontal fade for the wind's ribbon tail: opaque at U=0 (the head
+// end) fading to fully transparent at U=1 (the oldest, trailing end).
+// White base so material.color can tint it live by severity.
+function makeRibbonGradientTexture(): THREE.CanvasTexture {
+  const w = 256;
+  const h = 8;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d')!;
+  const grad = ctx.createLinearGradient(0, 0, w, 0);
+  grad.addColorStop(0, 'rgba(255,255,255,0.95)');
+  grad.addColorStop(0.5, 'rgba(255,255,255,0.5)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+  return new THREE.CanvasTexture(c);
+}
+
 // Small pill-shaped text label so the live-data markers read as
 // "something you can click," not decorative sparkles.
 function makeLabelSprite(text: string, accent: string): { sprite: THREE.Sprite; dispose: () => void } {
@@ -515,33 +567,57 @@ export default function SolarSystemViewer({ data, station }: Props) {
     const earthDef = earthRuntime.def;
 
     // ── Live data markers ────────────────────────────────────────
-    // Solar wind: rendered as an actual comet — a bright head with a
-    // fading particle tail — continuously streaming outward from the
-    // Sun toward wherever Earth currently is in its orbit. Direction
-    // and general path are illustrative, but its travel SPEED and color
-    // are driven by the real, live solar wind speed from NOAA.
-    // White base so material.color can tint it live by real severity
-    // (see windSeverityColor/flareSeverityColor) without regenerating
-    // the texture every frame.
-    const windTex = makeGlowTexture('rgba(255,255,255,1)');
-    const windHeadMat = new THREE.SpriteMaterial({ map: windTex, transparent: true, depthWrite: false, color: 0x93c5fd });
-    const windHead = new THREE.Sprite(windHeadMat);
-    windHead.scale.set(0.55, 0.55, 1);
+    // Solar wind: a streaking particle with a tapered ribbon tail —
+    // meant to read as an actual fast-moving stream, not a floating
+    // ball — continuously traveling from the Sun's corona toward
+    // wherever Earth currently is in its orbit. Direction and general
+    // path are illustrative, but its travel SPEED and color are driven
+    // by the real, live solar wind speed/Bz from NOAA.
+    const streakTex = makeStreakTexture();
+    disposables.push(streakTex);
+
+    // Head: a small plane, manually billboarded each frame to face the
+    // camera while staying elongated along the direction of travel —
+    // a Sprite can't do this (Sprites only ever rotate in pure
+    // screen-space, so they can't lean into a 3D velocity direction).
+    const windHeadGeo = new THREE.PlaneGeometry(1, 1);
+    const windHeadMat = new THREE.MeshBasicMaterial({
+      map: streakTex, color: 0x93c5fd, transparent: true, depthWrite: false,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    });
+    const windHead = new THREE.Mesh(windHeadGeo, windHeadMat);
     scene.add(windHead);
     clickTargets.push({ object: windHead, selection: { kind: 'solarwind' } });
-    disposables.push(windTex, windHeadMat);
+    disposables.push(windHeadGeo, windHeadMat);
 
-    const WIND_TAIL_LEN = 16;
-    const windTailSprites: THREE.Sprite[] = [];
-    const windTailMats: THREE.SpriteMaterial[] = [];
+    // Tail: one ribbon mesh built fresh each frame from the recent
+    // position history (billboarded per-segment toward the camera),
+    // tapering in width and fading via the gradient texture below —
+    // a continuous streak instead of a chain of separate dots.
+    const WIND_TAIL_LEN = 22;
+    const ribbonTex = makeRibbonGradientTexture();
+    const ribbonMat = new THREE.MeshBasicMaterial({
+      map: ribbonTex, color: 0x93c5fd, transparent: true, depthWrite: false,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    });
+    const ribbonGeo = new THREE.BufferGeometry();
+    const ribbonPositions = new Float32Array((WIND_TAIL_LEN + 1) * 2 * 3);
+    const ribbonUvs = new Float32Array((WIND_TAIL_LEN + 1) * 2 * 2);
+    const ribbonIndices: number[] = [];
     for (let i = 0; i < WIND_TAIL_LEN; i++) {
-      const m = new THREE.SpriteMaterial({ map: windTex, transparent: true, depthWrite: false, opacity: 0 });
-      const s = new THREE.Sprite(m);
-      scene.add(s);
-      windTailSprites.push(s);
-      windTailMats.push(m);
-      disposables.push(m);
+      const a = i * 2;
+      ribbonIndices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
     }
+    ribbonGeo.setAttribute('position', new THREE.BufferAttribute(ribbonPositions, 3));
+    ribbonGeo.setAttribute('uv', new THREE.BufferAttribute(ribbonUvs, 2));
+    ribbonGeo.setIndex(ribbonIndices);
+    ribbonGeo.setDrawRange(0, 0); // nothing to draw until history fills in
+    const windRibbon = new THREE.Mesh(ribbonGeo, ribbonMat);
+    windRibbon.frustumCulled = false; // custom-updated bounds, never auto-computed
+    scene.add(windRibbon);
+    clickTargets.push({ object: windRibbon, selection: { kind: 'solarwind' } });
+    disposables.push(ribbonGeo, ribbonMat, ribbonTex);
+
     const windHistory: THREE.Vector3[] = [];
     let windProgress = 0; // 0 (near Sun) → 1 (past Earth's orbit), loops
 
@@ -549,19 +625,41 @@ export default function SolarSystemViewer({ data, station }: Props) {
     scene.add(windLabel);
     disposables.push({ dispose: disposeWindLabel });
 
-    // Flare activity: a prominent pulsing burst right at the Sun's edge.
-    const flareTex = makeGlowTexture('rgba(255,255,255,1)');
-    const flareMat = new THREE.SpriteMaterial({ map: flareTex, transparent: true, depthWrite: false, color: 0xfca5a5 });
-    const flareMarker = new THREE.Sprite(flareMat);
-    flareMarker.position.set(SUN_RADIUS * 1.5, SUN_RADIUS * 0.85, SUN_RADIUS * 0.55);
-    flareMarker.scale.set(1.5, 1.5, 1);
-    scene.add(flareMarker);
-    clickTargets.push({ object: flareMarker, selection: { kind: 'flare' } });
-    disposables.push(flareTex, flareMat);
+    // Flare activity: an actual prominence-style arc erupting from the
+    // Sun's surface (like a real solar flare/loop), not a floating
+    // ball. Two feet anchored on the photosphere, child of sunMesh so
+    // it co-rotates with the surface like a real active region would.
+    const flareDir = new THREE.Vector3(1.5, 0.85, 0.55).normalize();
+    const flareTangent = new THREE.Vector3().crossVectors(flareDir, new THREE.Vector3(0, 1, 0)).normalize();
+    const flareFoot1 = flareDir.clone().applyAxisAngle(flareTangent, 0.42).multiplyScalar(SUN_RADIUS * 1.01);
+    const flareFoot2 = flareDir.clone().applyAxisAngle(flareTangent, -0.42).multiplyScalar(SUN_RADIUS * 1.01);
+    const flarePeak = flareDir.clone().multiplyScalar(SUN_RADIUS * 1.85);
+    const flareCurve = new THREE.QuadraticBezierCurve3(flareFoot1, flarePeak, flareFoot2);
+    const flareArcGeo = new THREE.TubeGeometry(flareCurve, 24, SUN_RADIUS * 0.045, 8, false);
+    const flareArcMat = new THREE.MeshBasicMaterial({
+      color: 0xfca5a5, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending,
+    });
+    const flareArc = new THREE.Mesh(flareArcGeo, flareArcMat);
+    sunMesh.add(flareArc);
+    clickTargets.push({ object: flareArc, selection: { kind: 'flare' } });
+    disposables.push(flareArcGeo, flareArcMat);
+
+    // Bright glow at the peak — its own sprite (not the tube) so it can
+    // pulse in scale for an "energetic burst" look without distorting
+    // where the arc's feet meet the surface.
+    const flareGlowTex = makeGlowTexture('rgba(255,255,255,1)');
+    const flareGlowMat = new THREE.SpriteMaterial({ map: flareGlowTex, color: 0xfca5a5, transparent: true, depthWrite: false });
+    const flarePeakGlow = new THREE.Sprite(flareGlowMat);
+    flarePeakGlow.position.copy(flarePeak);
+    flarePeakGlow.scale.set(0.7, 0.7, 1);
+    sunMesh.add(flarePeakGlow);
+    clickTargets.push({ object: flarePeakGlow, selection: { kind: 'flare' } });
+    disposables.push(flareGlowTex, flareGlowMat);
 
     const { sprite: flareLabel, dispose: disposeFlareLabel } = makeLabelSprite('Solar Flare', '#fca5a5');
     scene.add(flareLabel);
     disposables.push({ dispose: disposeFlareLabel });
+    const flareWorldPos = new THREE.Vector3(); // scratch, reused every frame
 
     // Aurora: a ring around Earth, colored by Kp / aurora probability.
     const auroraRingGeo = new THREE.RingGeometry(earthDef.radius * 1.7, earthDef.radius * 2.1, 32);
@@ -689,7 +787,13 @@ export default function SolarSystemViewer({ data, station }: Props) {
         case 'solarwind':
           return { getPos: () => windHead.position, distance: 2.4 };
         case 'flare':
-          return { getPos: () => flareMarker.position, distance: SUN_RADIUS * 2.1 };
+          // flareArc is a child of sunMesh (co-rotates with the
+          // surface), so its position is local — resolve world space
+          // fresh each call rather than reading .position directly.
+          return {
+            getPos: () => flarePeakGlow.getWorldPosition(flareWorldPos),
+            distance: SUN_RADIUS * 2.1,
+          };
         case 'aurora':
           return { getPos: () => earthRuntime.group.position, distance: earthDef.radius * 6.5 + 1.1 };
         default:
@@ -750,38 +854,83 @@ export default function SolarSystemViewer({ data, station }: Props) {
       const speedFactor = speed === null ? 1 : Math.max(0.5, Math.min(2.5, speed / 400));
       const windColor = windSeverityColor(speed, bz);
       windHeadMat.color.setHex(windColor);
-      for (const m of windTailMats) m.color.setHex(windColor);
+      ribbonMat.color.setHex(windColor);
 
-      // Comet-style solar wind stream: travels from just outside the
+      // Streaking solar-wind particle: travels from just outside the
       // Sun's corona out past Earth's current orbital position, along
       // the Sun→Earth line, looping continuously. Faster real wind
       // speed = faster loop.
       windProgress += delta * 0.12 * speedFactor;
       if (windProgress > 1) {
         windProgress -= 1;
-        windHistory.length = 0; // avoid a stray tail segment snapping across the whole path on wrap
+        windHistory.length = 0; // avoid the ribbon snapping across the whole path on wrap
       }
       const windAngle = earthRuntime.angle;
       const windR = THREE.MathUtils.lerp(SUN_RADIUS * 1.35, earthDef.orbitRadius * 1.3, windProgress);
       const windY = Math.sin(windProgress * Math.PI) * 0.9;
+      const prevWindPos = windHistory[0] ?? null;
       windHead.position.set(Math.cos(windAngle) * windR, windY, Math.sin(windAngle) * windR);
+
+      // Orient the head to face the camera while staying elongated
+      // along its actual direction of travel (a Sprite can only rotate
+      // in flat screen-space, so it can't lean into a 3D velocity like
+      // this — hence a manually-billboarded Mesh instead).
+      const travelDir = prevWindPos
+        ? windHead.position.clone().sub(prevWindPos)
+        : new THREE.Vector3(Math.cos(windAngle), 0, Math.sin(windAngle));
+      if (travelDir.lengthSq() < 1e-8) travelDir.set(Math.cos(windAngle), 0, Math.sin(windAngle));
+      travelDir.normalize();
+      const toCam = new THREE.Vector3().subVectors(camera.position, windHead.position).normalize();
+      let headRight = new THREE.Vector3().crossVectors(travelDir, toCam);
+      if (headRight.lengthSq() < 1e-8) headRight.set(1, 0, 0);
+      headRight.normalize();
+      const headUp = new THREE.Vector3().crossVectors(toCam, headRight).normalize();
+      windHead.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(headRight, headUp, toCam));
       const windHeadPulse = 1 + Math.sin(t * 3) * 0.15;
-      windHead.scale.setScalar(0.5 * speedFactor * 0.6 * windHeadPulse + 0.25);
+      const windBaseSize = 0.5 * speedFactor * 0.6 * windHeadPulse + 0.25;
+      windHead.scale.set(windBaseSize * 0.5, windBaseSize * 1.6, 1); // narrow + elongated = streak, not a ball
 
       windHistory.unshift(windHead.position.clone());
       if (windHistory.length > WIND_TAIL_LEN + 1) windHistory.pop();
-      for (let i = 0; i < WIND_TAIL_LEN; i++) {
-        const p = windHistory[i + 1];
-        const sprite = windTailSprites[i];
-        const mat = windTailMats[i];
-        if (!p) {
-          mat.opacity = 0;
-          continue;
+
+      // Rebuild the ribbon strip from the position history — each
+      // point gets a camera-facing "right" vector (perpendicular to its
+      // local direction of travel) scaled by a tapering half-width, so
+      // the whole thing reads as one continuous fading streak.
+      {
+        const posAttr = ribbonGeo.attributes.position as THREE.BufferAttribute;
+        const uvAttr = ribbonGeo.attributes.uv as THREE.BufferAttribute;
+        const n = windHistory.length;
+        const maxHalfWidth = windBaseSize * 0.3;
+        const scratchRight = new THREE.Vector3();
+        const scratchCam = new THREE.Vector3();
+        for (let i = 0; i < n; i++) {
+          const p = windHistory[i];
+          const neighbor = windHistory[i + 1] ?? windHistory[i - 1] ?? p;
+          const tangent = scratchRight.subVectors(p, neighbor);
+          if (tangent.lengthSq() < 1e-8) tangent.copy(travelDir);
+          tangent.normalize();
+          const toCamI = scratchCam.subVectors(camera.position, p).normalize();
+          const right = new THREE.Vector3().crossVectors(tangent, toCamI);
+          if (right.lengthSq() < 1e-8) right.set(0, 1, 0).cross(toCamI);
+          right.normalize();
+          const life = 1 - i / WIND_TAIL_LEN;
+          const half = maxHalfWidth * life;
+          const vi = i * 2 * 3;
+          posAttr.array[vi] = p.x + right.x * half;
+          posAttr.array[vi + 1] = p.y + right.y * half;
+          posAttr.array[vi + 2] = p.z + right.z * half;
+          posAttr.array[vi + 3] = p.x - right.x * half;
+          posAttr.array[vi + 4] = p.y - right.y * half;
+          posAttr.array[vi + 5] = p.z - right.z * half;
+          const u = i / WIND_TAIL_LEN;
+          const ui = i * 2 * 2;
+          uvAttr.array[ui] = u; uvAttr.array[ui + 1] = 0;
+          uvAttr.array[ui + 2] = u; uvAttr.array[ui + 3] = 1;
         }
-        sprite.position.copy(p);
-        const life = 1 - i / WIND_TAIL_LEN;
-        mat.opacity = life * life * 0.55;
-        sprite.scale.setScalar((0.5 * speedFactor * 0.6 + 0.25) * (0.25 + life * 0.6));
+        posAttr.needsUpdate = true;
+        uvAttr.needsUpdate = true;
+        ribbonGeo.setDrawRange(0, Math.max(0, (n - 1) * 6));
       }
       windLabel.position.copy(windHead.position).add(new THREE.Vector3(0, 0.55, 0));
 
@@ -790,9 +939,17 @@ export default function SolarSystemViewer({ data, station }: Props) {
       const flareCls = flareClass(flux);
       const flareHot = flareAct.label.startsWith('Major') || flareAct.label.startsWith('Moderate');
       const flarePulse = flareHot ? 1 + Math.sin(t * 6) * 0.4 : 1 + Math.sin(t * 1.4) * 0.15;
-      flareMarker.scale.setScalar(1.5 * flarePulse);
-      flareMat.color.setHex(flareSeverityColor(flareCls.letter));
-      flareLabel.position.copy(flareMarker.position).add(new THREE.Vector3(0, 0.65, 0));
+      const flareCol = flareSeverityColor(flareCls.letter);
+      // The arc's feet must stay anchored to the Sun's surface, so only
+      // its brightness pulses (not its scale, which would visibly pull
+      // the feet away from the photosphere). The peak glow sprite is a
+      // separate object, so IT can pulse in size freely for the
+      // "energetic burst" look.
+      flareArcMat.color.setHex(flareCol);
+      flareArcMat.opacity = flareHot ? 0.75 + Math.sin(t * 6) * 0.25 : 0.75 + Math.sin(t * 1.4) * 0.15;
+      flareGlowMat.color.setHex(flareCol);
+      flarePeakGlow.scale.setScalar(0.7 * flarePulse);
+      flareLabel.position.copy(flarePeakGlow.getWorldPosition(flareWorldPos)).add(new THREE.Vector3(0, 0.5, 0));
 
       const kp = d?.kp.current ?? null;
       if (kp !== null) {
@@ -1029,7 +1186,7 @@ function SolarWindPanel({ data }: { data: SpaceWeatherSnapshot | null }) {
       <Fact label="Density" value={l?.density !== null && l?.density !== undefined ? `${l.density.toFixed(1)} p/cm³` : '—'} />
       <Fact label="Bz (N/S magnetism)" value={l?.bz !== null && l?.bz !== undefined ? `${l.bz.toFixed(1)} nT` : '—'} />
       <p className="text-[11px] text-white/55 leading-relaxed mt-2">
-        The streaking "comet" is a stylized stand-in for the actual stream of particles flowing from the
+        The streaking particle is a stylized stand-in for the actual stream of particles flowing from the
         Sun past Earth right now, measured a million miles upwind — its speed here scales with the real
         wind speed. Strongly negative Bz punches holes in Earth's magnetic shield and drives aurora.
       </p>
@@ -1058,8 +1215,9 @@ function FlarePanel({ data }: { data: SpaceWeatherSnapshot | null }) {
         </div>
       )}
       <p className="text-[11px] text-white/55 leading-relaxed mt-2">
-        This marker glows brighter and pulses faster during stronger flare activity — the actual bursts of
-        X-rays coming off the Sun's surface right now.
+        This loop is a stylized solar prominence, anchored to the Sun's surface — it brightens and pulses
+        faster during stronger flare activity, standing in for the actual bursts of X-rays coming off the
+        Sun's surface right now.
       </p>
     </div>
   );
