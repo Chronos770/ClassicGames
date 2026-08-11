@@ -1035,7 +1035,13 @@ export default function SolarSystemViewer({ data, station }: Props) {
           </div>
         )}
         {selected && (
-          <InfoPanel selection={selected} data={data} station={station} onClose={() => setSelected(null)} />
+          <InfoPanel
+            selection={selected}
+            data={data}
+            station={station}
+            onClose={() => setSelected(null)}
+            onSelect={setSelected}
+          />
         )}
       </div>
     </div>
@@ -1049,11 +1055,13 @@ function InfoPanel({
   data,
   station,
   onClose,
+  onSelect,
 }: {
   selection: Selection;
   data: SpaceWeatherSnapshot | null;
   station: WeatherStation | null;
   onClose: () => void;
+  onSelect: (sel: Selection) => void;
 }) {
   return (
     <div className="absolute right-2 top-2 bottom-2 w-[min(88vw,300px)] bg-black/85 backdrop-blur-md border border-white/15 rounded-lg p-3.5 overflow-y-auto text-white">
@@ -1065,7 +1073,7 @@ function InfoPanel({
         ✕
       </button>
       {selection.kind === 'sun' && <SunPanel />}
-      {selection.kind === 'planet' && <PlanetPanel id={selection.id} />}
+      {selection.kind === 'planet' && <PlanetPanel id={selection.id} onSelect={onSelect} />}
       {selection.kind === 'moon' && <MoonPanel planetId={selection.planetId} moonName={selection.moonName} />}
       {selection.kind === 'ring' && <RingPanel planetId={selection.planetId} />}
       {selection.kind === 'feature' && <FeaturePanel planetId={selection.planetId} featureId={selection.featureId} />}
@@ -1098,9 +1106,10 @@ function SunPanel() {
   );
 }
 
-function PlanetPanel({ id }: { id: string }) {
+function PlanetPanel({ id, onSelect }: { id: string; onSelect: (sel: Selection) => void }) {
   const p = PLANETS.find((x) => x.id === id);
   if (!p) return null;
+  const hasExtras = (p.moons?.length ?? 0) > 0 || (p.features?.length ?? 0) > 0 || p.hasRing;
   return (
     <div className="pr-5">
       <div className="text-lg font-display font-bold text-white mb-2">{p.name}</div>
@@ -1112,14 +1121,40 @@ function PlanetPanel({ id }: { id: string }) {
       <Fact label="Atmosphere" value={p.facts.atmosphere} />
       <Fact label="Moons" value={p.facts.moonCount} />
       <p className="text-[11px] text-white/55 leading-relaxed mt-2">{p.facts.blurb}</p>
-      {(p.moons?.length || p.features?.length || p.hasRing) && (
-        <p className="text-[10px] text-white/35 mt-3 pt-2 border-t border-white/10">
-          Zoomed in — look around for {[
-            p.moons?.length ? `${p.moons.length} moon${p.moons.length > 1 ? 's' : ''}` : null,
-            p.features?.length ? 'surface features' : null,
-            p.hasRing ? 'its rings' : null,
-          ].filter(Boolean).join(', ')} to tap.
-        </p>
+      {hasExtras && (
+        <div className="mt-3 pt-3 border-t border-white/10">
+          <div className="text-[9px] uppercase tracking-wide text-white/40 mb-1.5">
+            Explore further — tap to zoom in
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {p.moons?.map((m) => (
+              <button
+                key={m.name}
+                onClick={() => onSelect({ kind: 'moon', planetId: p.id, moonName: m.name })}
+                className="text-[11px] px-2 py-1 rounded-md bg-slate-500/20 hover:bg-slate-500/35 border border-slate-400/30 text-slate-200 transition-colors"
+              >
+                🌙 {m.name}
+              </button>
+            ))}
+            {p.hasRing && (
+              <button
+                onClick={() => onSelect({ kind: 'ring', planetId: p.id })}
+                className="text-[11px] px-2 py-1 rounded-md bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-100 transition-colors"
+              >
+                💍 Rings
+              </button>
+            )}
+            {p.features?.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => onSelect({ kind: 'feature', planetId: p.id, featureId: f.id })}
+                className="text-[11px] px-2 py-1 rounded-md bg-orange-500/15 hover:bg-orange-500/25 border border-orange-400/30 text-orange-200 transition-colors"
+              >
+                📍 {f.name}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
