@@ -613,7 +613,11 @@ function AuroraMapCard({ data, station }: { data: SpaceWeatherSnapshot; station:
       </div>
       <AuroraMapBody data={data} aurora={aurora} station={station} sizeKey="compact" />
       {fullscreen && (
-        <div className="fixed inset-0 z-50 bg-black/97 backdrop-blur-sm overflow-y-auto">
+        // Fully opaque, not bg-black/NN — the compact card directly
+        // behind this overlay (same scroll position, not unmounted)
+        // has bright aurora colors that visibly bled through even at
+        // 97% opacity, producing a ghosting/double-exposure look.
+        <div className="fixed inset-0 z-50 bg-[#05060f] overflow-y-auto">
           <div className="max-w-5xl mx-auto px-4 py-4">
             <div className="flex items-center justify-between mb-3">
               <div className="text-sm font-display font-bold text-white">Aurora Forecast Map</div>
