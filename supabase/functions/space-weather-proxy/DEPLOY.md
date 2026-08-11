@@ -7,9 +7,48 @@ JSON payload for the client. Required for the Space tab to show anything.
 ## Status
 
 - [x] Source committed: `supabase/functions/space-weather-proxy/index.ts`
-- [ ] **Function not yet deployed to Supabase project**
+- [x] Deployed (Supabase project `qjjfrblhnvfmrlpujbzx`, `verify_jwt: false`
+      to match `weather-proxy`/`news-proxy`/etc — despite what an earlier
+      version of this doc said, none of this project's edge functions
+      currently require JWT verification)
 
 No DB migration needed — this function is read-only and uses no DB.
+
+## 2026-08-11 rewrite — most fields were silently empty
+
+A full audit found the function was returning null/empty for Kp, solar
+wind, and sunspots — not because it wasn't deployed, but because several
+upstream SWPC endpoints had moved or changed shape since this was written,
+and failures were swallowed silently by `jsonOrNull`'s catch block:
+
+- `/products/solar-wind/{plasma,mag}-1-day.json` → gone (404). Replaced
+  with `/json/rtsw/rtsw_{wind,mag}_1m.json` (filter `active === true`,
+  multiple redundant satellite sources per timestamp).
+- `/products/noaa-planetary-k-index.json` switched from tabular
+  (`[[headers],[row],...]`) to a plain array of objects — the old
+  `tabularToObjects()` parse silently returned `[]` for the new shape.
+- `/json/sunspot_report.json` is a per-station spot log, not a daily SSN
+  total, and isn't date-sorted. Replaced with
+  `/json/solar-cycle/swpc_observed_ssn.json` (daily SSN) and
+  `/json/f107_cm_flux.json` (daily 10.7cm flux).
+- `rtsw_wind_1m.json` occasionally emits bare `NaN` as a numeric value,
+  which is invalid strict JSON — Deno's `Response.json()` throws on it
+  (though Python/browser JSON parsers silently tolerate it, which is why
+  a curl+python spot-check looked fine). Fixed by fetching as text and
+  sanitizing `NaN`/`Infinity` before `JSON.parse()`.
+- `active_regions_count` was counting the entire multi-week
+  `solar_regions.json` archive (~200+) instead of just the most recent
+  observed date (~6).
+
+Also added: a NOAA OVATION aurora nowcast grid (`aurora` field) and a
+3-day Kp forecast (`kp.forecast`), both now rendered in the UI.
+
+If SWPC moves things again, re-run the discovery pass: `curl
+https://services.swpc.noaa.gov/json/` and `.../products/` return Apache
+directory listings — that's how the replacements above were found. The
+response also includes a `_debug_fetch_errors` field (endpoint URL → error
+string) for exactly this kind of troubleshooting, without needing another
+round of guess-and-check.
 
 ## To deploy
 
