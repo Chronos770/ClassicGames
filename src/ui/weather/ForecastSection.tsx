@@ -117,7 +117,7 @@ function Next24Hours({ periods }: { periods: NwsForecastPeriod[] }) {
                   </div>
                   <div className="my-1">
                     <AnimatedWeatherIcon
-                      conditionKey={forecastConditionKey(p.shortForecast, p.isDaytime)}
+                      conditionKey={forecastConditionKey(p.shortForecast, p.isDaytime, p.probabilityOfPrecipitation.value)}
                       isDay={p.isDaytime}
                       size={36}
                     />
@@ -151,7 +151,7 @@ function Next24Hours({ periods }: { periods: NwsForecastPeriod[] }) {
                 </div>
                 <div className="w-8 flex-shrink-0 flex justify-center">
                   <AnimatedWeatherIcon
-                    conditionKey={forecastConditionKey(p.shortForecast, p.isDaytime)}
+                    conditionKey={forecastConditionKey(p.shortForecast, p.isDaytime, p.probabilityOfPrecipitation.value)}
                     isDay={p.isDaytime}
                     size={30}
                   />
@@ -244,13 +244,18 @@ function DailyGrid({
             <details key={d.key} className="bg-black/20 backdrop-blur-md rounded-lg border border-white/8 overflow-hidden group">
               <summary className="cursor-pointer list-none flex items-center gap-3 p-3 hover:bg-white/5 transition-colors">
                 <AnimatedWeatherIcon
-                  conditionKey={forecastConditionKey(primary.shortForecast, primary.isDaytime)}
+                  conditionKey={forecastConditionKey(primary.shortForecast, primary.isDaytime, primary.probabilityOfPrecipitation.value)}
                   isDay={primary.isDaytime}
                   size={40}
                 />
 
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm text-white font-medium">{d.day?.name ?? d.night?.name}</div>
+                  <div className="text-sm text-white font-medium flex items-baseline gap-1.5">
+                    <span>{d.day?.name ?? d.night?.name}</span>
+                    <span className="text-xs text-white/40 font-normal">
+                      {new Date(primary.startTime).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                    </span>
+                  </div>
                   <div className="text-xs text-white/50 truncate">{primary.shortForecast}</div>
                 </div>
                 <div className="flex items-baseline gap-2 text-sm tabular-nums">
@@ -330,7 +335,7 @@ function TimeOfDayStrip({ dayHourly }: { dayHourly: NwsForecastPeriod[] }) {
             <div key={b.label} className="bg-black/20 rounded-lg p-2 flex items-center gap-2">
               <div className="flex-shrink-0">
                 <AnimatedWeatherIcon
-                  conditionKey={forecastConditionKey(mid.shortForecast, mid.isDaytime)}
+                  conditionKey={forecastConditionKey(mid.shortForecast, mid.isDaytime, maxRain)}
                   isDay={mid.isDaytime}
                   size={28}
                 />

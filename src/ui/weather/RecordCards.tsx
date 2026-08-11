@@ -137,6 +137,28 @@ export default function RecordCards({ stationId, lastIngestTick }: Props) {
         icon: '❄️',
       });
     }
+    if (recs.highestFeelsLike) {
+      out.push({
+        key: 'highest-feels-like',
+        label: 'Highest Feels Like',
+        value: (convertTemp(recs.highestFeelsLike.v, tempU) ?? recs.highestFeelsLike.v).toFixed(1),
+        unit: tU,
+        when: recs.highestFeelsLike.observed_at,
+        accent: 'heat',
+        icon: '🥵',
+      });
+    }
+    if (recs.lowestFeelsLike) {
+      out.push({
+        key: 'lowest-feels-like',
+        label: 'Lowest Feels Like',
+        value: (convertTemp(recs.lowestFeelsLike.v, tempU) ?? recs.lowestFeelsLike.v).toFixed(1),
+        unit: tU,
+        when: recs.lowestFeelsLike.observed_at,
+        accent: 'cold',
+        icon: '🥶',
+      });
+    }
     if (recs.wettestDay && recs.wettestDay.v > 0) {
       out.push({
         key: 'wettest-day',

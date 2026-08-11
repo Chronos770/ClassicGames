@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '../stores/authStore';
@@ -18,7 +18,11 @@ import RadarTab from './weather/RadarTab';
 import HealthTab from './weather/HealthTab';
 import ForecastTab from './weather/ForecastTab';
 import NewsTab from './weather/NewsTab';
-import SpaceWeatherTab from './weather/SpaceWeatherTab';
+// Lazy-loaded: pulls in Three.js for the 3D solar system viewer (~600KB),
+// so it should only download when someone actually opens the Space tab —
+// not on every weather page visit (including from the mobile app, which
+// wraps this same web build and shares the same concern on cellular data).
+const SpaceWeatherTab = lazy(() => import('./weather/SpaceWeatherTab'));
 import { WeatherInstallButton, useIsWeatherPwa, useWeatherManifest } from './weather/WeatherPwa';
 import WeatherAuthCard from './weather/WeatherAuthCard';
 import WeatherPushPrompt from './weather/WeatherPushPrompt';
@@ -450,7 +454,13 @@ export default function WeatherPage() {
             )}
             {tab === 'history' && <HistoryTab stationId={stationId} lastIngestTick={lastIngestTick} station={station} />}
             {tab === 'radar' && <RadarTab station={station} />}
-            {tab === 'space' && <SpaceWeatherTab station={station} tick={lastIngestTick} />}
+            {tab === 'space' && (
+              <Suspense
+                fallback={<div className="text-white/40 text-sm py-12 text-center">Loading space weather…</div>}
+              >
+                <SpaceWeatherTab station={station} tick={lastIngestTick} />
+              </Suspense>
+            )}
             {tab === 'news' && <NewsTab tick={lastIngestTick} />}
             {tab === 'health' && reading && (
               <HealthTab reading={reading} station={station} stationId={stationId} lastIngestTick={lastIngestTick} />

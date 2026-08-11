@@ -114,8 +114,8 @@ function Banner({
   if (!primary) return null;
   const companion = summary.companion;
   const tone = toneFor(primary);
-  const conditionKey = forecastConditionKey(primary.shortForecast, primary.isDaytime);
   const rainPct = primary.probabilityOfPrecipitation.value ?? 0;
+  const conditionKey = forecastConditionKey(primary.shortForecast, primary.isDaytime, primary.probabilityOfPrecipitation.value);
   const showRain = rainPct >= 10;
 
   const bits: string[] = [];

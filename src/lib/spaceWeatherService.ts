@@ -35,12 +35,28 @@ export interface NoaaScales {
   R: number;
 }
 
+export interface KpForecastPoint {
+  time: string;
+  kp: number;
+  kind: 'observed' | 'estimated' | 'predicted';
+}
+
+// [longitude 0-360, latitude -90..90, aurora value 0-100ish]
+export type AuroraGridPoint = [number, number, number];
+
+export interface AuroraSnapshot {
+  observation_time: string | null;
+  forecast_time: string | null;
+  resolution_deg: number;
+  points: AuroraGridPoint[];
+}
+
 export interface SpaceWeatherSnapshot {
   fetched_at: string;
   kp: {
     current: number | null;
     recent: KpPoint[];
-    forecast: any | null;
+    forecast: KpForecastPoint[];
   };
   solar_wind: {
     plasma_recent: SwPlasmaPoint[];
@@ -60,10 +76,14 @@ export interface SpaceWeatherSnapshot {
   alerts: SpwAlert[];
   scales: NoaaScales | null;
   sunspots: {
-    latest: any | null;
+    ssn: number | null;
+    ssn_date: string | null;
+    f10: number | null;
+    f10_date: string | null;
     active_regions_count: number;
   };
   three_day_headlines: string[];
+  aurora: AuroraSnapshot | null;
 }
 
 export async function fetchSpaceWeather(): Promise<SpaceWeatherSnapshot> {
@@ -200,6 +220,71 @@ export function auroraVisible(lat: number | null, kp: number | null): {
   if (absLat >= edge) return { verdict: 'likely', threshold: edge };
   if (absLat >= edge - 5) return { verdict: 'possible', threshold: edge };
   return { verdict: 'unlikely', threshold: edge };
+}
+
+// ── Aurora oval (OVATION nowcast grid) ──────────────────────────────
+
+// Color scale for an OVATION aurora probability/intensity value (roughly
+// 0-100, though values above ~40 are rare outside major storms). Mirrors
+// the green→yellow→red→magenta convention NOAA's own aurora dashboard
+// uses, tuned down in saturation so a dense grid of points doesn't turn
+// into a flat neon wall.
+export function auroraColor(val: number): string {
+  if (val <= 0) return 'transparent';
+  const stops: [number, [number, number, number]][] = [
+    [1, [16, 129, 92]], // faint teal-green
+    [4, [52, 211, 153]], // emerald
+    [10, [163, 230, 53]], // yellow-green
+    [20, [250, 204, 21]], // yellow
+    [40, [249, 115, 22]], // orange
+    [70, [239, 68, 68]], // red
+    [100, [232, 121, 249]], // fuchsia
+  ];
+  let lo = stops[0];
+  let hi = stops[stops.length - 1];
+  for (let i = 0; i < stops.length - 1; i++) {
+    if (val >= stops[i][0] && val <= stops[i + 1][0]) {
+      lo = stops[i];
+      hi = stops[i + 1];
+      break;
+    }
+  }
+  const span = hi[0] - lo[0] || 1;
+  const t = Math.max(0, Math.min(1, (val - lo[0]) / span));
+  const [r1, g1, b1] = lo[1];
+  const [r2, g2, b2] = hi[1];
+  const r = Math.round(r1 + (r2 - r1) * t);
+  const g = Math.round(g1 + (g2 - g1) * t);
+  const b = Math.round(b1 + (b2 - b1) * t);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+// Look up the aurora value nearest a given lat/lon in the downsampled
+// OVATION grid (server sends a 2°-step grid, |lat| >= 35 only). Snaps to
+// the nearest grid cell rather than interpolating — plenty precise for a
+// "is the oval near me right now" readout given the grid is already
+// resolution-limited.
+export function auroraValueAt(
+  points: AuroraGridPoint[],
+  lat: number | null,
+  lon: number | null,
+): number | null {
+  if (lat === null || lon === null || Math.abs(lat) < 35 || points.length === 0) return null;
+  const normLon = ((Math.round(lon / 2) * 2) % 360 + 360) % 360;
+  const normLat = Math.round(lat / 2) * 2;
+  let best: AuroraGridPoint | null = null;
+  let bestDist = Infinity;
+  for (const p of points) {
+    const dLon = Math.min(Math.abs(p[0] - normLon), 360 - Math.abs(p[0] - normLon));
+    const dLat = Math.abs(p[1] - normLat);
+    const dist = dLon + dLat;
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = p;
+      if (dist === 0) break;
+    }
+  }
+  return best ? best[2] : null;
 }
 
 // Public SDO (Solar Dynamics Observatory) image URLs. These are static

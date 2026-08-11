@@ -186,6 +186,8 @@ export interface WeatherRecords {
   highestPressure: RecordHit | null;
   lowestPressure: RecordHit | null;
   peakRainRate: RecordHit | null;
+  highestFeelsLike: RecordHit | null;
+  lowestFeelsLike: RecordHit | null;
 }
 
 /**
@@ -206,6 +208,8 @@ export async function getAllTimeRecords(stationId: number): Promise<WeatherRecor
       highestPressure: null,
       lowestPressure: null,
       peakRainRate: null,
+      highestFeelsLike: null,
+      lowestFeelsLike: null,
     };
   }
 
@@ -238,6 +242,8 @@ export async function getAllTimeRecords(stationId: number): Promise<WeatherRecor
     highestPressureRow,
     lowestPressureRow,
     peakRainRateRow,
+    highestFeelsLikeRow,
+    lowestFeelsLikeRow,
   ] = await Promise.all([
     top('temp', 'desc'),
     top('temp', 'asc'),
@@ -250,6 +256,14 @@ export async function getAllTimeRecords(stationId: number): Promise<WeatherRecor
     top('bar_sea_level', 'desc'),
     top('bar_sea_level', 'asc'),
     top('rain_rate_hi_in', 'desc'),
+    // THW index (temp/humidity/wind) is Davis's "feels hot" figure and is
+    // only computed >=70°F — it's the best proxy for a hottest-feels-like
+    // record (matches the coalesce order used for the live "Feels Like"
+    // reading elsewhere: thw_index ?? heat_index ?? wind_chill).
+    top('thw_index', 'desc'),
+    // Wind chill only gets computed in cold conditions, so its minimum is
+    // the coldest-feels-like record (thw_index doesn't populate down there).
+    top('wind_chill', 'asc'),
   ]);
 
   // Pick the larger of last-storm vs current-storm
@@ -299,6 +313,12 @@ export async function getAllTimeRecords(stationId: number): Promise<WeatherRecor
       : null,
     peakRainRate: peakRainRateRow
       ? { v: peakRainRateRow.rain_rate_hi_in, observed_at: peakRainRateRow.observed_at }
+      : null,
+    highestFeelsLike: highestFeelsLikeRow
+      ? { v: highestFeelsLikeRow.thw_index, observed_at: highestFeelsLikeRow.observed_at }
+      : null,
+    lowestFeelsLike: lowestFeelsLikeRow
+      ? { v: lowestFeelsLikeRow.wind_chill, observed_at: lowestFeelsLikeRow.observed_at }
       : null,
   };
 }

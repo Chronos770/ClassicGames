@@ -20,7 +20,7 @@ import {
 // Chart-friendly minimal columns we always need for the day view.
 // Keeping the projection narrow keeps the round-trip small.
 const COLS =
-  'id,station_id,observed_at,temp,hum,dew_point,wind_speed_avg_last_10_min,wind_speed_hi_last_10_min,wind_dir_last,rain_rate_last_in,rain_rate_hi_in,rainfall_last_15_min_in,rainfall_day_in,bar_sea_level,solar_rad,uv_index,heat_index,wind_chill';
+  'id,station_id,observed_at,temp,hum,dew_point,wind_speed_avg_last_10_min,wind_speed_hi_last_10_min,wind_dir_last,rain_rate_last_in,rain_rate_hi_in,rainfall_last_15_min_in,rainfall_day_in,bar_sea_level,solar_rad,uv_index,heat_index,wind_chill,thw_index';
 
 interface DayStat {
   label: string;
@@ -121,6 +121,26 @@ export default function WeatherDayPage() {
       out.push({
         label: 'Low',
         value: (convertTemp(min, tempU) ?? min).toFixed(1),
+        unit: tU,
+        tone: 'text-sky-300',
+      });
+    }
+    // "Feels like" — same coalesce priority used elsewhere (thw_index is
+    // Davis's temp/humidity/wind figure, valid >=70°F; wind_chill covers
+    // the cold end; heat_index/temp are fallbacks).
+    const feels = vals((r) => r.thw_index ?? r.heat_index ?? r.wind_chill ?? r.temp);
+    if (feels.length) {
+      const maxF = Math.max(...feels);
+      const minF = Math.min(...feels);
+      out.push({
+        label: 'Highest Feels Like',
+        value: (convertTemp(maxF, tempU) ?? maxF).toFixed(1),
+        unit: tU,
+        tone: 'text-orange-300',
+      });
+      out.push({
+        label: 'Lowest Feels Like',
+        value: (convertTemp(minF, tempU) ?? minF).toFixed(1),
         unit: tU,
         tone: 'text-sky-300',
       });

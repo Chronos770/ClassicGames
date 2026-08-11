@@ -244,6 +244,7 @@ Deno.serve(async (req) => {
         const byTs = groupByTimestamp(historic);
         const rows = Object.entries(byTs).map(([ts, m]) => buildReading(stationId, Number(ts), m));
 
+        let chunkInserted = 0;
         if (rows.length > 0) {
           // Strictly additive: only insert buckets that don't already
           // exist at (station_id, observed_at). Without ignoreDuplicates
@@ -253,14 +254,23 @@ Deno.serve(async (req) => {
           // never overwrite live data with archive aggregates.
           for (let i = 0; i < rows.length; i += 200) {
             const slice = rows.slice(i, i + 200);
-            const { error } = await supabase
+            // .select() after the upsert makes Postgres's RETURNING clause
+            // only hand back rows that were actually inserted — rows
+            // skipped by ON CONFLICT DO NOTHING (ignoreDuplicates) don't
+            // come back. Without this, rowsInserted was just counting every
+            // row WeatherLink returned for the range (e.g. 672 for a 7-day
+            // window = 7 days * 96 15-min buckets/day), even when every
+            // single one was already in the table and nothing new landed.
+            const { data: upserted, error } = await supabase
               .from('weather_readings')
-              .upsert(slice, { onConflict: 'station_id,observed_at', ignoreDuplicates: true });
+              .upsert(slice, { onConflict: 'station_id,observed_at', ignoreDuplicates: true })
+              .select('station_id');
             if (error) throw new Error(error.message);
+            chunkInserted += upserted?.length ?? 0;
           }
         }
-        rowsInserted += rows.length;
-        chunks.push({ startSec: cursor, endSec: chunkEnd, rows: rows.length });
+        rowsInserted += chunkInserted;
+        chunks.push({ startSec: cursor, endSec: chunkEnd, rows: chunkInserted, fetched: rows.length });
       } catch (e: any) {
         chunks.push({ startSec: cursor, endSec: chunkEnd, rows: 0, error: String(e?.message ?? e) });
       }

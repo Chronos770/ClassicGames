@@ -90,17 +90,46 @@ export function forecastEmoji(shortForecast: string, isDaytime = true): string {
 
 // Maps an NWS short-forecast string to a ConditionKey so the same animated
 // icon component used in the hero can render forecast periods.
+//
+// `pop` is the period's probabilityOfPrecipitation value (0-100), when
+// known. NWS's shortForecast text names the precip type ("Slight Chance
+// Showers And Thunderstorms") even when the actual chance is only 20-30%,
+// so matching on the text alone made the icon commit to a full
+// thunderstorm/rain graphic almost any time precip was mentioned at all —
+// a 20% chance of a thunderstorm looked identical to a certain one. Gate
+// each precip icon behind the real probability instead; below the
+// threshold we fall back to a cloud-cover icon rather than the dramatic
+// precip graphic. When pop is unavailable (undefined/null) we keep the
+// old text-only behavior.
 export function forecastConditionKey(
   shortForecast: string,
   isDaytime = true,
+  pop?: number | null,
 ): 'thunderstorm' | 'heavyRain' | 'rain' | 'drizzle' | 'snow' | 'fog' | 'windy' | 'hot' | 'cold' | 'sunny' | 'clear' | 'partlyCloudy' | 'cloudy' | 'unknown' {
   const s = shortForecast.toLowerCase();
-  if (/thunder/.test(s)) return 'thunderstorm';
-  if (/\b(hail|sleet|freezing|wintry)\b/.test(s)) return 'snow';
-  if (/snow|flurr|blizzard/.test(s)) return 'snow';
-  if (/\bheavy\s+rain\b|downpour/.test(s)) return 'heavyRain';
-  if (/drizzle/.test(s)) return 'drizzle';
-  if (/\b(rain|shower)\b/.test(s)) return 'rain';
+  const p = pop ?? null;
+  const likely = (min: number) => p === null || p >= min;
+  const cloudFallback = isDaytime ? 'partlyCloudy' : 'cloudy';
+
+  if (/thunder/.test(s)) {
+    if (likely(50)) return 'thunderstorm';
+    if (likely(25)) return 'rain';
+    return cloudFallback;
+  }
+  if (/\b(hail|sleet|freezing|wintry)\b/.test(s) || /snow|flurr|blizzard/.test(s)) {
+    return likely(30) ? 'snow' : cloudFallback;
+  }
+  if (/\bheavy\s+rain\b|downpour/.test(s)) {
+    if (likely(40)) return 'heavyRain';
+    if (likely(20)) return 'rain';
+    return cloudFallback;
+  }
+  if (/drizzle/.test(s)) {
+    return likely(30) ? 'drizzle' : cloudFallback;
+  }
+  if (/\b(rain|shower)\b/.test(s)) {
+    return likely(30) ? 'rain' : cloudFallback;
+  }
   if (/fog|haze|mist/.test(s)) return 'fog';
   if (/\bwind/.test(s)) return 'windy';
   if (/partly/.test(s)) return 'partlyCloudy';
