@@ -691,6 +691,8 @@ export default function SolarSystemViewer({ data, station }: Props) {
 
     (container as any).__setFocus = (sel: Selection | null) => {
       focus = computeFocus(sel);
+      // eslint-disable-next-line no-console
+      console.log('[solarsystem] __setFocus', sel, focus ? { distance: focus.distance, pos: focus.getPos().toArray() } : null);
       if (focus) {
         controls.minDistance = Math.max(0.1, focus.distance * 0.3);
         controls.maxDistance = focus.distance * 4;
@@ -709,6 +711,7 @@ export default function SolarSystemViewer({ data, station }: Props) {
     // ── Animation loop ──────────────────────────────────────────
     const clock = new THREE.Clock();
     let animId = 0;
+    let frameCount = 0;
 
     function animate() {
       if (disposed) return;
@@ -797,6 +800,7 @@ export default function SolarSystemViewer({ data, station }: Props) {
       auroraLabel.position.copy(earthRuntime.group.position).add(new THREE.Vector3(0, earthDef.radius * 2.6, 0));
 
       // ── Camera focus follow/zoom ─────────────────────────────
+      frameCount++;
       if (focus) {
         const targetPos = focus.getPos();
         const dir = new THREE.Vector3().subVectors(camera.position, controls.target);
@@ -805,9 +809,21 @@ export default function SolarSystemViewer({ data, station }: Props) {
         controls.target.lerp(targetPos, 0.08);
         const newDist = THREE.MathUtils.lerp(curDist, focus.distance, 0.07);
         camera.position.copy(controls.target).addScaledVector(dir, newDist);
+        if (frameCount % 20 === 0) {
+          // eslint-disable-next-line no-console
+          console.log('[solarsystem] focus tick', {
+            curDist, newDist, wantDist: focus.distance,
+            camPos: camera.position.toArray(), target: controls.target.toArray(),
+            minDist: controls.minDistance, maxDist: controls.maxDistance,
+          });
+        }
       }
 
       controls.update();
+      if (frameCount % 20 === 0 && focus) {
+        // eslint-disable-next-line no-console
+        console.log('[solarsystem] after controls.update()', camera.position.toArray());
+      }
       renderer.render(scene, camera);
     }
     animate();
