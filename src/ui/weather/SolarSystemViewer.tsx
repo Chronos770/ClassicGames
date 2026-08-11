@@ -645,6 +645,14 @@ export default function SolarSystemViewer({ data, station }: Props) {
     let focus: FocusTarget | null = null;
     const DEFAULT_MIN_DIST = 6;
     const DEFAULT_MAX_DIST = 90;
+    // Roughly matches the initial camera.position.set(0, 22, 34) distance
+    // from the origin — deselecting eases the camera back toward this,
+    // from whatever angle the user is currently looking, rather than
+    // just releasing the zoom clamp in place (which wouldn't actually
+    // "zoom back out" the way the on-screen hint promises).
+    const WIDE_VIEW_DISTANCE = 40;
+    const RELEASE_DURATION = 1.6; // seconds of eased pull-back before returning free control
+    let releaseTimer = 0;
 
     function computeFocus(sel: Selection | null): FocusTarget | null {
       if (!sel) return null;
@@ -690,13 +698,17 @@ export default function SolarSystemViewer({ data, station }: Props) {
     }
 
     (container as any).__setFocus = (sel: Selection | null) => {
-      focus = computeFocus(sel);
-      // eslint-disable-next-line no-console
-      console.log('[solarsystem] __setFocus', sel, focus ? { distance: focus.distance, pos: focus.getPos().toArray() } : null);
-      if (focus) {
-        controls.minDistance = Math.max(0.1, focus.distance * 0.3);
-        controls.maxDistance = focus.distance * 4;
+      const next = computeFocus(sel);
+      if (next) {
+        focus = next;
+        releaseTimer = 0;
+        controls.minDistance = Math.max(0.1, next.distance * 0.3);
+        controls.maxDistance = next.distance * 4;
       } else {
+        // Deselecting: ease back out to the wide view for a bit, then
+        // hand free control back to the user (see RELEASE_DURATION).
+        focus = { getPos: () => new THREE.Vector3(0, 0, 0), distance: WIDE_VIEW_DISTANCE };
+        releaseTimer = RELEASE_DURATION;
         controls.minDistance = DEFAULT_MIN_DIST;
         controls.maxDistance = DEFAULT_MAX_DIST;
       }
@@ -711,7 +723,6 @@ export default function SolarSystemViewer({ data, station }: Props) {
     // ── Animation loop ──────────────────────────────────────────
     const clock = new THREE.Clock();
     let animId = 0;
-    let frameCount = 0;
 
     function animate() {
       if (disposed) return;
@@ -800,7 +811,10 @@ export default function SolarSystemViewer({ data, station }: Props) {
       auroraLabel.position.copy(earthRuntime.group.position).add(new THREE.Vector3(0, earthDef.radius * 2.6, 0));
 
       // ── Camera focus follow/zoom ─────────────────────────────
-      frameCount++;
+      if (releaseTimer > 0) {
+        releaseTimer -= delta;
+        if (releaseTimer <= 0) focus = null; // hand free control back to the user
+      }
       if (focus) {
         const targetPos = focus.getPos();
         const dir = new THREE.Vector3().subVectors(camera.position, controls.target);
@@ -809,21 +823,9 @@ export default function SolarSystemViewer({ data, station }: Props) {
         controls.target.lerp(targetPos, 0.08);
         const newDist = THREE.MathUtils.lerp(curDist, focus.distance, 0.07);
         camera.position.copy(controls.target).addScaledVector(dir, newDist);
-        if (frameCount % 20 === 0) {
-          // eslint-disable-next-line no-console
-          console.log('[solarsystem] focus tick', {
-            curDist, newDist, wantDist: focus.distance,
-            camPos: camera.position.toArray(), target: controls.target.toArray(),
-            minDist: controls.minDistance, maxDist: controls.maxDistance,
-          });
-        }
       }
 
       controls.update();
-      if (frameCount % 20 === 0 && focus) {
-        // eslint-disable-next-line no-console
-        console.log('[solarsystem] after controls.update()', camera.position.toArray());
-      }
       renderer.render(scene, camera);
     }
     animate();
