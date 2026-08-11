@@ -22,7 +22,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { PLANETS, SUN_RADIUS, SUN_FACTS, type PlanetDef, type MoonDef, type PlanetFeature } from '../../lib/solarSystemData';
+import { PLANETS, SUN_RADIUS, SUN_FACTS, type PlanetDef, type MoonDef, type PlanetFeature, type WeatherReport } from '../../lib/solarSystemData';
 import {
   flareActivity,
   flareClass,
@@ -91,8 +91,12 @@ function shade([r, g, b]: [number, number, number], amt: number): [number, numbe
   return [f(r), f(g), f(b)];
 }
 
-function makeMottledTexture(base: number, accent: number): THREE.CanvasTexture {
-  const size = 256;
+// Airless rocky/icy world — real impact craters: a dark floor, a bright
+// rim lit from one side, and a soft ejecta halo, layered with a wide
+// power-law size mix (many tiny craters, a handful of big ones) like
+// actual cratered terrain rather than random blurry blobs.
+function makeCrateredTexture(base: number, accent: number, density = 1): THREE.CanvasTexture {
+  const size = 320;
   const c = document.createElement('canvas');
   c.width = size;
   c.height = size;
@@ -101,15 +105,281 @@ function makeMottledTexture(base: number, accent: number): THREE.CanvasTexture {
   const a = hexToRgb(accent);
   ctx.fillStyle = rgbStr(b);
   ctx.fillRect(0, 0, size, size);
-  for (let i = 0; i < 900; i++) {
+  // Fine regolith grain.
+  for (let i = 0; i < 1400; i++) {
     const x = Math.random() * size;
     const y = Math.random() * size;
-    const r = Math.random() * 6 + 1;
-    const t = Math.random();
-    ctx.fillStyle = rgbStr(t > 0.5 ? shade(a, (Math.random() - 0.5) * 20) : shade(b, (Math.random() - 0.5) * 24), 0.5);
+    const r = Math.random() * 2.5 + 0.4;
+    ctx.fillStyle = rgbStr(shade(Math.random() > 0.5 ? a : b, (Math.random() - 0.5) * 22), 0.35);
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
+  }
+  // A light source direction for consistent rim shading across all craters.
+  const lx = -0.5;
+  const ly = -0.6;
+  const craterCount = Math.round(140 * density);
+  for (let i = 0; i < craterCount; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    // Bias heavily toward small craters, a few big ones.
+    const r = Math.pow(Math.random(), 2.4) * 30 + 1.5;
+    // Soft ejecta halo.
+    if (r > 6) {
+      const haloGrad = ctx.createRadialGradient(x, y, r * 0.9, x, y, r * 1.8);
+      haloGrad.addColorStop(0, rgbStr(shade(b, 10), 0.18));
+      haloGrad.addColorStop(1, rgbStr(shade(b, 10), 0));
+      ctx.fillStyle = haloGrad;
+      ctx.beginPath();
+      ctx.arc(x, y, r * 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Crater bowl: dark floor fading to a bright rim on the lit side.
+    const bowlGrad = ctx.createRadialGradient(x, y, 0, x, y, r);
+    bowlGrad.addColorStop(0, rgbStr(shade(b, -38)));
+    bowlGrad.addColorStop(0.72, rgbStr(shade(b, -20)));
+    bowlGrad.addColorStop(1, rgbStr(shade(b, -6), 0));
+    ctx.fillStyle = bowlGrad;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    // Bright rim arc on the lit side only.
+    ctx.strokeStyle = rgbStr(shade(a, 34), Math.min(0.75, 0.3 + r / 30));
+    ctx.lineWidth = Math.max(0.6, r * 0.14);
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.94, Math.atan2(ly, lx) - 1.1, Math.atan2(ly, lx) + 1.1);
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
+// Venus / Titan — a thick, opaque cloud/haze deck. You never see the
+// actual solid surface of either world from outside, so this renders
+// soft, wind-sheared horizontal cloud bands instead of any terrain.
+function makeCloudyTexture(base: number, accent: number): THREE.CanvasTexture {
+  const w = 320;
+  const h = 160;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d')!;
+  const b = hexToRgb(base);
+  const a = hexToRgb(accent);
+  ctx.fillStyle = rgbStr(b);
+  ctx.fillRect(0, 0, w, h);
+  // Wind-sheared horizontal streak bands, each row offset by a slow sine
+  // wave so bands drift rather than sitting in hard rectangles.
+  const rows = 70;
+  for (let i = 0; i < rows; i++) {
+    const y = (i / rows) * h;
+    const rowH = h / rows + 0.6;
+    const wave = Math.sin(i * 0.35) * 6 + Math.sin(i * 0.9) * 2.5;
+    const t = (Math.sin(i * 0.5) + 1) / 2;
+    ctx.fillStyle = rgbStr(shade(t > 0.5 ? a : b, (Math.random() - 0.5) * 10), 0.5);
+    ctx.beginPath();
+    ctx.ellipse(w / 2 + wave, y + rowH / 2, w * 0.62, rowH * 0.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Soft billowing swirl blobs for structure.
+  for (let i = 0; i < 26; i++) {
+    const x = Math.random() * w;
+    const y = Math.random() * h;
+    const rx = Math.random() * 34 + 14;
+    const ry = rx * (0.25 + Math.random() * 0.25);
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, rx);
+    grad.addColorStop(0, rgbStr(shade(Math.random() > 0.5 ? a : b, (Math.random() - 0.5) * 26), 0.22));
+    grad.addColorStop(1, rgbStr(b, 0));
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(x, y, rx, ry, Math.random() * 0.6 - 0.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
+// Mars — rust-red plains, larger dark basaltic albedo regions, sparse
+// light cratering (dust buries most craters at this scale), and bright
+// polar ice caps top and bottom.
+function makeMarsTexture(base: number, accent: number): THREE.CanvasTexture {
+  const size = 320;
+  const c = document.createElement('canvas');
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext('2d')!;
+  const b = hexToRgb(base);
+  const a = hexToRgb(accent);
+  ctx.fillStyle = rgbStr(b);
+  ctx.fillRect(0, 0, size, size);
+  // Fine dust-color variation.
+  for (let i = 0; i < 1600; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    ctx.fillStyle = rgbStr(shade(b, (Math.random() - 0.5) * 24), 0.3);
+    ctx.beginPath();
+    ctx.arc(x, y, Math.random() * 2 + 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Large dark basaltic regions (Syrtis Major-like albedo features).
+  for (let i = 0; i < 9; i++) {
+    const x = Math.random() * size;
+    const y = size * 0.15 + Math.random() * size * 0.7;
+    const r = Math.random() * 36 + 20;
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, rgbStr(shade(a, -20), 0.55));
+    grad.addColorStop(1, rgbStr(shade(a, -20), 0));
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * (0.5 + Math.random() * 0.4), Math.random() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // A faint canyon streak, evoking Valles Marineris.
+  ctx.strokeStyle = rgbStr(shade(b, -30), 0.4);
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(size * 0.15, size * 0.52);
+  ctx.bezierCurveTo(size * 0.35, size * 0.48, size * 0.55, size * 0.58, size * 0.78, size * 0.5);
+  ctx.stroke();
+  // Sparse light craters.
+  for (let i = 0; i < 30; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = Math.pow(Math.random(), 2) * 10 + 2;
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, rgbStr(shade(b, -26)));
+    grad.addColorStop(0.75, rgbStr(shade(b, -12)));
+    grad.addColorStop(1, rgbStr(shade(b, -12), 0));
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Polar ice caps.
+  const capGrad1 = ctx.createLinearGradient(0, 0, 0, size * 0.12);
+  capGrad1.addColorStop(0, 'rgba(255,250,245,0.95)');
+  capGrad1.addColorStop(1, 'rgba(255,250,245,0)');
+  ctx.fillStyle = capGrad1;
+  ctx.fillRect(0, 0, size, size * 0.12);
+  const capGrad2 = ctx.createLinearGradient(0, size * 0.88, 0, size);
+  capGrad2.addColorStop(0, 'rgba(255,250,245,0)');
+  capGrad2.addColorStop(1, 'rgba(255,250,245,0.95)');
+  ctx.fillStyle = capGrad2;
+  ctx.fillRect(0, size * 0.88, size, size * 0.12);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
+// Icy moons — Europa's straight, dark linea fractures or Triton's
+// blobby "cantaloupe" dimpled terrain, over a pale ice base.
+function makeIcyCrackedTexture(base: number, accent: number, style: 'linear' | 'cantaloupe'): THREE.CanvasTexture {
+  const size = 320;
+  const c = document.createElement('canvas');
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext('2d')!;
+  const b = hexToRgb(base);
+  const a = hexToRgb(accent);
+  ctx.fillStyle = rgbStr(b);
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 1000; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    ctx.fillStyle = rgbStr(shade(b, (Math.random() - 0.5) * 16), 0.3);
+    ctx.beginPath();
+    ctx.arc(x, y, Math.random() * 2.5 + 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (style === 'linear') {
+    // Long, gently-curving fracture lines criss-crossing the surface.
+    for (let i = 0; i < 22; i++) {
+      const x0 = Math.random() * size;
+      const y0 = Math.random() * size;
+      const ang = Math.random() * Math.PI * 2;
+      const len = Math.random() * 140 + 60;
+      const x1 = x0 + Math.cos(ang) * len;
+      const y1 = y0 + Math.sin(ang) * len;
+      const midx = (x0 + x1) / 2 + (Math.random() - 0.5) * 40;
+      const midy = (y0 + y1) / 2 + (Math.random() - 0.5) * 40;
+      ctx.strokeStyle = rgbStr(shade(a, -10), 0.35 + Math.random() * 0.25);
+      ctx.lineWidth = Math.random() * 1.8 + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.quadraticCurveTo(midx, midy, x1, y1);
+      ctx.stroke();
+    }
+  } else {
+    // Cantaloupe terrain: irregular dimpled blobs, no sharp rims.
+    for (let i = 0; i < 70; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      const r = Math.random() * 14 + 5;
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, rgbStr(shade(a, -14), 0.4));
+      grad.addColorStop(1, rgbStr(shade(a, -14), 0));
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  // Bright polar frost.
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.fillRect(0, 0, size, size * 0.07);
+  ctx.fillRect(0, size * 0.93, size, size * 0.07);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
+// Io — sulfur-and-silicate volcanic patchwork. No craters (constantly
+// resurfaced by eruptions); instead blotchy patches of yellow, orange,
+// white and black, like a lava lamp frozen mid-swirl.
+function makeVolcanicTexture(base: number, accent: number): THREE.CanvasTexture {
+  const size = 320;
+  const c = document.createElement('canvas');
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext('2d')!;
+  const b = hexToRgb(base);
+  const a = hexToRgb(accent);
+  ctx.fillStyle = rgbStr(b);
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 60; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = Math.random() * 26 + 8;
+    const roll = Math.random();
+    const col = roll < 0.35 ? shade(a, 20) : roll < 0.6 ? shade(b, -10) : roll < 0.8 ? [255, 245, 220] as [number, number, number] : [40, 30, 20] as [number, number, number];
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, rgbStr(col, 0.5));
+    grad.addColorStop(1, rgbStr(col, 0));
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * (0.6 + Math.random() * 0.4), Math.random() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // A few active-looking dark volcanic vents with a hot rim.
+  for (let i = 0; i < 8; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = Math.random() * 6 + 3;
+    ctx.fillStyle = 'rgba(35,20,15,0.7)';
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,180,90,0.55)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 1.4, 0, Math.PI * 2);
+    ctx.stroke();
   }
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = THREE.RepeatWrapping;
@@ -118,43 +388,69 @@ function makeMottledTexture(base: number, accent: number): THREE.CanvasTexture {
 }
 
 function makeBandedTexture(base: number, accent: number, spot?: number): THREE.CanvasTexture {
-  const w = 256;
-  const h = 128;
+  const w = 320;
+  const h = 160;
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
   const ctx = c.getContext('2d')!;
   const b = hexToRgb(base);
   const a = hexToRgb(accent);
-  // Horizontal bands with wavy edges, like gas-giant cloud belts.
-  const bandCount = 9;
-  for (let i = 0; i < bandCount; i++) {
-    const y0 = (i / bandCount) * h;
-    const y1 = ((i + 1) / bandCount) * h;
-    const useAccent = i % 2 === 0;
+  // Fine-grained horizontal bands (row by row) with a slow sine drift so
+  // belt boundaries look turbulent/wind-sheared rather than ruled lines.
+  const rowCount = 80;
+  for (let i = 0; i < rowCount; i++) {
+    const y = (i / rowCount) * h;
+    const rowH = h / rowCount + 0.8;
+    const bandPhase = Math.sin(i * 0.28) * 0.5 + Math.sin(i * 0.61 + 1.3) * 0.3;
+    const useAccent = bandPhase > 0;
     const col = useAccent ? a : b;
-    const jitterAmt = (Math.random() - 0.5) * 18;
+    const jitterAmt = (Math.random() - 0.5) * 16 + bandPhase * 12;
     ctx.fillStyle = rgbStr(shade(col, jitterAmt));
-    ctx.fillRect(0, y0, w, y1 - y0);
+    ctx.fillRect(0, y, w, rowH);
   }
-  // Soft horizontal noise streaks for texture.
-  for (let i = 0; i < 400; i++) {
+  // Turbulent horizontal noise streaks, denser than before, with slight
+  // wave curvature to suggest shear flow between adjacent belts.
+  for (let i = 0; i < 550; i++) {
     const y = Math.random() * h;
     const x = Math.random() * w;
-    const len = Math.random() * 30 + 10;
-    ctx.strokeStyle = rgbStr(shade(Math.random() > 0.5 ? a : b, (Math.random() - 0.5) * 30), 0.25);
-    ctx.lineWidth = 1;
+    const len = Math.random() * 36 + 10;
+    ctx.strokeStyle = rgbStr(shade(Math.random() > 0.5 ? a : b, (Math.random() - 0.5) * 34), 0.22);
+    ctx.lineWidth = Math.random() * 1.4 + 0.4;
     ctx.beginPath();
     ctx.moveTo(x, y);
-    ctx.lineTo(x + len, y + (Math.random() - 0.5) * 2);
+    ctx.bezierCurveTo(x + len * 0.4, y + (Math.random() - 0.5) * 3, x + len * 0.7, y + (Math.random() - 0.5) * 3, x + len, y + (Math.random() - 0.5) * 2);
+    ctx.stroke();
+  }
+  // Small swirling vortices scattered across the bands (mini storms).
+  for (let i = 0; i < 10; i++) {
+    const x = Math.random() * w;
+    const y = Math.random() * h;
+    const r = Math.random() * 6 + 3;
+    ctx.strokeStyle = rgbStr(shade(Math.random() > 0.5 ? a : b, 24), 0.3);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0.4, Math.PI * 1.7);
     ctx.stroke();
   }
   if (spot) {
     const sc = hexToRgb(spot);
-    ctx.fillStyle = rgbStr(sc, 0.85);
+    const sx = w * 0.28;
+    const sy = h * 0.62;
+    // Storm body with a swirled inner ring, not a flat blob.
+    const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, 20);
+    grad.addColorStop(0, rgbStr(shade(sc, 18), 0.9));
+    grad.addColorStop(0.6, rgbStr(sc, 0.85));
+    grad.addColorStop(1, rgbStr(sc, 0));
+    ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.ellipse(w * 0.28, h * 0.62, 18, 10, 0, 0, Math.PI * 2);
+    ctx.ellipse(sx, sy, 20, 11, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.strokeStyle = rgbStr(shade(sc, -30), 0.6);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, 12, 6, 0, 0, Math.PI * 2);
+    ctx.stroke();
   }
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = THREE.RepeatWrapping;
@@ -163,43 +459,112 @@ function makeBandedTexture(base: number, accent: number, spot?: number): THREE.C
 }
 
 function makeEarthTexture(): THREE.CanvasTexture {
-  const w = 256;
-  const h = 128;
+  const w = 384;
+  const h = 192;
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
   const ctx = c.getContext('2d')!;
-  ctx.fillStyle = '#245a9c';
+  // Ocean with a subtle depth gradient rather than a flat fill.
+  const oceanGrad = ctx.createLinearGradient(0, 0, 0, h);
+  oceanGrad.addColorStop(0, '#1c4a80');
+  oceanGrad.addColorStop(0.5, '#2b6bad');
+  oceanGrad.addColorStop(1, '#1c4a80');
+  ctx.fillStyle = oceanGrad;
   ctx.fillRect(0, 0, w, h);
-  // Landmasses — random green/brown blobs.
-  for (let i = 0; i < 16; i++) {
+  // Landmasses — each continent built from several overlapping blobs so
+  // coastlines look organic and irregular instead of a single ellipse.
+  const drawLand = (cx: number, cy: number, rx: number, ry: number, rot: number) => {
+    for (const dx of [-w, 0, w]) {
+      const grad = ctx.createRadialGradient(cx + dx, cy, 0, cx + dx, cy, Math.max(rx, ry) * 1.1);
+      grad.addColorStop(0, 'rgba(90,138,66,0.95)');
+      grad.addColorStop(0.75, 'rgba(74,124,60,0.92)');
+      grad.addColorStop(1, 'rgba(74,124,60,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.ellipse(cx + dx, cy, rx, ry, rot, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
+  const continents = 9;
+  for (let i = 0; i < continents; i++) {
     const cx = Math.random() * w;
-    const cy = Math.random() * h * 0.8 + h * 0.1;
-    const rx = Math.random() * 22 + 8;
-    const ry = Math.random() * 12 + 5;
-    ctx.fillStyle = Math.random() > 0.4 ? 'rgba(74,124,60,0.9)' : 'rgba(120,108,66,0.85)';
+    const cy = Math.random() * h * 0.76 + h * 0.1;
+    const baseRx = Math.random() * 26 + 14;
+    const baseRy = Math.random() * 14 + 8;
+    const lobes = 3 + Math.floor(Math.random() * 3);
+    for (let j = 0; j < lobes; j++) {
+      const ang = (j / lobes) * Math.PI * 2 + Math.random() * 0.6;
+      const dist = Math.random() * baseRx * 0.7;
+      const lx = cx + Math.cos(ang) * dist;
+      const ly = cy + Math.sin(ang) * dist * 0.6;
+      const lrx = baseRx * (0.45 + Math.random() * 0.5);
+      const lry = baseRy * (0.45 + Math.random() * 0.5);
+      drawLand(lx, ly, lrx, lry, Math.random() * Math.PI);
+    }
+    // Arid/desert tint patches on some landmasses.
+    if (Math.random() > 0.5) {
+      for (const dx of [-w, 0, w]) {
+        ctx.fillStyle = 'rgba(150,132,74,0.35)';
+        ctx.beginPath();
+        ctx.ellipse(cx + dx + (Math.random() - 0.5) * baseRx, cy, baseRx * 0.4, baseRy * 0.35, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+  // Mountain/terrain shading flecks over land.
+  for (let i = 0; i < 500; i++) {
+    const x = Math.random() * w;
+    const y = Math.random() * h;
+    ctx.fillStyle = `rgba(40,60,30,${Math.random() * 0.12})`;
     ctx.beginPath();
-    ctx.ellipse(cx, cy, rx, ry, Math.random() * Math.PI, 0, Math.PI * 2);
-    ctx.fill();
-    // wrap-around continuity at the seams
-    ctx.beginPath();
-    ctx.ellipse(cx - w, cy, rx, ry, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(cx + w, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.arc(x, y, Math.random() * 2 + 0.5, 0, Math.PI * 2);
     ctx.fill();
   }
-  // Poles
-  ctx.fillStyle = 'rgba(240,245,250,0.9)';
-  ctx.fillRect(0, 0, w, h * 0.08);
-  ctx.fillRect(0, h * 0.92, w, h * 0.08);
-  // Clouds
-  for (let i = 0; i < 22; i++) {
+  // Poles.
+  const poleGradN = ctx.createLinearGradient(0, 0, 0, h * 0.1);
+  poleGradN.addColorStop(0, 'rgba(240,245,250,0.95)');
+  poleGradN.addColorStop(1, 'rgba(240,245,250,0)');
+  ctx.fillStyle = poleGradN;
+  ctx.fillRect(0, 0, w, h * 0.1);
+  const poleGradS = ctx.createLinearGradient(0, h * 0.9, 0, h);
+  poleGradS.addColorStop(0, 'rgba(240,245,250,0)');
+  poleGradS.addColorStop(1, 'rgba(240,245,250,0.95)');
+  ctx.fillStyle = poleGradS;
+  ctx.fillRect(0, h * 0.9, w, h * 0.1);
+  // Scattered wispy cloud streaks.
+  for (let i = 0; i < 26; i++) {
     const cx = Math.random() * w;
     const cy = Math.random() * h;
-    ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.25 + 0.08})`;
+    ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.22 + 0.06})`;
     ctx.beginPath();
-    ctx.ellipse(cx, cy, Math.random() * 20 + 8, Math.random() * 6 + 3, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy, Math.random() * 22 + 8, Math.random() * 6 + 3, Math.random() * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // A couple of spiral cyclone systems for a more recognizable "weather"
+  // read, drawn as a tightening arc spiral rather than a plain ellipse.
+  const spirals = 2 + Math.floor(Math.random() * 2);
+  for (let s = 0; s < spirals; s++) {
+    const cx = Math.random() * w;
+    const cy = Math.random() * h * 0.7 + h * 0.15;
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    const turns = 2.2;
+    const steps = 60;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const ang = t * Math.PI * 2 * turns;
+      const rad = t * 14;
+      const px = cx + Math.cos(ang) * rad;
+      const py = cy + Math.sin(ang) * rad * 0.7;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 7, 0, Math.PI * 2);
     ctx.fill();
   }
   const tex = new THREE.CanvasTexture(c);
@@ -561,8 +926,12 @@ export default function SolarSystemViewer({ data, station }: Props) {
         ? makeEarthTexture()
         : isGasGiant
         ? makeBandedTexture(def.color, def.bandColor ?? def.color, def.id === 'jupiter' ? 0xcc6a3d : undefined)
-        : makeMottledTexture(def.color, def.bandColor ?? def.color);
-      const geo = new THREE.SphereGeometry(def.radius, 24, 18);
+        : def.id === 'venus'
+        ? makeCloudyTexture(def.color, def.bandColor ?? def.color)
+        : def.id === 'mars'
+        ? makeMarsTexture(def.color, def.bandColor ?? def.color)
+        : makeCrateredTexture(def.color, def.bandColor ?? def.color, def.id === 'mercury' ? 1.3 : 1);
+      const geo = new THREE.SphereGeometry(def.radius, 40, 30);
       const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, metalness: 0.0 });
       const mesh = new THREE.Mesh(geo, mat);
       tiltGroup.add(mesh);
@@ -603,15 +972,26 @@ export default function SolarSystemViewer({ data, station }: Props) {
 
       const moons: MoonRuntime[] = [];
       for (const m of def.moons ?? []) {
-        const mGeo = new THREE.SphereGeometry(m.radius, 10, 8);
-        const mMat = new THREE.MeshStandardMaterial({ color: m.color, roughness: 0.95 });
+        const mAccent = m.accentColor ?? m.color;
+        const mTex =
+          m.style === 'hazy'
+            ? makeCloudyTexture(m.color, mAccent)
+            : m.style === 'volcanic'
+            ? makeVolcanicTexture(m.color, mAccent)
+            : m.style === 'icy'
+            ? makeIcyCrackedTexture(m.color, mAccent, 'linear')
+            : m.style === 'cantaloupe'
+            ? makeIcyCrackedTexture(m.color, mAccent, 'cantaloupe')
+            : makeCrateredTexture(m.color, mAccent, 1.1);
+        const mGeo = new THREE.SphereGeometry(m.radius, 20, 16);
+        const mMat = new THREE.MeshStandardMaterial({ map: mTex, roughness: 0.95 });
         const mMesh = new THREE.Mesh(mGeo, mMat);
         const pivot = new THREE.Object3D();
         pivot.add(mMesh);
         group.add(pivot);
         clickTargets.push({ object: mMesh, selection: { kind: 'moon', planetId: def.id, moonName: m.name } });
         moons.push({ pivot, def: m, angle: Math.random() * Math.PI * 2 });
-        disposables.push(mGeo, mMat);
+        disposables.push(mGeo, mMat, mTex);
       }
 
       runtimePlanets.push({ def, group, mesh, angle, moons });
@@ -1201,6 +1581,49 @@ function Fact({ label, value }: { label: string; value: string | number }) {
   );
 }
 
+// Renders a planet/moon's `weather` block in the same visual language
+// as the app's real Earth weather (stat tiles + notable-conditions
+// list) — but explicitly labeled "Typical conditions," not "Live,"
+// since there's no live public data feed for other worlds (see the
+// long comment on WeatherReport in solarSystemData.ts for why).
+function WeatherReportCard({ weather }: { weather: WeatherReport }) {
+  return (
+    <div className="mt-3 pt-3 border-t border-white/10">
+      <div className="text-[9px] uppercase tracking-wide text-white/40 mb-1.5">
+        🌡️ Typical conditions — not live, real planetary science
+      </div>
+      <div className="text-xs font-semibold text-sky-200 mb-2 leading-snug">{weather.headline}</div>
+      <div className="space-y-1.5 mb-2.5">
+        <div className="bg-white/5 rounded-md px-2 py-1.5">
+          <div className="text-[8px] uppercase tracking-wide text-white/35">Temperature</div>
+          <div className="text-[11px] text-white/85 leading-snug">{weather.tempRange}</div>
+        </div>
+        <div className="bg-white/5 rounded-md px-2 py-1.5">
+          <div className="text-[8px] uppercase tracking-wide text-white/35">Pressure</div>
+          <div className="text-[11px] text-white/85 leading-snug">{weather.pressure}</div>
+        </div>
+        <div className="bg-white/5 rounded-md px-2 py-1.5">
+          <div className="text-[8px] uppercase tracking-wide text-white/35">Wind</div>
+          <div className="text-[11px] text-white/85 leading-snug">{weather.wind}</div>
+        </div>
+      </div>
+      {weather.notable.length > 0 && (
+        <div>
+          <div className="text-[8px] uppercase tracking-wide text-white/35 mb-1">Notable</div>
+          <ul className="space-y-1">
+            {weather.notable.map((n, i) => (
+              <li key={i} className="text-[11px] text-white/65 leading-snug flex gap-1.5">
+                <span className="text-white/30 flex-shrink-0">•</span>
+                <span>{n}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SunPanel() {
   return (
     <div className="pr-5">
@@ -1229,6 +1652,7 @@ function PlanetPanel({ id, onSelect }: { id: string; onSelect: (sel: Selection) 
       <Fact label="Atmosphere" value={p.facts.atmosphere} />
       <Fact label="Moons" value={p.facts.moonCount} />
       <p className="text-[11px] text-white/55 leading-relaxed mt-2">{p.facts.blurb}</p>
+      <WeatherReportCard weather={p.facts.weather} />
       {hasExtras && (
         <div className="mt-3 pt-3 border-t border-white/10">
           <div className="text-[9px] uppercase tracking-wide text-white/40 mb-1.5">
@@ -1280,6 +1704,7 @@ function MoonPanel({ planetId, moonName }: { planetId: string; moonName: string 
       <Fact label="Distance from planet" value={m.facts.distanceFromPlanetKm} />
       <Fact label="Orbital period" value={m.facts.orbitalPeriod} />
       <p className="text-[11px] text-white/55 leading-relaxed mt-2">{m.facts.blurb}</p>
+      <WeatherReportCard weather={m.facts.weather} />
     </div>
   );
 }
